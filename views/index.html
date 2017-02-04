@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Hello World</title>
+	<link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.css">
+	<link rel="stylesheet" href="../assets/css/style.css">
+	<style>
+		#connection-list li a{
+			text-decoration: none;
+			color: red;
+		}
+	</style>
+</head>
+<body>
+<nav class="main-nav">
+	<a class="btn btn-primary" id="btn-add-connection">Connection</a>&nbsp;
+	<a class="btn btn-warning" id="btn-manage-users">User</a>
+</nav>
+
+<div class="row">
+	<div class="col-sm-2">
+		<ul id="connection-list"></ul>
+	</div>
+	<div class="col-md-10" id="app-body">
+		<ul class="nav nav-tabs" role="tablist">
+		    <li role="presentation" class="active"><a href="#home" aria-controls="home" role="tab" data-toggle="tab">Object</a></li>
+		</ul>
+		<div class="tab-content">
+			<div role="tabpanel" class="tab-pane active" id="home"></div>
+		</div>
+	</div>
+</div>
+
+<div class="modal" id="modal-add-connection">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h4 class="modal-title">Add new connections</h4>
+			</div>
+			<div class="modal-body">
+				<form class="form-horizontal" id="form-add-connection">
+					<div class="form-group">
+						<label for="connection-name" class="control-label col-md-3">Connection Name</label>
+						<div class="col-md-9">
+							<input type="text" class="form-control" id="connection-name" name="name" value="Localhost">
+						</div>
+					</div>
+			
+					<div class="form-group">
+						<label for="host-name" class="control-label col-md-3">IP Address / Host</label>
+						<div class="col-md-9">
+							<input type="text" class="form-control" id="host-name" name="host" value="127.0.0.1">
+						</div>
+					</div>
+			
+					<div class="form-group">
+						<label for="host-name" class="control-label col-md-3">Port</label>
+						<div class="col-md-9">
+							<input type="text" class="form-control" id="host-name" name="port" value="3306">
+						</div>
+					</div>
+			
+					<div class="form-group">
+						<label for="host-name" class="control-label col-md-3">User</label>
+						<div class="col-md-9">
+							<input type="text" class="form-control" id="host-name" name="user" value="root">
+						</div>
+					</div>
+			
+					<div class="form-group">
+						<label for="host-name" class="control-label col-md-3">Password</label>
+						<div class="col-md-9">
+							<input type="text" class="form-control" id="host-name" name="password" value="">
+						</div>
+					</div>
+					<div class="form-group">
+						<div class="col-md-12">
+							<button type="button" class="btn btn-default">Test Connection</button>
+							<button type="submit" class="btn btn-primary pull-right">Save</button>
+						</div>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+<!-- build:remove -->
+<!-- Connect to server process -->
+<script>require('electron-connect').client.create()</script> 
+<!-- end:build -->
+<script src="../app/index.js"></script>
+</body>
+</html>
