@@ -1,6 +1,8 @@
 const Conf = require('conf');
 let conf = new Conf();
+
 global.using = function(filename) {
+	filename = filename.replace(/\.(?!js$)/, '/');
 	return require(__dirname + '/' + filename);
 };
 

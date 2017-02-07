@@ -1,0 +1,63 @@
+.main-nav {
+	position: fixed;
+	top: 0;right: 0;left: 0;
+	height: 60px;
+	background: #EEE;
+	padding: 10px;
+}
+
+body {
+	color: 'green';
+}
+#app-body {
+	input {
+		border: none;
+	    height: 100%;
+	    display: block;
+	    padding: 5px;
+	    background: none;
+	}
+	td {
+		padding: 0;
+	}
+}
+.no-selection {
+	-webkit-user-select: none; /* webkit (safari, chrome) browsers */
+}
+.connection-container {
+	position: fixed;
+	width: 200px;
+	top: 60px;
+	height: 100%;
+	float: left;
+	background: #f1f1f2;
+	ul {
+		margin: 0;padding: 0;list-style: none;
+		li {
+			display: block;
+		}
+		li a {
+			text-decoration: none;
+			cursor: default;
+			@extend .no-selection;
+			display: block;
+			padding: 5px;
+			&:hover {
+				background: #EEE;
+			}
+		}
+	}
+	> ul > li > a {
+		padding-left: 15px;
+	}
+	> ul > li > ul > li > a {
+		padding-left: 30px;
+	}
+}
+.app-container {
+	padding-left: 210px;
+	padding-top: 60px;
+	a {
+		cursor: default;
+	}
+}

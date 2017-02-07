@@ -1,4 +1,4 @@
-const dataRenderer = using('render/data');
+const dataRenderer = using('render.data');
 class Table {
 	constructor(options) {
 		log(options);

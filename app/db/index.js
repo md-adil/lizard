@@ -1,5 +1,6 @@
 const mysql = require('mysql'),
-	Bird = require('bluebird');
+	Bird = require('bluebird'),
+	map = require('lodash/map');
 
 class DB {
 	constructor(config) {
@@ -39,24 +40,29 @@ class DB {
 	}
 
 	dropTable(tableName) {
-		return this.executeQuery("DELETE TABLE " + tableName);
+		return this.executeQuery(`DELETE TABLE \`${tableName}\`` );
 	}
 
 	truncateTable(tableName) {
-		return this.executeQuery("TRUNCATE TABLE " + tableName);
+		return this.executeQuery(`TRUNCATE TABLE \`${tableName}\``);
 	}
 
-	fetchData(table) {
-		return this.executeQuery(`SELECT * FROM ${table} LIMIT 1000`);
+	getRows(table) {
+		return this.executeQuery(`SHOW INDEXES from \`${table}\` WHERE Key_name='PRIMARY'`).then(def => {
+			return this.executeQuery(`SELECT * FROM \`${table}\` LIMIT 500`).then(data => {
+				data.primaryKeys = map(def.results, 'Column_name');
+				return data;
+			});
+		});
 	}
 
 	delete() {
 
 	}
 
-	executeQuery(query) {
+	executeQuery(query, bindings = []) {
 		return new Bird(resolve => {
-			this._connection.query(query, (err, results, fields) => {
+			this._connection.query(query, bindings, (err, results, fields) => {
 				if(err) {
 					throw err;
 				} else {

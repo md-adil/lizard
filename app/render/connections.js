@@ -1,4 +1,4 @@
-const dbRenderer = using('render/databases');
+const dbRenderer = using('render.databases');
 
 class Connections {
 

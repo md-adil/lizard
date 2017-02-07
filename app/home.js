@@ -22,6 +22,9 @@ function formToObj(arr) {
 	var conf = {};
 	arr.forEach(d => {
 		conf[d.name] = d.value;
-	})
+	});
 	return conf;
 }
+$('a').dblclick(function() {
+	return false;
+});
