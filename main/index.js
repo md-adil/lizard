@@ -7,5 +7,5 @@ app.on('ready', function () {
     width: 800,
     height: 500
   });
-  mainWindow.loadURL('file://' + __dirname + '/../views/index.html');
+  mainWindow.loadURL('http://localhost:8888/dist/index.html');
 });

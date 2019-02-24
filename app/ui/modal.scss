@@ -1,0 +1,31 @@
+@function border() {
+    @return 1px solid rgba(#000000, 0.4);
+}
+
+.ui-modal-backdrop {
+    position: fixed;
+    top: 0;right: 0;left: 0;bottom: 0;
+    background: rgba(#000000, 0.4);
+    .ui-modal-dialog {
+        width: 400px;
+        margin: 100px auto;
+    }
+    .ui-modal-content {
+        background: #fff;
+        border: 1px solid rgba(#000, 0.3);
+    }
+    .ui-modal-body, .ui-modal-header {
+        padding: 15px;
+    }
+    .ui-modal-header {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: border();
+    }
+    .ui-btn-close {
+        background: none;
+        border: none;
+        margin: 0;padding: 0;
+        font-size: 1.2em;
+    }
+}
