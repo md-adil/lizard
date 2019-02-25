@@ -1,7 +1,7 @@
-import * as React from "react";
 import classnames from "classnames";
-
+import * as React from "react";
 import "./button.scss";
+import Icon from "./Icon";
 
 interface IProps {
     children: React.ReactNode;
@@ -15,10 +15,11 @@ class Button extends React.Component<IProps> {
     };
 
     public render() {
-        const { children, ...props } = this.props;
+        const { children, isLoading, onClick, ...props } = this.props;
         return (
             <button
-                className={classnames("ui-btn", {"is-loading": this.props.isLoading})}
+                onClick={isLoading ? undefined : onClick}
+                className={classnames("ui-btn", {"is-loading": isLoading})}
                 {...props}
             >
                 {children}

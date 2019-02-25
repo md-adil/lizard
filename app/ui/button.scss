@@ -2,3 +2,10 @@ button {
     background: #fff;
     padding: 10px;
 }
+
+.ui-btn, button {
+    &.is-loading {
+        color: lighten(#000, 8);
+        background: #777;
+    }
+}

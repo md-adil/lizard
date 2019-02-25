@@ -1,11 +1,9 @@
-import * as React from 'react';
-import App from '../components/App';
-interface PropsType {
-}
+import * as React from "react";
+import App from "../components/App";
 
-class AppContainer extends React.Component<PropsType, {}> {
-    render() {
-        return <App />
+class AppContainer extends React.Component<{}> {
+    public render() {
+        return <App />;
     }
 }
 

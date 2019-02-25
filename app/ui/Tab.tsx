@@ -1,4 +1,5 @@
 import * as React from "react";
+import "./tab.scss";
 const { map } = React.Children;
 
 interface IPropsPane {
@@ -35,7 +36,9 @@ class Tab extends React.Component<IProps> {
 
     public renderNav = (pane: any) => {
         return (
-            <span onClick={this.handleChange.bind(this, pane)}>{pane.props.title}<a>&times;</a></span>
+            <span className="ui-tabs-nav-btn" onClick={this.handleChange.bind(this, pane)}>
+                {pane.props.title}<a>&times;</a>
+            </span>
         );
     }
 
