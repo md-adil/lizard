@@ -1,9 +1,16 @@
-import * as React from 'react';
-import * as ReactDOM from 'react-dom';
-import AppContainer from './containers/AppContainer';
-
-const app = document.createElement('div');
+import * as React from "react";
+import { Provider } from "react-redux";
+import * as ReactDOM from "react-dom";
+import AppContainer from "./containers/AppContainer";
+import store from "./store";
+const app = document.createElement("div");
 
 document.body.appendChild(app);
 
-ReactDOM.render(<AppContainer />, app);
+const RootContainer = () => (
+    <Provider store={store}>
+        <AppContainer />
+    </Provider>
+);
+
+ReactDOM.render(<RootContainer />, app);
