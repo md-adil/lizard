@@ -1,16 +1,9 @@
-import { ADD, CREATE, IConnection, UPDATE } from "../actions/connection";
+import { ADD, CREATE, ConnectionActionTypes, IConnectionState, UPDATE } from "../actions/connection";
 
-interface IState {
-    isCreating: boolean;
-    data: IConnection[];
-}
-
-interface IAction {
-    type: string;
-    payload: IConnection;
-}
-
-export default (state: IState = {isCreating: false, data: []}, action: IAction) => {
+export default (
+        state: IConnectionState = { isCreating: false, data: []},
+        action: ConnectionActionTypes,
+    ): IConnectionState => {
     switch (action.type) {
         case CREATE:
             return { ...state, isCreating: true };

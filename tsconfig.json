@@ -1,5 +1,7 @@
 {
     "compilerOptions": {
+        "baseUrl": ".",
+        "paths": { "*": ["types/*"] },
         "outDir": "./dist/",
         "sourceMap": true,
         "noImplicitAny": true,
@@ -8,9 +10,9 @@
         "strict": true,
         "jsx": "react",
         "allowJs": true,
-        "typeRoots": [ "./typings", "node_modules/@types" ],
+        "typeRoots": [ "./types", "./node_modules/@types" ],
     },
     "exclude": [
-        "./node_modules/**/*", "typings"
+        "./node_modules/**/*", "types"
     ]
 }

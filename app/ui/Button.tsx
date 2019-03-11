@@ -7,6 +7,7 @@ interface IProps {
     children: React.ReactNode;
     onClick ?: () => void;
     isLoading: boolean;
+    htmlType?: string;
 }
 
 class Button extends React.Component<IProps> {

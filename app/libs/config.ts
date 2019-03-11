@@ -1,4 +1,4 @@
-import conf from "conf";
+import * as conf from "conf";
 
 class Config {
     public set(key: string, value: any) {
