@@ -18,12 +18,12 @@ export interface IConnectionState {
 
 export interface IConnectionAction {
     type: string;
-    payload: IConnection;
+    payload: boolean | IConnection;
 }
 
 export type ConnectionActionTypes = IConnectionAction;
 
-export const isCreating = (creating: boolean) => {
+export const isCreating = (creating: boolean): IConnectionAction => {
     return { type: CREATE, payload: creating };
 };
 
@@ -35,6 +35,6 @@ export const destroy = (connection: IConnection): IConnectionAction => {
     return {type: DELETE, payload: connection};
 };
 
-export const update = (connection: IConnection) => {
-    return {type: DELETE, connection};
+export const update = (connection: IConnection): IConnectionAction => {
+    return {type: DELETE, payload: connection};
 };

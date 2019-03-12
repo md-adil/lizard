@@ -5,11 +5,12 @@ import Button from "../ui/Button";
 
 interface IProps {
     connections: IConnection[];
+    onAddConnection: any;
 }
 
 export default (props: IProps) => (
     <div>
-        <Button>Add one</Button>
+        <Button onClick={props.onAddConnection}>Add one</Button>
         <CreateConnectionContainer />
     </div>
 );

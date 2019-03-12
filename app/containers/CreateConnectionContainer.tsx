@@ -9,29 +9,37 @@ import { AppState } from "../store";
 interface IProps {
     connection: IConnectionState;
     onCancel?: any;
+    dispatch: any;
 }
 
 interface IState {
     errors: any;
-    values: any;
+    values: connection.IConnection;
 }
 
 class CreateConnectionContainer extends React.Component<IProps, IState> {
     public state = {
-        values: {},
+        values: {
+            name: "",
+            host: "",
+            user: "",
+            password: "",
+            type: "",
+        },
         errors: {},
-        isCreating: false,
     }
 
     public handleCancel = () => {
+        this.props.dispatch(connection.isCreating(false));
     }
 
-    public handleChange = () => {
-
+    public handleChange = (e: React.FormEvent<HTMLInputElement>) => {
+        this.setState({values: { ...this.state.values, [e.currentTarget.name]: e.currentTarget.value } });
     }
 
-    public handleSubmit = () => {
-
+    public handleSubmit = (e: React.FormEvent): void => {
+        e.preventDefault();
+        this.props.dispatch(connection.add(this.state.values));
     }
 
 
@@ -42,7 +50,7 @@ class CreateConnectionContainer extends React.Component<IProps, IState> {
                 onSubmit={this.handleSubmit}
                 values={this.state.values}
                 errors={this.state.values}
-                onCancel={this.props.onCancel}
+                onCancel={this.handleCancel}
                 visible={this.props.connection.isCreating}
                 />
         );
@@ -50,9 +58,7 @@ class CreateConnectionContainer extends React.Component<IProps, IState> {
 }
 
 const mapStateToProps = ({ connection }: AppState) => ({ connection });
-const mapDispatchToProps = ({ dispatch }: any) => ({
-    onCancel: () => dispatch(connection.isCreating(false)),
-    update: (connection: any) => dispatch(connection.update(connection))
-})
+const mapDispatchToProps = (dispatch: any) => ({dispatch})
 
 export default connect(mapStateToProps)(CreateConnectionContainer);
+

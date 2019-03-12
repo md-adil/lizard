@@ -6,9 +6,9 @@ interface IProps {
     visible: boolean;
     values: any;
     errors: any;
-    onChange: () => void;
+    onChange: (evt: React.FormEvent<HTMLInputElement>) => void;
     onCancel: () => void;
-    onSubmit: () => void;
+    onSubmit: (evt: React.FormEvent<HTMLFormElement>) => void;
 }
 
 

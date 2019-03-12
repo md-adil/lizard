@@ -1,12 +1,16 @@
 import { ADD, CREATE, ConnectionActionTypes, IConnectionState, UPDATE } from "../actions/connection";
 
+const initialState: IConnectionState = {
+    data: [],
+    isCreating: false,
+};
+
 export default (
-        state: IConnectionState = { isCreating: false, data: []},
-        action: ConnectionActionTypes,
+        state = initialState, action: ConnectionActionTypes,
     ): IConnectionState => {
     switch (action.type) {
         case CREATE:
-            return { ...state, isCreating: true };
+            return { ...state, isCreating: action.payload as boolean };
         case ADD:
             return { ...state, data: state.data };
         case UPDATE:
