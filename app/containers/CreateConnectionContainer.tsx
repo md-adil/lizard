@@ -61,4 +61,3 @@ const mapStateToProps = ({ connection }: AppState) => ({ connection });
 const mapDispatchToProps = (dispatch: any) => ({dispatch})
 
 export default connect(mapStateToProps)(CreateConnectionContainer);
-

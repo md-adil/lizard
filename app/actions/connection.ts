@@ -1,7 +1,11 @@
+import config from "../libs/config";
+
 export const CREATE = "CONECTIONS CREATE";
 export const ADD = "CONNECTIONS ADD";
 export const DELETE = "CONNECTIONS DELETE";
 export const UPDATE = "CONNECTIONS UPDATE";
+export const LOAD = "CONNECTION LOAD";
+export const LOADING = "CONNECTION LOADING";
 
 export interface IConnection {
     name: string;
@@ -13,6 +17,7 @@ export interface IConnection {
 
 export interface IConnectionState {
     isCreating: boolean;
+    isLoading: boolean;
     data: IConnection[];
 }
 
@@ -27,8 +32,17 @@ export const isCreating = (creating: boolean): IConnectionAction => {
     return { type: CREATE, payload: creating };
 };
 
-export const add = (connection: IConnection): IConnectionAction => {
-    return { type: ADD, payload: connection };
+export const isLoading = (loading: boolean) => {
+    return { type: LOADING, payload: loading };
+} 
+
+export const add = (connection: IConnection) => async (dispatch: any, getState: any) => {
+    const connections = getState().connection.data.concat([connection]);
+    dispatch(isLoading(true));
+    await config.set("connections", connections);
+    dispatch({ type: ADD, payload: connection });
+    dispatch(isCreating(false));
+    dispatch(isLoading(false));
 };
 
 export const destroy = (connection: IConnection): IConnectionAction => {
@@ -38,3 +52,12 @@ export const destroy = (connection: IConnection): IConnectionAction => {
 export const update = (connection: IConnection): IConnectionAction => {
     return {type: DELETE, payload: connection};
 };
+
+export const fetch = () => async (dispatch: any) => {
+    dispatch({type: LOADING, payload: true});
+    const connections = await config.get("connections");
+    if(connections) {
+        dispatch({ type: LOAD, payload: connections });
+    }
+    dispatch({type: LOADING, payload: false});
+}
