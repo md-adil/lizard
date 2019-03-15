@@ -1,18 +1,18 @@
 import * as fs from "fs";
 
-export const write = (_path: string, content: any) => new Promise<void>((r, e) => {
-    fs.writeFile(_path, content, (err) => {
-        if(err) {
+export const write = (p: string, content: any) => new Promise<void>((r, e) => {
+    fs.writeFile(p, content, (err) => {
+        if (err) {
             e(err);
         } else {
             r();
         }
-    })
+    });
 });
 
-export const read = (_path: string) => new Promise<Buffer>((r, e) => {
-    fs.readFile(_path, (err, data) => {
-        if(err) {
+export const read = (p: string) => new Promise<Buffer>((r, e) => {
+    fs.readFile(p, (err, data) => {
+        if (err) {
             e(err);
         } else {
             r(data);
@@ -20,15 +20,15 @@ export const read = (_path: string) => new Promise<Buffer>((r, e) => {
     });
 });
 
-export const isExists = (_path: string) => new Promise<boolean>((r, _) => {
-    fs.access(_path, fs.constants.F_OK, (err) => {
+export const isExists = (p: string) => new Promise<boolean>((r, _) => {
+    fs.access(p, fs.constants.F_OK, (err) => {
         r(err ? false : true);
-    })
+    });
 });
 
-export const isDirectory = (_path: string) => new Promise<boolean>((r, e) => {
-    fs.lstat(_path, (err, stats) => {
-        if(err) {
+export const isDirectory = (p: string) => new Promise<boolean>((r, e) => {
+    fs.lstat(p, (err, stats) => {
+        if (err) {
             e(err);
         } else {
             r(stats.isDirectory());
@@ -36,10 +36,9 @@ export const isDirectory = (_path: string) => new Promise<boolean>((r, e) => {
     });
 });
 
-
-export const unlink = (_path: string) => new Promise<void>((r, e) => {
-    fs.unlink(_path, (err: Error | undefined) => {
-        if(err) {
+export const unlink = (p: string) => new Promise<void>((r, e) => {
+    fs.unlink(p, (err: Error | undefined) => {
+        if (err) {
             e(err);
         } else {
             r();
@@ -47,12 +46,12 @@ export const unlink = (_path: string) => new Promise<void>((r, e) => {
     });
 });
 
-export const mkdir = (_path: string, options: any = {}) => new Promise<void>((r, e) => {
-    fs.mkdir(_path, options, (err) => {
-        if(err) {
+export const mkdir = (p: string, options: any = {}) => new Promise<void>((r, e) => {
+    fs.mkdir(p, options, (err) => {
+        if (err) {
             e(err);
         } else {
             r();
         }
-    })
-})
+    });
+});

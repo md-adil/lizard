@@ -2,9 +2,11 @@ import * as React from "react";
 import ConnectionList from "../components/ConnectionList";
 import { connect } from "react-redux";
 import * as connection from "../actions/connection";
+import {AppState} from "../store";
 
 interface IProps {
     dispatch: any;
+    connection: connection.IConnectionState;
 }
 
 interface IState {
@@ -16,17 +18,24 @@ class ConnectionListContainer extends React.Component<IProps, IState> {
         connections: [],
     };
 
+    public componentDidMount() {
+        this.props.dispatch(connection.fetch());
+    }
 
-    handleAddConnection = (e: any) => {
+    public handleAddConnection = (e: any) => {
         this.props.dispatch(connection.isCreating(true));
     }
 
     public render() {
         return (
-           <ConnectionList onAddConnection={this.handleAddConnection} connections={this.state.connections}/>
+           <ConnectionList onAddConnection={this.handleAddConnection} connection={this.props.connection}/>
         );
     }
 }
 
+const mapStateToProps = (state: AppState) => ({
+    connection: state.connection
+});
+
 const dispatchToProps = (dispatch: any) => ({ dispatch });
-export default connect(null, dispatchToProps)(ConnectionListContainer);
+export default connect(mapStateToProps, dispatchToProps)(ConnectionListContainer);

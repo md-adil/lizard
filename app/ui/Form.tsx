@@ -9,7 +9,7 @@ interface IFormProps extends React.FormHTMLAttributes<HTMLFormElement> {
 interface IFieldProps {
     children: React.ReactNode;
     label?: string;
-    error?: null|string
+    error?: null | string;
 }
 
 interface ITextProps extends React.InputHTMLAttributes<HTMLInputElement>{

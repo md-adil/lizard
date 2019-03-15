@@ -18,6 +18,11 @@ const initialState: IConnectionState = {
 export default (
         state = initialState, action: ConnectionActionTypes,
     ): IConnectionState => {
+
+    if (action.type === LOAD) {
+        return { ...state, data: action.payload as IConnection[] };
+    }
+
     switch (action.type) {
         case CREATE:
             return { ...state, isCreating: action.payload as boolean };
@@ -26,9 +31,7 @@ export default (
         case UPDATE:
             return state;
         case LOADING:
-            return { ...state, isLoading: action.payload as boolean }
-        case LOAD:
-            return { ...state, data: action.payload }
+            return { ...state, isLoading: action.payload as boolean };
         default:
             return state;
     }
