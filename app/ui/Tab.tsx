@@ -6,10 +6,15 @@ interface IPropsPane {
     key: string;
     title: string;
     children: React.ReactNode;
+    closable: boolean;
 }
 
 const Pane = (props: IPropsPane) => {
     return null;
+};
+
+Pane.defaultProps = {
+    closable: true
 };
 
 interface IProps {
@@ -22,6 +27,9 @@ class Tab extends React.Component<IProps> {
     public static Pane = Pane;
 
     public renderContent = (pane: any) => {
+        if (!pane) {
+            return null;
+        }
         if (this.props.active !== pane.key) {
             return null;
         }
@@ -35,9 +43,13 @@ class Tab extends React.Component<IProps> {
     }
 
     public renderNav = (pane: any) => {
+        if (!pane) {
+            return null;
+        }
+        const {closable} = pane.props;
         return (
             <span className="ui-tabs-nav-btn" onClick={this.handleChange.bind(this, pane)}>
-                {pane.props.title}<a>&times;</a>
+                {pane.props.title}{closable && <a>&times;</a>}
             </span>
         );
     }

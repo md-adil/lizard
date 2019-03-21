@@ -1,13 +1,12 @@
-import { IConnectionState } from "../actions/connection";
 import * as connection from "../actions/connection";
 import * as React from "react";
 import { connect } from "react-redux";
 import CreateConnection from "../components/CreateConnection";
 import { AppState } from "../store";
-
+import * as shortid from "shortid";
 
 interface IProps {
-    connection: IConnectionState;
+    connection: connection.IConnectionState;
     onCancel?: any;
     dispatch: any;
 }
@@ -20,11 +19,13 @@ interface IState {
 class CreateConnectionContainer extends React.Component<IProps, IState> {
     public state = {
         values: {
+            id: shortid(),
             name: "",
             host: "",
             user: "",
             password: "",
             type: "",
+            isConnected: false,
         },
         errors: {},
     }
@@ -57,7 +58,7 @@ class CreateConnectionContainer extends React.Component<IProps, IState> {
     }
 }
 
-const mapStateToProps = ({ connection }: AppState) => ({ connection });
-const mapDispatchToProps = (dispatch: any) => ({dispatch})
+const mapStateToProps = (state: AppState) => ({ connection: state.connection });
+const mapDispatchToProps = (dispatch: any) => ({dispatch});
 
 export default connect(mapStateToProps)(CreateConnectionContainer);

@@ -2,6 +2,7 @@
     "extends": ["tslint:latest", "tslint-react"],
     "rules": {
         "ordered-imports": false,
-        "trailing-comma": false
+        "trailing-comma": false,
+        "object-literal-sort-keys": false
     }
 }

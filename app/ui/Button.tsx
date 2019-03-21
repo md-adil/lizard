@@ -16,9 +16,10 @@ class Button extends React.Component<IProps> {
     };
 
     public render() {
-        const { children, isLoading, onClick, ...props } = this.props;
+        const { children, isLoading, htmlType, onClick, ...props } = this.props;
         return (
             <button
+                type={htmlType}
                 onClick={isLoading ? undefined : onClick}
                 className={classnames("ui-btn", {"is-loading": isLoading})}
                 {...props}

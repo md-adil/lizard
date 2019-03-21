@@ -1,7 +1,8 @@
 import * as React from "react";
-import { IConnection, IConnectionState } from "../actions/connection";
+import { IConnectionState } from "../actions/connection";
 import CreateConnectionContainer from "../containers/CreateConnectionContainer";
 import Button from "../ui/Button";
+import ConnectionContainer from "../containers/ConnectionListItemContainer";
 
 interface IProps {
     connection: IConnectionState;
@@ -12,10 +13,7 @@ export default (props: IProps) => (
     <div>
         <Button onClick={props.onAddConnection}>Add one</Button>
         <div className="connection-list">
-            { props.connection.data.map((list) => <div key={list.name} className="connection-list-item">
-                <div>{list.name}</div>
-                </div>)
-            }
+            {props.connection.data.map((list) => <ConnectionContainer key={list.id} connection={list} />)}
         </div>
         <CreateConnectionContainer />
     </div>

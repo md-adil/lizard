@@ -1,18 +1,24 @@
+import * as Knex from "knex";
 import * as config from "../libs/config";
+import { Dispatch } from "redux";
 
 export const CREATE = "CONECTIONS CREATE";
 export const ADD = "CONNECTIONS ADD";
 export const DELETE = "CONNECTIONS DELETE";
 export const UPDATE = "CONNECTIONS UPDATE";
 export const LOAD = "CONNECTION LOAD";
+export const CONNECTED = "CONNECTED IS CONNECTED";
 export const LOADING = "CONNECTION LOADING";
 
 export interface IConnection {
+    id: string;
     name: string;
     host: string;
     user: string;
     password: string;
     type: string;
+    isConnected: boolean;
+    db?: Knex;
 }
 
 export interface IConnectionState {
@@ -65,4 +71,18 @@ export const fetch = () => async (dispatch: any) => {
         dispatch({ type: LOAD, payload: connections });
     }
     dispatch({type: LOADING, payload: false});
+};
+
+export const connect = (connection: IConnection) => async (dispatch: Dispatch) => {
+    connection.isConnected = true;
+    connection.db = Knex({
+        client: "mysql2",
+        connection: {
+            host : connection.host,
+            user : connection.user,
+            password : connection.password
+        }
+    });
+
+    return dispatch({type: UPDATE, payload: connection});
 };

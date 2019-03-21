@@ -6,7 +6,7 @@ import {
     ConnectionActionTypes,
     IConnectionState,
     UPDATE,
-    IConnection
+    IConnection,
 } from "../actions/connection";
 
 const initialState: IConnectionState = {
