@@ -1,12 +1,12 @@
 import * as React from "react";
 import { IConnection } from "../actions/connection";
+import Connection from "../db/Connection";
 
 export interface IProps {
-    connection: IConnection;
-    onConnect: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+    connection: Connection;
 }
 
-export default ({connection, onConnect}: IProps) => (
+export default (props: IProps) => (
     <div>
         <aside>
             Databases

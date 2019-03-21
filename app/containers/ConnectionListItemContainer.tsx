@@ -1,7 +1,8 @@
 import * as React from "react";
 import { connect } from "react-redux";
-import Connection from "../components/Connection";
+import Connection from "../components/ConnectionListItem";
 import * as connection from "../actions/connection";
+import * as connectedConnection from "../actions/connectedConnection";
 import { Dispatch } from "redux";
 
 interface IProps {
@@ -13,7 +14,7 @@ class ConnectionListItemContainer extends React.Component<IProps> {
 
     public handleConnect = (e: React.MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault();
-        this.props.dispatch(connection.connect(this.props.connection));
+        this.props.dispatch(connectedConnection.connect(this.props.connection));
     }
 
     public render() {

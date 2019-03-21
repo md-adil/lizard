@@ -72,17 +72,3 @@ export const fetch = () => async (dispatch: any) => {
     }
     dispatch({type: LOADING, payload: false});
 };
-
-export const connect = (connection: IConnection) => async (dispatch: Dispatch) => {
-    connection.isConnected = true;
-    connection.db = Knex({
-        client: "mysql2",
-        connection: {
-            host : connection.host,
-            user : connection.user,
-            password : connection.password
-        }
-    });
-
-    return dispatch({type: UPDATE, payload: connection});
-};

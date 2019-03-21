@@ -1,17 +1,17 @@
 import * as React from "react";
 import { connect } from "react-redux";
-import Connection from "../components/Connection";
-import * as connection from "../actions/connection";
-import * as database from "../actions/database";
+import ConnectionComponent from "../components/Connection";
 import { Dispatch } from "redux";
+import Connection from "../db/Connection";
+import Database from "../db/Database";
 
 interface IProps {
-    connection: connection.IConnection;
+    connection: Connection;
     dispatch: any;
 }
 
 interface IState {
-    databases: database.IDatabase[];
+    databases: Database[];
 }
 
 class ConnectionContainer extends React.Component<IProps, IState> {
@@ -24,16 +24,13 @@ class ConnectionContainer extends React.Component<IProps, IState> {
     }
 
     public async componentDidMount() {
-        const knex = this.props.connection.db;
-        if (!knex) {
-            return;
-        }
-        const databases = await knex.raw("SWOW databases");
-        console.log(database);
+        this.setState({
+            databases: await this.props.connection.databases()
+        });
     }
 
     public render() {
-        return <Connection onConnect={this.handleConnect} connection={this.props.connection} />;
+        return <ConnectionComponent connection={this.props.connection} />;
     }
 }
 
