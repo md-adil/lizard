@@ -1,74 +1,124 @@
-import * as Knex from "knex";
 import * as config from "../libs/config";
 import { Dispatch } from "redux";
+import Connection from "../db/Connection";
 
-export const CREATE = "CONECTIONS CREATE";
-export const ADD = "CONNECTIONS ADD";
-export const DELETE = "CONNECTIONS DELETE";
-export const UPDATE = "CONNECTIONS UPDATE";
-export const LOAD = "CONNECTION LOAD";
-export const CONNECTED = "CONNECTED IS CONNECTED";
-export const LOADING = "CONNECTION LOADING";
+export const CONNECTING = "@connections/connecting";
+export const CONNECTED = "@connections/connected";
+export const CREATING = "@connections/creating";
+export const ADDING = "@connections/adding";
+export const ADD = "@connections/add";
+export const DELETE = "@connections/delete";
+export const UPDATE = "@connections/update";
+export const LOAD = "@connections/load";
+export const LOADING = "@connections/loading";
+export const ACTIVE = "@connections/active";
 
-export interface IConnection {
+export interface IConnectionConfig {
     id: string;
     name: string;
     host: string;
     user: string;
     password: string;
     type: string;
-    isConnected: boolean;
-    db?: Knex;
 }
 
-export interface IConnectionState {
-    isCreating: boolean;
-    isLoading: boolean;
-    data: IConnection[];
+interface ICreating {
+    type: typeof CREATING;
+    payload: boolean;
 }
 
-export interface IConnectionAction {
-    type: string;
-    payload: boolean | IConnection;
+export const creating = (isCreate: boolean) => ({ type: CREATING, paylaod: isCreate });
+
+interface IAdding {
+    type: typeof ADDING;
+    payload: boolean;
 }
 
-export interface IConnectionActionLoad {
-    type: typeof LOAD;
-    payload: IConnection[];
-}
-
-export type ConnectionActionTypes = IConnectionAction | IConnectionActionLoad;
-
-export const isCreating = (creating: boolean): IConnectionAction => {
-    return { type: CREATE, payload: creating };
+export const adding = (payload: boolean): IAdding => {
+    return { type: ADDING, payload };
 };
 
-export const isLoading = (loading: boolean) => {
+interface ILoading {
+    type: typeof LOADING;
+    payload: boolean;
+}
+
+export const isLoading = (loading: boolean): ILoading => {
     return { type: LOADING, payload: loading };
 };
 
-export const add = (connection: IConnection) => async (dispatch: any, getState: any) => {
+interface IAdd {
+    type: typeof ADD;
+    payload: Connection;
+}
+
+export const add = (connection: Connection) => async (dispatch: any, getState: any) => {
     const connections = getState().connection.data.concat([connection]);
-    dispatch(isLoading(true));
+    dispatch(adding(true));
     await config.set("connections", connections);
     dispatch({ type: ADD, payload: connection });
-    dispatch(isCreating(false));
-    dispatch(isLoading(false));
 };
 
-export const destroy = (connection: IConnection): IConnectionAction => {
+interface IDestroy {
+    type: typeof DELETE;
+    payload: Connection;
+}
+
+export const destroy = (connection: Connection): IDestroy => {
     return {type: DELETE, payload: connection};
 };
 
-export const update = (connection: IConnection): IConnectionAction => {
-    return {type: DELETE, payload: connection};
+interface IUpdate {
+    type: typeof UPDATE;
+    payload: Connection;
+    data: IConnectionConfig;
+}
+
+export const update = (connection: Connection, data: IConnectionConfig): IUpdate => {
+    return {type: UPDATE, payload: connection, data};
 };
+
+interface ILoaded {
+    type: typeof LOAD;
+    payload: Connection[];
+}
+
+interface ILoading {
+    type: typeof LOADING;
+    payload: boolean;
+}
 
 export const fetch = () => async (dispatch: any) => {
     dispatch({type: LOADING, payload: true});
     const connections = await config.get("connections");
     if (connections) {
-        dispatch({ type: LOAD, payload: connections });
+        dispatch({ type: LOAD, payload: connections.map((conf: IConnectionConfig) => new Connection(conf)) });
     }
     dispatch({type: LOADING, payload: false});
 };
+
+interface IConnected {
+    type: typeof CONNECTED;
+    payload: Connection;
+}
+
+interface IConnecting {
+    type: typeof CONNECTING;
+    payload: Connection;
+}
+
+export const connect = (connection: Connection) => async (dispatch: Dispatch) => {
+    dispatch({type: CONNECTING, paylaod: connection});
+    await connection.connect();
+    dispatch({type: CONNECTED, paylaod: connection});
+};
+
+interface IActive {
+    type: typeof ACTIVE;
+    payload: string;
+}
+
+export const active = (payload: string) => ({ type: ACTIVE, payload });
+
+export type ConnectionActionTypes = ICreating | ILoading | ILoaded | IConnecting |
+        IConnected | IAdding | IAdd | ILoading | IUpdate | IDestroy | IActive;

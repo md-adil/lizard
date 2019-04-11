@@ -4,8 +4,8 @@ import ConnectionListContainer from "../containers/ConnectionListContainer";
 import ConnectionContainer from "../containers/ConnectionContainer";
 import Tab from "../ui/Tab";
 import { AppState } from "../store";
-import { IConnectionState } from "../actions/connection";
 import Connection from "../db/Connection";
+import "./app.scss";
 
 interface IState {
     isVisible: boolean;
@@ -13,8 +13,7 @@ interface IState {
 }
 
 interface IProps {
-    connection: IConnectionState;
-    connectedConnection: any;
+    connections: Connection[];
 }
 
 class App extends React.Component<IProps, IState> {
@@ -34,20 +33,29 @@ class App extends React.Component<IProps, IState> {
     public handleTabChange = (key: string) => {
         this.setState({ activeTab: key });
     }
+
+    public handleConnectToConnection = (connection: any) => {
+        console.log('Connected');
+    }
     public render() {
-        const connections = this.props.connectedConnection;
+        const connections = this.props.connections;
         return (
             <div>
                 <Tab active={this.state.activeTab} onChange={this.handleTabChange}>
                     <Tab.Pane closable={false} key="connections" title="Connection List">
                         <ConnectionListContainer />
                     </Tab.Pane>
-                    {connections.map((d: Connection) => (<Tab.Pane key={d.name} title={d.name}><ConnectionContainer connection={d}/></Tab.Pane>))}
+                    {connections.map((d: Connection) => (<Tab.Pane key={d.name} title={d.name}>
+                        <ConnectionContainer connection={d} />
+                    </Tab.Pane>))}
                 </Tab>
             </div>
         );
     }
 }
 
-const mapState = ({connection, connectedConnection}: AppState) => ({connection, connectedConnection});
+const mapState = ({connection}: AppState) => ({
+    connections: connection.data
+});
+
 export default connect(mapState)(App);

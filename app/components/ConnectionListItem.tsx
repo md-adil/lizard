@@ -1,8 +1,8 @@
 import * as React from "react";
-import { IConnection } from "../actions/connection";
+import Connection from "../db/Connection";
 
 export interface IProps {
-    connection: IConnection;
+    connection: Connection;
     onConnect: (e: React.MouseEvent<HTMLAnchorElement>) => void;
 }
 

@@ -11,7 +11,6 @@ interface IProps {
     onSubmit: (evt: React.FormEvent<HTMLFormElement>) => void;
 }
 
-
 export default ({values, onCancel, onChange, errors, onSubmit, visible}: IProps) => (
     <Modal
         title="Hello world"

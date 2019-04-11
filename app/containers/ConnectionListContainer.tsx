@@ -1,13 +1,14 @@
 import * as React from "react";
 import ConnectionList from "../components/ConnectionList";
 import { connect } from "react-redux";
-import * as connection from "../actions/connection";
 import { AppState } from "../store";
 import { Dispatch } from "redux";
+import Connection from "../db/Connection";
+import * as connectionAction from "../actions/connection";
 
 interface IProps {
     dispatch: any;
-    connection: connection.IConnectionState;
+    connections: Connection[];
 }
 
 interface IState {
@@ -20,25 +21,25 @@ class ConnectionListContainer extends React.Component<IProps, IState> {
     };
 
     public componentDidMount() {
-        this.props.dispatch(connection.fetch());
+        this.props.dispatch(connectionAction.fetch());
     }
 
     public handleAddConnection = (e: any) => {
-        this.props.dispatch(connection.isCreating(true));
+        this.props.dispatch(connectionAction.creating(true));
     }
 
     public render() {
         return (
             <ConnectionList
                 onAddConnection={this.handleAddConnection}
-                connection={this.props.connection}
+                connections={this.props.connections}
             />
         );
     }
 }
 
-const mapStateToProps = (state: AppState) => ({
-    connection: state.connection
+const mapStateToProps = ({ connection }: AppState) => ({
+    connections: connection.data
 });
 
 const dispatchToProps = (dispatch: Dispatch) => ({ dispatch });

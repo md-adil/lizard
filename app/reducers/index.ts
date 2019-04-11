@@ -1,5 +1,5 @@
 import { combineReducers } from "redux";
 import connection from "./connection";
-import connectedConnection from "./connectedConnection";
+import table from "./table";
 
-export default combineReducers({ connection, connectedConnection });
+export default combineReducers({ connection, table });

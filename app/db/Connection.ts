@@ -1,31 +1,39 @@
 import Database from "./Database";
-import { IConnection } from "../actions/connection";
-import * as Knex from "knex";
+import { IConnectionConfig } from "../actions/connection";
+import Query from "./query";
 
 class Connection {
+    public id: string;
     public name: string;
-    protected config: IConnection;
-    protected knex: Knex;
+    public isConnected: boolean = false;
+    public isConnecting: boolean = false;
+    protected config: IConnectionConfig;
+    private connection: Query | null = null;
 
-    constructor(conf: IConnection) {
+    constructor(conf: IConnectionConfig) {
         this.name = conf.name;
         this.config = conf;
-        // this.knex = Knex({
-        //     client: "mysql2",
-        //     connection: {
-        //         host : conf.host,
-        //         user : conf.user,
-        //         password : conf.password
-        //     }
-        // });
+        this.id = conf.id;
     }
 
-    public async verify() {
-        return this.knex.raw("SELECT 1");
+    public async connect() {
+        const connection = new Query(this.config);
+        await connection.execute("SELECT 1 + 1 as result");
+        this.connection = connection;
     }
 
-    public databases(): Promise<Database[]> {
-        return new Promise(() => {});
+    public async databases(): Promise<Database[]> {
+        if (!this.connection) {
+            return [];
+        }
+        const db = await this.connection.fetchAll("SHOW DATABASES");
+        return db.map((dbname: any) => {
+            return new Database(dbname.Database, this.config);
+        });
+    }
+
+    public toJSON() {
+        return this.config;
     }
 }
 

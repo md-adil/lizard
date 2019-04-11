@@ -1,37 +1,58 @@
-import {
-    ADD,
-    LOAD,
-    LOADING,
-    CREATE,
-    ConnectionActionTypes,
-    IConnectionState,
-    UPDATE,
-    IConnection,
-} from "../actions/connection";
+import * as Types from "../actions/connection";
+import Connection from "../db/Connection";
+
+interface IConnectionState {
+    isCreating: boolean;
+    isLoading: boolean;
+    isAdding: boolean;
+    active: string;
+    data: Connection[];
+}
 
 const initialState: IConnectionState = {
-    data: [],
     isCreating: false,
+    isAdding: false,
     isLoading: false,
+    active: "connections",
+    data: []
 };
 
 export default (
-        state = initialState, action: ConnectionActionTypes,
+        state = initialState, action: Types.ConnectionActionTypes,
     ): IConnectionState => {
 
-    if (action.type === LOAD) {
-        return { ...state, data: action.payload as IConnection[] };
+    if (action.type === Types.LOAD) {
+        return { ...state, data: action.payload };
     }
 
     switch (action.type) {
-        case CREATE:
-            return { ...state, isCreating: action.payload as boolean };
-        case ADD:
-            return { ...state, data: [ ...state.data, action.payload as IConnection ] };
-        case UPDATE:
+        case Types.CREATING:
+            return { ...state, isCreating: action.payload };
+
+        case Types.ADDING:
+            return { ...state, isAdding: action.payload };
+
+        case Types.ADD:
+            return { ...state, isCreating: false, isAdding: false, data: [ ...state.data, action.payload ] };
+
+        case Types.UPDATE:
             return state;
-        case LOADING:
-            return { ...state, isLoading: action.payload as boolean };
+
+        case Types.LOADING:
+            return { ...state, isLoading: action.payload };
+
+        case Types.ACTIVE:
+            return { ...state, active: action.payload };
+
+        case Types.CONNECTED:
+            return { ...state, active: action.payload.id, data: state.data.map((connection) => {
+                if (connection === action.payload) {
+                    connection.isConnected = true;
+                    connection.isConnecting = false;
+                }
+                return connection;
+            })};
+
         default:
             return state;
     }

@@ -4,16 +4,17 @@ import { connect } from "react-redux";
 import CreateConnection from "../components/CreateConnection";
 import { AppState } from "../store";
 import * as shortid from "shortid";
+import Connection from "../db/Connection";
 
 interface IProps {
-    connection: connection.IConnectionState;
+    isCreating: boolean;
     onCancel?: any;
     dispatch: any;
 }
 
 interface IState {
     errors: any;
-    values: connection.IConnection;
+    values: connection.IConnectionConfig;
 }
 
 class CreateConnectionContainer extends React.Component<IProps, IState> {
@@ -31,7 +32,7 @@ class CreateConnectionContainer extends React.Component<IProps, IState> {
     }
 
     public handleCancel = () => {
-        this.props.dispatch(connection.isCreating(false));
+        this.props.dispatch(connection.creating(false));
     }
 
     public handleChange = (e: React.FormEvent<HTMLInputElement>) => {
@@ -40,7 +41,7 @@ class CreateConnectionContainer extends React.Component<IProps, IState> {
 
     public handleSubmit = (e: React.FormEvent): void => {
         e.preventDefault();
-        this.props.dispatch(connection.add(this.state.values));
+        this.props.dispatch(connection.add(new Connection(this.state.values)));
     }
 
 
@@ -52,13 +53,16 @@ class CreateConnectionContainer extends React.Component<IProps, IState> {
                 values={this.state.values}
                 errors={this.state.values}
                 onCancel={this.handleCancel}
-                visible={this.props.connection.isCreating}
+                visible={this.props.isCreating}
                 />
         );
     }
 }
 
-const mapStateToProps = (state: AppState) => ({ connection: state.connection });
+const mapStateToProps = (state: AppState) => ({
+    connection: state.connection,
+    isCreating: state.connection.isCreating
+});
 const mapDispatchToProps = (dispatch: any) => ({dispatch});
 
 export default connect(mapStateToProps)(CreateConnectionContainer);
