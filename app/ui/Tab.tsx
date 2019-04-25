@@ -1,6 +1,7 @@
 import * as React from "react";
 import "./tab.scss";
 const { map } = React.Children;
+import classnames from "classnames";
 
 interface IPropsPane {
     key: string;
@@ -20,6 +21,7 @@ Pane.defaultProps = {
 interface IProps {
     active: string;
     children: React.ReactNode;
+    className?: string;
     onChange: (key: string, props: IPropsPane) => void;
 }
 
@@ -48,7 +50,10 @@ class Tab extends React.Component<IProps> {
         }
         const {closable} = pane.props;
         return (
-            <span className="ui-tabs-nav-btn" onClick={this.handleChange.bind(this, pane)}>
+            <span
+                className={classnames("ui-tabs-nav-btn", { "is-active": this.props.active === pane.key })}
+                onClick={this.handleChange.bind(this, pane)}
+            >
                 {pane.props.title}{closable && <a>&times;</a>}
             </span>
         );
@@ -56,7 +61,7 @@ class Tab extends React.Component<IProps> {
 
     public render() {
         return (
-            <div className="ui-tabs">
+            <div className={classnames("ui-tabs", this.props.className)}>
                 <nav className="ui-tabs-nav">{map(this.props.children, this.renderNav)}</nav>
                 {map(this.props.children, this.renderContent)}
             </div>

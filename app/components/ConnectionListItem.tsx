@@ -7,7 +7,7 @@ export interface IProps {
 }
 
 export default ({connection, onConnect}: IProps) => (
-    <div>
-        <a onClick={onConnect}>{connection.name}</a>
+    <div className="connection-list-item">
+        <a href="#" onClick={onConnect}>{connection.name}</a>
     </div>
 );

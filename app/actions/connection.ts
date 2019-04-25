@@ -108,9 +108,9 @@ interface IConnecting {
 }
 
 export const connect = (connection: Connection) => async (dispatch: Dispatch) => {
-    dispatch({type: CONNECTING, paylaod: connection});
+    dispatch({type: CONNECTING, payload: connection});
     await connection.connect();
-    dispatch({type: CONNECTED, paylaod: connection});
+    dispatch({type: CONNECTED, payload: connection});
 };
 
 interface IActive {

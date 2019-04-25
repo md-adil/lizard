@@ -1,5 +1,6 @@
 import * as React from "react";
 import Database from "../db/Database";
+import "./database.scss";
 
 interface IProps {
     databases: Database[];

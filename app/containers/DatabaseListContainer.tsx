@@ -25,7 +25,7 @@ class DatabaseListContainer extends React.Component<IProps> {
         this.setState({ databases });
     }
 
-    public handleSelect = async (database: Database, evt: React.MouseEvent<HTMLDivElement>) => {
+    public handleSelect = async (database: Database) => {
         const tables = await database.tables();
         this.props.setTable(tables);
     }

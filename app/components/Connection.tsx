@@ -6,6 +6,7 @@ import DatabaseListContainer from "../containers/DatabaseListContainer";
 import Database from "../db/Database";
 import * as _ from "lodash";
 import RecordContainer from "../containers/RecordContainer";
+import "./connection.scss";
 
 export interface IProps {
     connection: Connection;
@@ -25,7 +26,7 @@ const TableName = (props: ITableProps) => (
 );
 
 export default (props: IProps) => (
-    <div>
+    <div style={{display: "flex"}}>
         <aside>
             <DatabaseListContainer connection={props.connection} />
         </aside>

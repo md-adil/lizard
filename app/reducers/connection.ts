@@ -4,12 +4,14 @@ import Connection from "../db/Connection";
 interface IConnectionState {
     isCreating: boolean;
     isLoading: boolean;
+    isLoaded: boolean;
     isAdding: boolean;
     active: string;
     data: Connection[];
 }
 
 const initialState: IConnectionState = {
+    isLoaded: false,
     isCreating: false,
     isAdding: false,
     isLoading: false,
@@ -22,7 +24,7 @@ export default (
     ): IConnectionState => {
 
     if (action.type === Types.LOAD) {
-        return { ...state, data: action.payload };
+        return { ...state, data: action.payload, isLoaded: true };
     }
 
     switch (action.type) {
@@ -43,6 +45,14 @@ export default (
 
         case Types.ACTIVE:
             return { ...state, active: action.payload };
+
+        case Types.CONNECTING:
+            return { ...state, data: state.data.map((connection) => {
+                if (connection === action.payload) {
+                    connection.isConnecting = true;
+                }
+                return connection;
+            })};
 
         case Types.CONNECTED:
             return { ...state, active: action.payload.id, data: state.data.map((connection) => {

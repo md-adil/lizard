@@ -9,6 +9,7 @@ import * as connectionAction from "../actions/connection";
 interface IProps {
     dispatch: any;
     connections: Connection[];
+    isConnectionLoaded: boolean;
 }
 
 interface IState {
@@ -21,7 +22,9 @@ class ConnectionListContainer extends React.Component<IProps, IState> {
     };
 
     public componentDidMount() {
-        this.props.dispatch(connectionAction.fetch());
+        if (!this.props.isConnectionLoaded) {
+            this.props.dispatch(connectionAction.fetch());
+        }
     }
 
     public handleAddConnection = (e: any) => {
@@ -39,7 +42,8 @@ class ConnectionListContainer extends React.Component<IProps, IState> {
 }
 
 const mapStateToProps = ({ connection }: AppState) => ({
-    connections: connection.data
+    connections: connection.data,
+    isConnectionLoaded: connection.isLoaded
 });
 
 const dispatchToProps = (dispatch: Dispatch) => ({ dispatch });

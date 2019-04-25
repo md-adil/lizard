@@ -5,7 +5,9 @@ import ConnectionContainer from "../containers/ConnectionContainer";
 import Tab from "../ui/Tab";
 import { AppState } from "../store";
 import Connection from "../db/Connection";
+import * as connectionAction from "../actions/connection";
 import "./app.scss";
+import { Dispatch } from "redux";
 
 interface IState {
     isVisible: boolean;
@@ -14,6 +16,8 @@ interface IState {
 
 interface IProps {
     connections: Connection[];
+    activeConnection: string;
+    dispatch: Dispatch;
 }
 
 class App extends React.Component<IProps, IState> {
@@ -31,21 +35,18 @@ class App extends React.Component<IProps, IState> {
     }
 
     public handleTabChange = (key: string) => {
-        this.setState({ activeTab: key });
+        this.props.dispatch(connectionAction.active(key));
     }
 
-    public handleConnectToConnection = (connection: any) => {
-        console.log('Connected');
-    }
     public render() {
         const connections = this.props.connections;
         return (
-            <div>
-                <Tab active={this.state.activeTab} onChange={this.handleTabChange}>
+            <div className="connections">
+                <Tab active={this.props.activeConnection} className="connection-tabs" onChange={this.handleTabChange}>
                     <Tab.Pane closable={false} key="connections" title="Connection List">
                         <ConnectionListContainer />
                     </Tab.Pane>
-                    {connections.map((d: Connection) => (<Tab.Pane key={d.name} title={d.name}>
+                    {connections.map((d: Connection) => d.isConnected && (<Tab.Pane key={d.id} title={d.name}>
                         <ConnectionContainer connection={d} />
                     </Tab.Pane>))}
                 </Tab>
@@ -55,7 +56,10 @@ class App extends React.Component<IProps, IState> {
 }
 
 const mapState = ({connection}: AppState) => ({
-    connections: connection.data
+    connections: connection.data,
+    activeConnection: connection.active
 });
 
-export default connect(mapState)(App);
+const mapDispatch = (dispatch: Dispatch) => ({dispatch});
+
+export default connect(mapState, mapDispatch)(App);

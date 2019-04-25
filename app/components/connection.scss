@@ -1,0 +1,21 @@
+.connection-list {
+    display: flex;
+}
+
+.connection-list-item {
+    display: block;
+    border: 1px solid #bbb;
+    padding: 10px;
+    a {
+        text-decoration: none;
+        color: #333;
+    }
+}
+
+.connection-tabs {
+    > nav {
+        > .is-active {
+            background: #DDD;
+        }
+    }
+}
