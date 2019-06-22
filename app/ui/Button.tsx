@@ -2,6 +2,7 @@ import classnames from "classnames";
 import * as React from "react";
 import "./button.scss";
 import Icon from "./Icon";
+import Spinner from "./Spinner";
 
 interface IProps {
     children: React.ReactNode;
@@ -24,7 +25,7 @@ class Button extends React.Component<IProps> {
                 className={classnames("ui-btn", {"is-loading": isLoading})}
                 {...props}
             >
-                {children}
+                {isLoading && <Spinner size={16} />}<span>{children}</span>
             </button>
         );
     }

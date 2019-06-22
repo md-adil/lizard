@@ -4,7 +4,7 @@ import { connect } from "react-redux";
 import { AppState } from "../store";
 import { Dispatch } from "redux";
 import Connection from "../db/Connection";
-import * as connectionAction from "../actions/connection";
+import * as connectionAction from "../store/connection/action";
 
 interface IProps {
     dispatch: any;

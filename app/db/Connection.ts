@@ -1,5 +1,5 @@
 import Database from "./Database";
-import { IConnectionConfig } from "../actions/connection";
+import { IConnectionConfig } from "../store/connection/action";
 import Query from "./query";
 
 class Connection {

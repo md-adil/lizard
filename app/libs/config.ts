@@ -2,7 +2,7 @@ import * as conf from "conf";
 import * as os from "os";
 import * as fs from "./fs";
 
-const configsDir = `${os.homedir()}/lizard`;
+const configsDir = `${os.homedir()}/.lizard`;
 const paths: any = {
     configs: configsDir + "/configs.json",
     connections: configsDir + "/connections.json",

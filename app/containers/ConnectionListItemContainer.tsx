@@ -1,7 +1,7 @@
 import * as React from "react";
 import { connect } from "react-redux";
-import ConnectionList from "../components/ConnectionListItem";
-import * as connection from "../actions/connection";
+import ConnectionListItem from "../components/ConnectionListItem";
+import * as connection from "../store/connection/action";
 import { Dispatch } from "redux";
 import Connection from "../db/Connection";
 
@@ -18,7 +18,7 @@ class ConnectionListItemContainer extends React.Component<IProps> {
     }
 
     public render() {
-        return <ConnectionList onConnect={this.handleConnect} connection={this.props.connection} />;
+        return <ConnectionListItem onConnect={this.handleConnect} connection={this.props.connection} />;
     }
 }
 

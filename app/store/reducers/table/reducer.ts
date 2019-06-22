@@ -1,5 +1,5 @@
-import { ADD, DELETE, SET, CONNECT, ITableState, ITableSetAction, ITableAction } from "../actions/table";
-import Table from "../db/Table";
+import { ADD, DELETE, SET, CONNECT, ITableState, ITableSetAction, ITableAction } from "../../table/action";
+import Table from "../../../db/Table";
 
 const defaultState: ITableState = {
     data: []

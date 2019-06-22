@@ -1,6 +1,6 @@
-import * as config from "../libs/config";
+import * as config from "../../libs/config";
 import { Dispatch } from "redux";
-import Connection from "../db/Connection";
+import Connection from "../../db/Connection";
 
 export const CONNECTING = "@connections/connecting";
 export const CONNECTED = "@connections/connected";
@@ -27,7 +27,7 @@ interface ICreating {
     payload: boolean;
 }
 
-export const creating = (isCreate: boolean) => ({ type: CREATING, paylaod: isCreate });
+export const creating = (isCreate: boolean): ICreating => ({ type: CREATING, payload: isCreate });
 
 interface IAdding {
     type: typeof ADDING;

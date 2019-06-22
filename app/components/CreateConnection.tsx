@@ -13,7 +13,7 @@ interface IProps {
 
 export default ({values, onCancel, onChange, errors, onSubmit, visible}: IProps) => (
     <Modal
-        title="Hello world"
+        title="Add connection"
         visible={visible}
         onClose={onCancel}>
         <Form onSubmit={onSubmit}>

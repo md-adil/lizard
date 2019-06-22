@@ -1,4 +1,4 @@
-import Table from "../db/Table";
+import Table from "../../db/Table";
 
 export const ADD = "ADD TABLE";
 export const DELETE = "DELETE TABLE";

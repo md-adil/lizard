@@ -4,7 +4,7 @@ import DatabaseList from "../components/DatabaseList";
 import Connection from "../db/Connection";
 import Database from "../db/Database";
 import Table from "../db/Table";
-import * as tableAction from "../actions/table";
+import * as tableAction from "../store/table/action";
 import { Dispatch } from "redux";
 
 interface IProps {

@@ -25,7 +25,9 @@ module.exports = {
 	},
 
 	plugins: [
-		new HTMLWebpackPlugin,
+		new HTMLWebpackPlugin({
+			title: 'Lizard'
+		}),
 		new TSLintPlugin({
             files: [path.resolve(__dirname, '../app/**/*.ts')]
         })

@@ -4,6 +4,7 @@ import * as ReactDOM from "react-dom";
 import AppContainer from "./containers/AppContainer";
 import store from "./store";
 const app = document.createElement("div");
+app.id = "app";
 
 document.body.appendChild(app);
 

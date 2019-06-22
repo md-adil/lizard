@@ -3,10 +3,8 @@ import { connect } from "react-redux";
 import ConnectionComponent from "../components/Connection";
 import { Dispatch } from "redux";
 import Connection from "../db/Connection";
-import Database from "../db/Database";
 import Table from "../db/Table";
-import * as tableAction from "../actions/table";
-import { AppState } from "../store";
+import * as tableAction from "../store/table/action";
 
 interface IProps {
     connection: Connection;
@@ -19,7 +17,6 @@ interface IState {
 }
 
 class ConnectionContainer extends React.Component<IProps, IState> {
-    public state = { activeTab: "tables", tables: [] };
     public handleConnect = (e: React.MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault();
     }
@@ -38,8 +35,6 @@ class ConnectionContainer extends React.Component<IProps, IState> {
         return (
             <ConnectionComponent
                 onSelectTable={this.handleSelectTable}
-                tables={this.props.tables}
-                activeTab={this.state.activeTab}
                 handleTabChagne={this.handleTabChange}
                 connection={this.props.connection}
             />
@@ -48,8 +43,8 @@ class ConnectionContainer extends React.Component<IProps, IState> {
 }
 
 const mapDispatch = (dispatch: Dispatch) => ({ dispatch });
-const mapStateToProps = ({ table }: AppState) => ({
-    tables: table.data
-});
+// const mapStateToProps = ({ table }: AppState) => ({
+//     tables: table.data
+// });
 
-export default connect(mapStateToProps, mapDispatch)(ConnectionContainer);
+export default connect(null, mapDispatch)(ConnectionContainer);

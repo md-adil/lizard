@@ -1,4 +1,4 @@
-import * as connection from "../actions/connection";
+import * as connection from "../store/connection/action";
 import * as React from "react";
 import { connect } from "react-redux";
 import CreateConnection from "../components/CreateConnection";

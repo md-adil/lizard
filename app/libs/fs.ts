@@ -10,7 +10,11 @@ export const write = (p: string, content: any) => new Promise<void>((r, e) => {
     });
 });
 
-export const read = (p: string) => new Promise<Buffer>((r, e) => {
+export const read = (p: string) => new Promise<Buffer | null>(async (r, e) => {
+    if (!await isExists(p)) {
+        return r(null);
+    }
+
     fs.readFile(p, (err, data) => {
         if (err) {
             e(err);

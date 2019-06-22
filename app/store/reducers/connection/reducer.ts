@@ -1,5 +1,5 @@
-import * as Types from "../actions/connection";
-import Connection from "../db/Connection";
+import * as Types from "../../connection/action";
+import Connection from "../../../db/Connection";
 
 interface IConnectionState {
     isCreating: boolean;

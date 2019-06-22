@@ -1,5 +1,5 @@
 import IQuery from "./QueryInterface";
-import { IConnectionConfig } from "../../actions/connection";
+import { IConnectionConfig } from "../../store/connection/action";
 import mysql = require("mysql");
 
 class Query implements IQuery {
