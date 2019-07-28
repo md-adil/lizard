@@ -1,3 +1,4 @@
+/**
 import * as React from "react";
 import { connect } from "react-redux";
 import ConnectionComponent from "../components/Connection";
@@ -48,3 +49,4 @@ const mapDispatch = (dispatch: Dispatch) => ({ dispatch });
 // });
 
 export default connect(null, mapDispatch)(ConnectionContainer);
+ */

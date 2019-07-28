@@ -1,17 +1,34 @@
-import { AppState } from "..";
-import { IContentAction, ADD, REMOVE, IContentState } from "./types";
+import { IContentAction, ADD, REMOVE, ACTIVE, IContentState } from "./types";
 
 const defaultState: IContentState = {
-    active: "",
     data: []
 };
 
-export default (state = defaultState, action: IContentAction): IContentState => {
+let lastActive: string | undefined;
+export default (
+    state = defaultState,
+    action: IContentAction
+): IContentState => {
     switch (action.type) {
         case ADD:
-            return { ...state, data: [ ...state.data, action.payload ] };
+            lastActive = state.active;
+            return {
+                ...state,
+                data: [...state.data, action.payload],
+                active: action.payload.key || action.payload.title
+            };
         case REMOVE:
-            return {...state, data: state.data.filter((a) => a !== action.payload)};
+            const active = lastActive;
+            return {
+                ...state,
+                active,
+                data: state.data.filter((a: any) => a.title !== action.payload)
+            };
+        case ACTIVE:
+            return {
+                ...state,
+                active: action.payload
+            };
         default:
             return state;
     }

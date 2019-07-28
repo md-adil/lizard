@@ -3,27 +3,20 @@ import { IConnectionConfig } from "../../store/connection/action";
 import mysql = require("mysql");
 
 class Query implements IQuery {
-    protected config: IConnectionConfig;
     protected connection: mysql.Connection;
-    constructor(config: IConnectionConfig, dbname?: string) {
-        this.config = config;
-        if (dbname) {
-            this.connection = mysql.createConnection({
-                host: config.host,
-                user: config.user,
-                database: dbname
-            });
-        } else {
-            this.connection = mysql.createConnection({
-                host: config.host,
-                user: config.user
-            });
-        }
+    protected myQuery?: string;
+    constructor(conn: mysql.Connection) {
+        this.connection = conn;
     }
 
-    public execute(q: string): Promise<any> {
+    public query(q: string) {
+        this.myQuery = q;
+        return this;
+    }
+
+    public execute(): Promise<any> {
         return new Promise<void>((res, rej) => {
-            this.connection.query(q, (err, _, __) => {
+            this.connection.query(this.myQuery || "", (err, _, __) => {
                 if (err) {
                     rej(err);
                 } else {
@@ -33,27 +26,36 @@ class Query implements IQuery {
         });
     }
 
-    public fetch(query: string) {
+    public fetch() {
+        if (!this.myQuery) {
+            throw new Error("Please select any query");
+        }
         return new Promise<any>((res, rej) => {
-            this.connection.query(query, (err, results, fields) => {
-                if (err) {
-                    rej(err);
-                } else {
-                    res(results[0]);
+            this.connection.query(
+                this.myQuery || "",
+                (err, results, fields) => {
+                    if (err) {
+                        rej(err);
+                    } else {
+                        res(results[0]);
+                    }
                 }
-            });
+            );
         });
     }
 
-    public fetchAll(query: string) {
+    public fetchAll() {
         return new Promise<any>((res, rej) => {
-            this.connection.query(query, (err, results, fields) => {
-                if (err) {
-                    rej(err);
-                } else {
-                    res(results);
+            this.connection.query(
+                this.myQuery || "",
+                (err?: Error, results?: any[], fields?: any) => {
+                    if (err) {
+                        rej(err);
+                    } else {
+                        res(results);
+                    }
                 }
-            });
+            );
         });
     }
 }

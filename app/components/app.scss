@@ -1,8 +1,10 @@
-html,body {
+html,
+body {
     height: 100%;
 }
 body {
-    margin: 0;padding: 0;
+    margin: 0;
+    padding: 0;
 }
 
 #app {
@@ -15,14 +17,14 @@ body {
 }
 header {
     background: rgb(197, 202, 212);
-    flex: 0 0 100px;
+    flex: 0 0 50px;
 }
 main {
     display: flex;
     flex: 4;
 }
 aside {
-    background: #BBB;
+    background: #e2e2e2;
     flex: 1;
 }
 section.content {

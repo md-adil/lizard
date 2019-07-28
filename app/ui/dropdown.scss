@@ -1,0 +1,14 @@
+.ui {
+    &.dropdown {
+        position: relative;
+    }
+    &.dropdown-items {
+        display: none;
+        position: absolute;
+        top: 0;
+        right: 0;
+    }
+    &.dropdown.visible &.dropdown-items {
+        display: block;
+    }
+}

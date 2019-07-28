@@ -9,7 +9,7 @@ interface IProps {
     onAddConnection: () => void;
 }
 
-export default ({onAddConnection}: IProps) => (
+export default ({ onAddConnection }: IProps) => (
     <div id="root">
         <header>
             <CreateConnectionContainer />
@@ -22,4 +22,4 @@ export default ({onAddConnection}: IProps) => (
             <ContentContainer />
         </main>
     </div>
-)
+);

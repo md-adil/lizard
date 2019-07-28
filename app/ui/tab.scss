@@ -4,6 +4,9 @@
     }
     &-nav-btn {
         padding: 10px;
-        border: 1px solid #BBB;
+        border: 1px solid #bbb;
+        &.is-active {
+            background: #f1f1f1;
+        }
     }
 }
