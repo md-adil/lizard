@@ -24,7 +24,13 @@ class TableListContainer extends React.Component<IProps, IState> {
         store.dispatch(
             contentAction.add({
                 title: `${table.name} - ${table.database.name}`,
-                content: <TableContainer fields={fields} records={records} />
+                content: (
+                    <TableContainer
+                        table={table}
+                        fields={fields}
+                        records={records}
+                    />
+                )
             })
         );
     };

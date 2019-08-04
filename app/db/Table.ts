@@ -1,5 +1,7 @@
 import Database from "./Database";
 import * as mysql from "mysql";
+import Field from "./Field";
+import * as _ from "lodash";
 
 class Table {
     public name: string;
@@ -15,11 +17,28 @@ class Table {
             .fetchAll();
     }
 
-    public async fields() {
+    public async fields(): Promise<Field[]> {
         const fields = await this.database
             .query(`EXPLAIN ${this.name}`)
             .fetchAll();
-        return fields.map((f: any) => f);
+        return Field.create(fields);
+    }
+
+    public async update(conditions: any, values: any) {
+        const bindings: any[] = [];
+        const v = _.map(values, (val, key) => {
+            bindings.push(val);
+            return `${key} = ?`;
+        }).join(",");
+
+        const c = _.map(conditions, (val, key) => {
+            bindings.push(val);
+            return `${key} = ?`;
+        }).join(" AND ");
+
+        return this.database
+            .query(`UPDATE ${this.name} SET ${v} WHERE ${c}`, bindings)
+            .execute();
     }
 }
 

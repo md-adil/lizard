@@ -3,26 +3,32 @@ import { IConnectionConfig } from "../../store/connection/action";
 import mysql = require("mysql");
 
 class Query implements IQuery {
+    public bindings: any[] = [];
     protected connection: mysql.Connection;
     protected myQuery?: string;
     constructor(conn: mysql.Connection) {
         this.connection = conn;
     }
 
-    public query(q: string) {
+    public query(q: string, bindings: any[] = []) {
         this.myQuery = q;
+        this.bindings = bindings;
         return this;
     }
 
     public execute(): Promise<any> {
         return new Promise<void>((res, rej) => {
-            this.connection.query(this.myQuery || "", (err, _, __) => {
-                if (err) {
-                    rej(err);
-                } else {
-                    res();
+            this.connection.query(
+                this.myQuery || "",
+                this.bindings,
+                (err, _, __) => {
+                    if (err) {
+                        rej(err);
+                    } else {
+                        res();
+                    }
                 }
-            });
+            );
         });
     }
 
@@ -34,6 +40,7 @@ class Query implements IQuery {
             this.connection.query(
                 this.myQuery || "",
                 (err, results, fields) => {
+                    console.log({ fields });
                     if (err) {
                         rej(err);
                     } else {

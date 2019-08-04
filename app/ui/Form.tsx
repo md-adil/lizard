@@ -1,5 +1,4 @@
 import * as React from "react";
-import { createForm } from "rc-form";
 import Button from "./Button";
 import classnames from "classnames";
 
@@ -60,7 +59,6 @@ export const Submit = ({ children, ...props }: ISubmitProps) => (
 
 class Form extends React.Component<IFormProps> {
     public static Field = Field;
-    public static create = createForm;
     public static Text = Text;
     public static Input = Text;
     public static Submit = Submit;

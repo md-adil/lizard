@@ -20,8 +20,8 @@ class Database {
         });
     }
 
-    public query(q: string): Query {
-        return this.getBuilder().query(q);
+    public query(q: string, bindings: any[] = []): Query {
+        return this.getBuilder().query(q, bindings);
     }
 
     public getBuilder(): Query {

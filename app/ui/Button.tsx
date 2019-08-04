@@ -4,16 +4,17 @@ import "./button.scss";
 import Icon from "./Icon";
 import Spinner from "./Spinner";
 
+export type HTMLButtonTypes = "submit" | "reset" | "button" | undefined;
 interface IProps {
     children: React.ReactNode;
-    onClick ?: () => void;
+    onClick?: () => void;
     isLoading: boolean;
-    htmlType?: string;
+    htmlType?: HTMLButtonTypes;
 }
 
 class Button extends React.Component<IProps> {
     public static defaultProps = {
-        isLoading: false,
+        isLoading: false
     };
 
     public render() {
@@ -22,10 +23,11 @@ class Button extends React.Component<IProps> {
             <button
                 type={htmlType}
                 onClick={isLoading ? undefined : onClick}
-                className={classnames("ui-btn", {"is-loading": isLoading})}
+                className={classnames("ui-btn", { "is-loading": isLoading })}
                 {...props}
             >
-                {isLoading && <Spinner size={16} />}<span>{children}</span>
+                {isLoading && <Spinner size={16} />}
+                <span>{children}</span>
             </button>
         );
     }

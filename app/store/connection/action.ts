@@ -27,7 +27,10 @@ interface ICreating {
     payload: boolean;
 }
 
-export const creating = (isCreate: boolean): ICreating => ({ type: CREATING, payload: isCreate });
+export const creating = (isCreate: boolean): ICreating => ({
+    type: CREATING,
+    payload: isCreate
+});
 
 interface IAdding {
     type: typeof ADDING;
@@ -52,7 +55,10 @@ interface IAdd {
     payload: Connection;
 }
 
-export const add = (connection: Connection) => async (dispatch: any, getState: any) => {
+export const add = (connection: Connection) => async (
+    dispatch: any,
+    getState: any
+) => {
     const connections = getState().connection.data.concat([connection]);
     dispatch(adding(true));
     await config.set("connections", connections);
@@ -65,7 +71,7 @@ interface IDestroy {
 }
 
 export const destroy = (connection: Connection): IDestroy => {
-    return {type: DELETE, payload: connection};
+    return { type: DELETE, payload: connection };
 };
 
 interface IUpdate {
@@ -74,8 +80,11 @@ interface IUpdate {
     data: IConnectionConfig;
 }
 
-export const update = (connection: Connection, data: IConnectionConfig): IUpdate => {
-    return {type: UPDATE, payload: connection, data};
+export const update = (
+    connection: Connection,
+    data: IConnectionConfig
+): IUpdate => {
+    return { type: UPDATE, payload: connection, data };
 };
 
 interface ILoaded {
@@ -89,12 +98,17 @@ interface ILoading {
 }
 
 export const fetch = () => async (dispatch: any) => {
-    dispatch({type: LOADING, payload: true});
+    dispatch({ type: LOADING, payload: true });
     const connections = await config.get("connections");
     if (connections) {
-        dispatch({ type: LOAD, payload: connections.map((conf: IConnectionConfig) => new Connection(conf)) });
+        dispatch({
+            type: LOAD,
+            payload: connections.map(
+                (conf: IConnectionConfig) => new Connection(conf)
+            )
+        });
     }
-    dispatch({type: LOADING, payload: false});
+    dispatch({ type: LOADING, payload: false });
 };
 
 interface IConnected {
@@ -107,10 +121,16 @@ interface IConnecting {
     payload: Connection;
 }
 
-export const connect = (connection: Connection) => async (dispatch: Dispatch) => {
-    dispatch({type: CONNECTING, payload: connection});
-    await connection.connect();
-    dispatch({type: CONNECTED, payload: connection});
+export const connect = (connection: Connection) => async (
+    dispatch: Dispatch
+) => {
+    dispatch({ type: CONNECTING, payload: connection });
+    try {
+        await connection.connect();
+    } catch (err) {
+        alert(err.message);
+    }
+    dispatch({ type: CONNECTED, payload: connection });
 };
 
 interface IActive {
@@ -120,5 +140,15 @@ interface IActive {
 
 export const active = (payload: string) => ({ type: ACTIVE, payload });
 
-export type ConnectionActionTypes = ICreating | ILoading | ILoaded | IConnecting |
-        IConnected | IAdding | IAdd | ILoading | IUpdate | IDestroy | IActive;
+export type ConnectionActionTypes =
+    | ICreating
+    | ILoading
+    | ILoaded
+    | IConnecting
+    | IConnected
+    | IAdding
+    | IAdd
+    | ILoading
+    | IUpdate
+    | IDestroy
+    | IActive;

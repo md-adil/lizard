@@ -8,40 +8,12 @@ import store from "../store";
 import * as content from "../store/content/action";
 import TableListContainer from "../containers/TableListContainer";
 import Database from "../db/Database";
+import DatabaseContainer from "../containers/DatabaseContainer";
 const { useState } = React;
 interface IProps {
     onAddConnection: any;
     connections: Connection[];
 }
-
-interface IDatabaseProps {
-    database: Database;
-}
-
-const DatabaseComponent = (props: IDatabaseProps) => {
-    const [loading, setLoading] = useState(false);
-    const database = props.database;
-    const loadResults = async () => {
-        setLoading(true);
-        const tables = await database.tables();
-        store.dispatch(
-            content.add({
-                title: `tables in ${database.name}`,
-                content: (
-                    <TableListContainer tables={tables} database={database} />
-                )
-            })
-        );
-        setLoading(false);
-    };
-
-    return (
-        <div onClick={loadResults}>
-            {loading && <Spinner />}
-            {props.database.name}
-        </div>
-    );
-};
 
 const useDatabase = (init: any) => {
     const [databases, setDatabase] = React.useState(init);
@@ -52,10 +24,14 @@ const useDatabase = (init: any) => {
         async (e: any, connection: any) => {
             e.preventDefault();
             setIsConnecting(true);
-            await connection.connect();
+            try {
+                await connection.connect();
+                const db = await connection.databases();
+                setDatabase(db);
+            } catch (err) {
+                alert(err.message);
+            }
             setIsConnecting(false);
-            const db = await connection.databases();
-            setDatabase(db);
         }
     ];
 };
@@ -75,8 +51,8 @@ const ConnectionListItem = ({ connection }: { connection: Connection }) => {
                 {connection.name}
             </a>
             <div className="databases">
-                {databases.map((db: Database) => (
-                    <DatabaseComponent key={db.name} database={db} />
+                {databases.map((database: Database) => (
+                    <DatabaseContainer database={database} />
                 ))}
             </div>
             <Dropdown overlay={overlay}>
