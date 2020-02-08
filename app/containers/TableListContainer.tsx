@@ -21,18 +21,6 @@ class TableListContainer extends React.Component<IProps, IState> {
         const fields = await table.fields();
         const records = await table.records();
         console.log({ records });
-        store.dispatch(
-            contentAction.add({
-                title: `${table.name} - ${table.database.name}`,
-                content: (
-                    <TableContainer
-                        table={table}
-                        fields={fields}
-                        records={records}
-                    />
-                )
-            })
-        );
     };
 
     public render() {

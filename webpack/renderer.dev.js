@@ -2,20 +2,23 @@ const webpack = require('webpack'),
 	path = require('path'),
 	HTMLWebpackPlugin = require('html-webpack-plugin'),
 	TSLintPlugin = require('tslint-webpack-plugin');
+const nodeExternals = require('webpack-node-externals')
+
 
 module.exports = {
 	watch: true,
 	mode: 'development',
-	target: 'electron-renderer',
-	devtool: 'inline-source-map',
-	resolve: {  extensions: ['.ts', '.tsx', '.js'] },
+	target: "electron-renderer",
+	devtool: "inline-source-map",
+	resolve: { extensions: ['.ts', '.tsx', '.js'] },
+	externals: [nodeExternals()],
 	entry: {
 		main: './app/index.ts'
 	},
 	module: {
 		rules: [
-			{ test: /\.tsx?$/, use: [ 'awesome-typescript-loader' ], exclude: /node_modules/ },
-			{ test: /\.scss$/, use: [ 'style-loader', 'css-loader', 'sass-loader' ] }
+			{ test: /\.tsx?$/, use: ['awesome-typescript-loader'], exclude: /node_modules/ },
+			{ test: /\.scss$/, use: ['style-loader', 'css-loader', 'sass-loader'] }
 		]
 	},
 	output: {
@@ -29,8 +32,8 @@ module.exports = {
 			title: 'Lizard'
 		}),
 		new TSLintPlugin({
-            files: [path.resolve(__dirname, '../app/**/*.ts')]
-        })
+			files: [path.resolve(__dirname, '../app/**/*.ts')]
+		})
 	],
 
 	devServer: {

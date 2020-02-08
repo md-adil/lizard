@@ -1,7 +1,7 @@
 import Database from "./Database";
-import { IConnectionConfig } from "../store/connection/action";
 import Query from "./query";
 import * as mysql from "mysql";
+import { IConnectionConfig } from "../store/connection/types";
 
 class Connection {
     public id: string;

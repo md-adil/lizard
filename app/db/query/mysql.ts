@@ -1,6 +1,5 @@
 import IQuery from "./QueryInterface";
-import { IConnectionConfig } from "../../store/connection/action";
-import mysql = require("mysql");
+import * as mysql from "mysql";
 
 class Query implements IQuery {
     public bindings: any[] = [];

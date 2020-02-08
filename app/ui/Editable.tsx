@@ -1,6 +1,6 @@
-import * as React from "react";
+import React from "react";
 import { Input } from "./Form";
-import * as moment from "moment";
+import moment from "moment";
 export type ChangeEvent = (value: any) => void;
 
 interface IProps {

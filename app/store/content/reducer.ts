@@ -1,4 +1,4 @@
-import { IContentAction, ADD, REMOVE, ACTIVE, IContentState } from "./types";
+import { IContentAction, Types, IContentState } from "./types";
 
 const defaultState: IContentState = {
     data: []
@@ -10,21 +10,21 @@ export default (
     action: IContentAction
 ): IContentState => {
     switch (action.type) {
-        case ADD:
+        case Types.ADD:
             lastActive = state.active;
             return {
                 ...state,
                 data: [...state.data, action.payload],
                 active: action.payload.key || action.payload.title
             };
-        case REMOVE:
+        case Types.REMOVE:
             const active = lastActive;
             return {
                 ...state,
                 active,
                 data: state.data.filter((a: any) => a.title !== action.payload)
             };
-        case ACTIVE:
+        case Types.ACTIVE:
             return {
                 ...state,
                 active: action.payload

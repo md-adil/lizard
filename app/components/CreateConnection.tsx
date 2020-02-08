@@ -1,7 +1,5 @@
-import * as React from "react";
-import Modal from "../ui/Modal";
-import Form from "../ui/Form";
-
+import React from "react";
+import { Modal, Form, Button } from "semantic-ui-react";
 interface IProps {
     visible: boolean;
     values: any;
@@ -11,29 +9,53 @@ interface IProps {
     onSubmit: (evt: React.FormEvent<HTMLFormElement>) => void;
 }
 
-export default ({values, onCancel, onChange, errors, onSubmit, visible}: IProps) => (
-    <Modal
-        title="Add connection"
-        visible={visible}
-        onClose={onCancel}>
+export default ({
+    values,
+    onCancel,
+    onChange,
+    errors,
+    onSubmit,
+    visible
+}: IProps) => (
+    <Modal title="Add connection" visible={visible} onClose={onCancel}>
         <Form onSubmit={onSubmit}>
             <Form.Field label="Connection name" error={errors.name}>
-                <Form.Text name="name" onChange={onChange} value={values.name} />
+                <Form.Input
+                    name="name"
+                    onChange={onChange}
+                    value={values.name}
+                />
             </Form.Field>
             <Form.Field label="Host">
-                <Form.Text name="host" onChange={onChange} value={values.host} />
+                <Form.Input
+                    name="host"
+                    onChange={onChange}
+                    value={values.host}
+                />
             </Form.Field>
             <Form.Field label="Port">
-                <Form.Text name="port" onChange={onChange} value={values.port} />
+                <Form.Input
+                    name="port"
+                    onChange={onChange}
+                    value={values.port}
+                />
             </Form.Field>
             <Form.Field label="User">
-                <Form.Text name="user" onChange={onChange} value={values.user} />
+                <Form.Input
+                    name="user"
+                    onChange={onChange}
+                    value={values.user}
+                />
             </Form.Field>
             <Form.Field label="Password">
-                <Form.Text name="password" onChange={onChange} value={values.password} />
+                <Form.Input
+                    name="password"
+                    onChange={onChange}
+                    value={values.password}
+                />
             </Form.Field>
             <Form.Field>
-                <Form.Submit>Save</Form.Submit>
+                <Button>Save</Button>
             </Form.Field>
         </Form>
     </Modal>

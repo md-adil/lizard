@@ -1,5 +1,4 @@
 import Table from "../../db/Table";
-
 export const ADD = "ADD TABLE";
 export const DELETE = "DELETE TABLE";
 export const SET = "SET TABLES";
@@ -20,7 +19,7 @@ export interface ITableSetAction {
 }
 
 export const set = (tables: Table[]): ITableSetAction => {
-    return  {
+    return {
         type: SET,
         paylaod: tables
     };

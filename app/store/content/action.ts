@@ -1,17 +1,16 @@
-import * as React from "react";
-import { ADD, REMOVE, ACTIVE, IContent } from "./types";
+import { Types, IContent } from "./types";
 
 export const add = (payload: IContent) => ({
-    type: ADD,
+    type: Types.ADD,
     payload
 });
 
 export const remove = (payload: string) => ({
-    type: REMOVE,
+    type: Types.REMOVE,
     payload
 });
 
 export const active = (payload: string) => ({
-    type: ACTIVE,
+    type: Types.ACTIVE,
     payload
 });

@@ -1,11 +1,10 @@
-import * as React from "react";
+import React from "react";
 import { Provider } from "react-redux";
-import * as ReactDOM from "react-dom";
+import ReactDOM from "react-dom";
 import AppContainer from "./containers/AppContainer";
 import store from "./store";
 const app = document.createElement("div");
 app.id = "app";
-
 document.body.appendChild(app);
 
 const RootContainer = () => (
@@ -13,5 +12,5 @@ const RootContainer = () => (
         <AppContainer />
     </Provider>
 );
-
+console.log("REndering app");
 ReactDOM.render(<RootContainer />, app);

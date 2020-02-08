@@ -1,9 +1,12 @@
-const {app, BrowserWindow} = require('electron');
+const { app, BrowserWindow } = require('electron');
 
-require('electron-debug')({showDevTools: true});
+require('electron-debug')({ showDevTools: true });
 
 app.on('ready', function () {
   let mainWindow = new BrowserWindow({
+    webPreferences: {
+      nodeIntegration: true,
+    },
     width: 800,
     height: 500
   });

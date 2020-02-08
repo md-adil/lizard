@@ -22,16 +22,6 @@ class DatabaseContainer extends React.Component<IProps, IState> {
         this.setState({ isLoading: true });
         const database = this.props.database;
         const tables = await database.tables();
-
-        store.dispatch(
-            contentAction.add({
-                title: `tables in ${database.name}`,
-                content: (
-                    <TableListContainer tables={tables} database={database} />
-                )
-            })
-        );
-
         this.setState({ isLoading: false });
     };
 

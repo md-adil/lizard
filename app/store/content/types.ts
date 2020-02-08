@@ -1,6 +1,8 @@
-export const ADD = "@content/add";
-export const REMOVE = "@content/remove";
-export const ACTIVE = "@content/active";
+export enum Types {
+    ADD = "@content/add",
+    REMOVE = "@content/remove",
+    ACTIVE = "@content/active",
+}
 
 export interface IContent {
     title: string;
@@ -16,17 +18,17 @@ export interface IContentState {
 }
 
 export interface IContentAddAction {
-    type: typeof ADD;
+    type: Types.ADD;
     payload: IContent;
 }
 
 export interface IContentRemoveAction {
-    type: typeof REMOVE;
+    type: Types.REMOVE;
     payload: IContent | string;
 }
 
 export interface IContentActiveAction {
-    type: typeof ACTIVE;
+    type: Types.ACTIVE;
     payload: string;
 }
 

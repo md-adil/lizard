@@ -1,5 +1,4 @@
 {
-    "extends": ["tslint:latest", "tslint-react"],
     "rules": {
         "ordered-imports": false,
         "trailing-comma": false,

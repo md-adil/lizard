@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import App from "../components/App";
 import { connect } from "react-redux";
 import * as connectionAction from "../store/connection/action";
@@ -19,7 +19,4 @@ class AppContainer extends React.Component<IProps> {
 
 const mapDispatch = (dispatch: any) => ({ dispatch });
 
-export default connect(
-    null,
-    mapDispatch
-)(AppContainer);
+export default connect(null, mapDispatch)(AppContainer);
