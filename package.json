@@ -19,7 +19,7 @@
         "concurrently": "^5.1.0",
         "conf": "^6.2.0",
         "css-loader": "^3.4.2",
-        "lodash": "^4.17.15",
+        "lodash": "^4.17.19",
         "moment": "^2.24.0",
         "mysql": "^2.18.1",
         "react": "^16.12.0",
