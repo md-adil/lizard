@@ -1,0 +1,53 @@
+import { z } from "zod";
+import { ok, fail } from "@/lib/api";
+import {
+  listTableOverrides,
+  listColumnOverrides,
+  setTableOverride,
+  setColumnOverride,
+} from "@/lib/metadata/store";
+
+const tableOverrideSchema = z.object({
+  kind: z.literal("table"),
+  connectionId: z.string(),
+  schema: z.string(),
+  table: z.string(),
+  hidden: z.boolean().default(false),
+  displayColumn: z.string().nullable().default(null),
+  label: z.string().nullable().default(null),
+});
+
+const columnOverrideSchema = z.object({
+  kind: z.literal("column"),
+  connectionId: z.string(),
+  schema: z.string(),
+  table: z.string(),
+  column: z.string(),
+  label: z.string().nullable().default(null),
+  widget: z.string().nullable().default(null),
+  hidden: z.boolean().default(false),
+  readonly: z.boolean().default(false),
+  sortOrder: z.number().nullable().default(null),
+  help: z.string().nullable().default(null),
+});
+
+export async function GET() {
+  return ok({ tables: listTableOverrides(), columns: listColumnOverrides() });
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = z.discriminatedUnion("kind", [tableOverrideSchema, columnOverrideSchema]).parse(await req.json());
+    if (body.kind === "table") {
+      setTableOverride(body);
+    } else {
+      setColumnOverride(body);
+    }
+    return ok({ saved: true });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return fail(new Error(e.errors.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
+    }
+    return fail(e);
+  }
+}

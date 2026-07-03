@@ -1,0 +1,59 @@
+
+# Demo fleet: two independent Postgres databases simulating microservices.
+#   users-db  (port 54321) — customers + crm schema
+#   orders-db (port 54322) — orders + order_items (no FK to customers: cross-DB)
+# Each initializes lizard_read / lizard_write roles per the security model.
+#
+# Optional: run Lizard itself in a container too:
+#   docker compose --profile app up -d --build
+services:
+  lizard:
+    build: .
+    profiles: ["app"]
+    ports:
+      - "3111:3111"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LIZARD_AI_MODEL: ${LIZARD_AI_MODEL:-claude-sonnet-5}
+    volumes:
+      - lizard-data:/app/data
+    depends_on:
+      users-db:
+        condition: service_healthy
+      orders-db:
+        condition: service_healthy
+
+  users-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: users_service
+    ports:
+      - "54321:5432"
+    volumes:
+      - ./docker/users-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d users_service"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  orders-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders_service
+    ports:
+      - "54322:5432"
+    volumes:
+      - ./docker/orders-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orders_service"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  lizard-data:
