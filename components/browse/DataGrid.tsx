@@ -13,6 +13,7 @@ import {
   type ColumnDef,
   type ColumnSizingState,
 } from "@tanstack/react-table";
+import { Loader2 } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import { formatCell } from "./useTableMeta";
 
@@ -29,6 +30,7 @@ interface Props {
   rowClickable?: boolean;
   maxHeight?: string;
   isLoading?: boolean;
+  isFetching?: boolean;
 }
 
 const helper = createColumnHelper<Row>();
@@ -57,6 +59,7 @@ export function DataGrid({
   rowClickable,
   maxHeight = "calc(100vh - 240px)",
   isLoading = false,
+  isFetching = false,
 }: Props) {
   // holding sizing in React state guarantees a re-render on every resize tick
   const [colSizing, setColSizing] = useState<ColumnSizingState>({});
@@ -112,8 +115,18 @@ export function DataGrid({
   const leafColumns = table.getVisibleLeafColumns();
   const totalWidth = table.getTotalSize();
 
+  const showRefetchOverlay = isFetching && !isLoading;
+
   return (
-    <div className="panel overflow-auto scrollbar-thin" style={{ maxHeight }}>
+    <div style={{ position: "relative" }}>
+      <div
+        className="panel overflow-auto scrollbar-thin"
+        style={{
+          maxHeight,
+          opacity: showRefetchOverlay ? 0.6 : 1,
+          transition: "opacity 120ms",
+        }}
+      >
       <table
         className="grid"
         style={{
@@ -227,6 +240,23 @@ export function DataGrid({
         </tbody>
       </table>
       {leafColumns.length === 0 && null}
+      </div>
+      {showRefetchOverlay && (
+        <div
+          className="flex items-center justify-center"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+          }}
+        >
+          <Loader2
+            size={20}
+            className="animate-spin"
+            style={{ color: "var(--accent)" }}
+          />
+        </div>
+      )}
     </div>
   );
 }

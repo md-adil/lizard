@@ -194,6 +194,7 @@ export default function TablePage() {
         rows={data?.rows ?? []}
         fkLabels={data?.fkLabels ?? {}}
         isLoading={isLoading}
+        isFetching={isFetching}
         sort={sort}
         sortDir={sortDir}
         onToggleSort={toggleSort}

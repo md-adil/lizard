@@ -211,11 +211,14 @@ export function CustomizePanel({
           {cols.map((c, i) => (
             <div key={c.name} className="panel px-3 py-2">
               <div className="flex items-center gap-2">
-                <span className="code text-[12px] w-24 truncate" title={c.name}>
+                <span
+                  className="code text-[12px] flex-1 truncate"
+                  title={c.name}
+                >
                   {c.name}
                 </span>
                 <input
-                  className="input flex-1 min-w-0"
+                  className="input flex-2"
                   style={{ padding: "3px 8px", fontSize: 12 }}
                   placeholder="Label"
                   value={c.label}
@@ -228,7 +231,7 @@ export function CustomizePanel({
                   }
                 />
                 <select
-                  className="input w-28"
+                  className="input flex-1"
                   style={{ padding: "3px 6px", fontSize: 12 }}
                   value={c.widget}
                   onChange={(e) =>

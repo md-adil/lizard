@@ -177,16 +177,29 @@ table.grid th .resizer-handle {
   top: 0;
   right: 0;
   height: 100%;
-  width: 7px;
+  width: 4px;
   cursor: col-resize;
   user-select: none;
   touch-action: none;
   background: transparent;
   z-index: 2;
 }
+table.grid th .resizer-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 3px;
+  width: 1px;
+  height: 100%;
+  background: var(--border);
+}
 table.grid th .resizer-handle:hover,
 table.grid th .resizer-handle.is-resizing {
   background: var(--accent);
+}
+table.grid th .resizer-handle:hover::after,
+table.grid th .resizer-handle.is-resizing::after {
+  background: transparent;
 }
 table.grid tr:hover td {
   background: var(--hover);
