@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, usePathname, useParams } from "next/navigation";
+import { usePathname, useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme, toggleTheme } from "@/components/useTheme";
@@ -19,6 +19,17 @@ interface CatalogConnection {
   database: string;
   schemas: CatalogSchema[];
   error?: string;
+}
+interface TableOverride {
+  connectionId: string;
+  schema: string;
+  table: string;
+  hidden: boolean;
+  label: string | null;
+}
+interface CatalogResponse {
+  connections: CatalogConnection[];
+  tableOverrides: TableOverride[];
 }
 
 const NAV = [
@@ -49,8 +60,7 @@ function ThemeToggle() {
 export function Sidebar() {
   const pathname = usePathname();
   const params = useParams<{ connection?: string; schema?: string }>();
-  const router = useRouter();
-  const { data } = useQuery<{ connections: CatalogConnection[] }>({
+  const { data } = useQuery<CatalogResponse>({
     queryKey: ["catalog"],
     queryFn: async () => {
       const res = await fetch("/api/catalog");
@@ -60,10 +70,12 @@ export function Sidebar() {
   });
 
   const connections = useMemo(() => data?.connections ?? [], [data]);
+  const overrides = useMemo(() => data?.tableOverrides ?? [], [data]);
   const [selected, setSelected] = useState<string>("");
   const [loaded, setLoaded] = useState<string[]>([]);
   const [addingSchema, setAddingSchema] = useState(false);
   const [schemaSearch, setSchemaSearch] = useState("");
+  const [tableSearch, setTableSearch] = useState("");
 
   // follow the URL when browsing; otherwise keep/first connection
   useEffect(() => {
@@ -108,6 +120,12 @@ export function Sidebar() {
   };
 
   const remaining = allSchemas.filter((s) => !loaded.includes(s));
+
+  // override lookup: connectionId.schema.table → { hidden, label }
+  const overrideFor = (schema: string, table: string) =>
+    overrides.find((o) => o.connectionId === conn?.connectionId && o.schema === schema && o.table === table);
+
+  const tableQ = tableSearch.trim().toLowerCase();
 
   return (
     <aside
@@ -257,6 +275,19 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* table filter */}
+      {conn && !conn.error && loaded.length > 0 && (
+        <div className="px-3 pb-1">
+          <input
+            className="input"
+            style={{ padding: "4px 8px", fontSize: 12 }}
+            placeholder="Filter tables…"
+            value={tableSearch}
+            onChange={(e) => setTableSearch(e.target.value)}
+          />
+        </div>
+      )}
+
       {/* tables of loaded schemas */}
       <div className="px-2 pb-4 flex-1">
         {conn &&
@@ -264,6 +295,15 @@ export function Sidebar() {
           loaded.map((schemaName) => {
             const schema = conn.schemas.find((s) => s.name === schemaName);
             if (!schema) return null;
+            // hidden-override tables drop out; label override drives display + search
+            const tables = schema.tables
+              .map((t) => {
+                const o = overrideFor(schemaName, t.name);
+                return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false };
+              })
+              .filter((t) => !t.hidden)
+              .filter((t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ));
+            if (tables.length === 0) return null;
             return (
               <div key={schemaName} className="mb-2">
                 {loaded.length > 1 && (
@@ -271,26 +311,32 @@ export function Sidebar() {
                     {schemaName}
                   </div>
                 )}
-                {schema.tables.map((t) => {
+                {tables.map((t) => {
                   const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
                   const active = pathname === href || pathname.startsWith(href + "/");
                   return (
                     <Link
                       key={t.name}
                       href={href}
+                      title={t.label !== t.name ? t.name : undefined}
                       className="block rounded px-2.5 py-1 text-[14px] truncate"
                       style={{
                         background: active ? "var(--accent-soft)" : "transparent",
                         color: active ? "var(--accent)" : "var(--text-dim)",
                       }}
                     >
-                      {t.name}
+                      {t.label}
                     </Link>
                   );
                 })}
               </div>
             );
           })}
+        {conn && !conn.error && tableQ && (
+          <p className="px-2.5 pt-1 text-[11.5px]" style={{ color: "var(--text-faint)" }}>
+            filtering by “{tableSearch}”
+          </p>
+        )}
       </div>
     </aside>
   );

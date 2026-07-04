@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { useCatalog, buildTableMeta, formatCell, type TableMeta } from "@/components/browse/useTableMeta";
+import { useCatalog, buildTableMeta, type TableMeta } from "@/components/browse/useTableMeta";
 import { RowEditor } from "@/components/browse/RowEditor";
 import { CustomizePanel } from "@/components/browse/CustomizePanel";
+import { DataGrid } from "@/components/browse/DataGrid";
 import type { Filter } from "@/lib/data/crud";
 
 const OPS: { value: Filter["op"]; label: string }[] = [
@@ -182,59 +183,29 @@ export default function TablePage() {
         <p className="text-[13px] mb-3" style={{ color: "var(--red)" }}>{(error as Error).message}</p>
       )}
 
-      <div className="panel overflow-x-auto scrollbar-thin" style={{ maxHeight: "calc(100vh - 240px)", overflowY: "auto" }}>
-        <table className="grid">
-          <thead>
-            <tr>
-              {visibleCols.map((cm) => (
-                <th key={cm.col.name} className="cursor-pointer" onClick={() => toggleSort(cm.col.name)} title={`${cm.col.dataType}${cm.col.nullable ? "" : " · not null"}`}>
-                  {cm.label}
-                  {sort === cm.col.name && <span style={{ color: "var(--accent)" }}> {sortDir === "asc" ? "▲" : "▼"}</span>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data?.rows.map((row, i) => (
-              <tr
-                key={i}
-                className={meta.table.primaryKey.length > 0 ? "cursor-pointer" : ""}
-                onClick={() => {
-                  if (meta.table.primaryKey.length === 0) return;
-                  const pkObj: Record<string, unknown> = {};
-                  for (const k of meta.table.primaryKey) pkObj[k] = row[k];
-                  router.push(
-                    `/browse/${params.connection}/${params.schema}/${params.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`
-                  );
-                }}
-              >
-                {visibleCols.map((cm) => {
-                  const v = row[cm.col.name];
-                  const label = cm.ref && v != null ? data.fkLabels[cm.col.name]?.[String(v)] : undefined;
-                  const f = formatCell(v);
-                  return (
-                    <td key={cm.col.name} title={typeof v === "object" ? JSON.stringify(v) : String(v ?? "")}>
-                      {label ? (
-                        <>
-                          {label} <span className="tag code" style={{ fontSize: 10 }}>{String(v)}</span>
-                        </>
-                      ) : (
-                        <span style={{ color: f.muted ? "var(--text-faint)" : undefined }}>{f.text}</span>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {isLoading && <p className="px-4 py-6 text-[13px]" style={{ color: "var(--text-dim)" }}>Loading…</p>}
-        {data?.rows.length === 0 && (
-          <p className="px-4 py-8 text-center text-[13px]" style={{ color: "var(--text-dim)" }}>
-            No rows{filters.length ? " match the filters" : ""}.
-          </p>
-        )}
-      </div>
+      <DataGrid
+        columns={visibleCols}
+        rows={data?.rows ?? []}
+        fkLabels={data?.fkLabels ?? {}}
+        sort={sort}
+        sortDir={sortDir}
+        onToggleSort={toggleSort}
+        rowClickable={meta.table.primaryKey.length > 0}
+        onRowClick={(row) => {
+          if (meta.table.primaryKey.length === 0) return;
+          const pkObj: Record<string, unknown> = {};
+          for (const k of meta.table.primaryKey) pkObj[k] = row[k];
+          router.push(
+            `/browse/${params.connection}/${params.schema}/${params.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`
+          );
+        }}
+      />
+      {isLoading && <p className="px-1 py-3 text-[13px]" style={{ color: "var(--text-dim)" }}>Loading…</p>}
+      {!isLoading && data?.rows.length === 0 && (
+        <p className="px-1 py-6 text-[13px]" style={{ color: "var(--text-dim)" }}>
+          No rows{filters.length ? " match the filters" : ""}.
+        </p>
+      )}
 
       <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--text-dim)" }}>
         <button className="btn btn-sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>← Prev</button>

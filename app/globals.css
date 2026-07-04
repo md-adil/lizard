@@ -148,23 +148,45 @@ table.grid {
 table.grid th {
   text-align: left;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-dim);
   background: var(--bg-raised);
   padding: 7px 12px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
+  z-index: 1;
   white-space: nowrap;
   user-select: none;
+  /* no overflow:hidden here — it would clip the resize handle */
+}
+table.grid th .th-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 table.grid td {
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
-  max-width: 340px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+table.grid th .resizer-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 7px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  background: transparent;
+  z-index: 2;
+}
+table.grid th .resizer-handle:hover,
+table.grid th .resizer-handle.is-resizing {
+  background: var(--accent);
 }
 table.grid tr:hover td {
   background: var(--hover);
