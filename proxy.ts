@@ -6,7 +6,7 @@ const SESSION_COOKIE = "lizard_session";
 // Fast-path redirect for page requests with no session cookie. Real validation
 // (and stale-cookie handling) happens in the routes/AppShell — this only avoids
 // rendering the app chrome for obviously-unauthenticated visitors.
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAuthPage = pathname === "/login";
   const hasCookie = req.cookies.has(SESSION_COOKIE);

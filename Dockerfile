@@ -1,22 +1,28 @@
-FROM node:22-slim AS deps
+FROM node:25-slim AS node
+
+FROM node AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:22-slim AS build
+FROM node AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:22-slim
+FROM node
+RUN groupadd -r lizard && useradd -r -g lizard -m lizard
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/next.config.ts ./next.config.ts
+ENV NODE_ENV=production \
+    PORT=3111 \
+    HOSTNAME=0.0.0.0
+# standalone server + static assets + public files
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
+RUN mkdir -p /app/data && chown -R lizard:lizard /app
 VOLUME /app/data
+USER lizard
 EXPOSE 3111
-CMD ["npm", "run", "start"]
+CMD ["node", "./server.js"]

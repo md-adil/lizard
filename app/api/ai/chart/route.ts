@@ -20,15 +20,24 @@ export async function POST(req: Request) {
     spec = await planChart(body.prompt, body.connections);
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return fail(new Error(e.errors.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
+      return fail(
+        new Error(
+          e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+        ),
+      );
     }
     return fail(e);
   }
   try {
     await requireAllReadable(spec.connections);
     const result = await runGuardedQuery(
-      { target: spec.target, connections: spec.connections, sql: spec.sql, dialect: spec.dialect },
-      user.email
+      {
+        target: spec.target,
+        connections: spec.connections,
+        sql: spec.sql,
+        dialect: spec.dialect,
+      },
+      user.email,
     );
     return ok({ spec, result });
   } catch (e) {

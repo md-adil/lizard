@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     return ok(user, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return fail(new Error(e.errors.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
+      return fail(new Error(e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
     }
     return fail(e);
   }

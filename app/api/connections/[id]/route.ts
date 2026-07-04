@@ -26,7 +26,7 @@ export async function PATCH(req: Request, { params }: Params) {
     return ok({ ...redact(updated!), status });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return fail(new Error(e.errors.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
+      return fail(new Error(e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
     }
     return fail(e);
   }
