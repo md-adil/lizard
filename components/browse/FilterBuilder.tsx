@@ -6,7 +6,7 @@
 // an adaptive value editor (search-select for references, multi-select for
 // enums, chip lists for "in", two inputs for "between"). Conditions combine
 // with a Match-all / Match-any toggle. Emits only complete conditions.
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/data/filters";
@@ -252,9 +252,12 @@ function ConditionRow({
             value={chipDraft}
             onChange={(e) => setChipDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && chipDraft.trim()) {
-                if (!values.includes(chipDraft)) onChange({ ...cond, values: [...values, chipDraft] });
-                setChipDraft("");
+              if (e.key === "Enter") {
+                e.stopPropagation(); // adding a chip shouldn't also apply the panel
+                if (chipDraft.trim()) {
+                  if (!values.includes(chipDraft)) onChange({ ...cond, values: [...values, chipDraft] });
+                  setChipDraft("");
+                }
               }
             }}
           />
@@ -358,31 +361,45 @@ export function FilterBuilder({
 }) {
   const [open, setOpen] = useState(false);
   const [set, setSet] = useState<FilterSet>(value);
-  const first = useRef(true);
 
-  // debounce emitting completed conditions so typing doesn't refetch per keystroke
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    const t = setTimeout(() => {
-      onChange({ combinator: set.combinator, conditions: set.conditions.filter(isComplete) });
-    }, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [set]);
+  const complete = (s: FilterSet): FilterSet => ({ combinator: s.combinator, conditions: s.conditions.filter(isComplete) });
+  const emit = (s: FilterSet) => onChange(complete(s));
 
-  const activeCount = value.conditions.filter(isComplete).length;
+  const applied = value; // the currently-applied filter set (from the parent)
+  const activeCount = applied.conditions.filter(isComplete).length;
+  // are there edits in the panel not yet applied?
+  const dirty = JSON.stringify(complete(set)) !== JSON.stringify(complete(applied));
 
   const addCondition = () => {
     const col = columns[0];
-    setSet((s) => ({ ...s, conditions: [...s.conditions, { column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }] }));
+    setSet((s) => ({
+      ...s,
+      conditions: [...s.conditions, { column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }],
+    }));
   };
 
   const update = (i: number, c: FilterCondition) =>
     setSet((s) => ({ ...s, conditions: s.conditions.map((x, j) => (j === i ? c : x)) }));
-  const remove = (i: number) => setSet((s) => ({ ...s, conditions: s.conditions.filter((_, j) => j !== i) }));
+
+  // remove & clear take effect immediately (unambiguous); typed values need Apply
+  const remove = (i: number) =>
+    setSet((s) => {
+      const next = { ...s, conditions: s.conditions.filter((_, j) => j !== i) };
+      emit(next);
+      return next;
+    });
+  const clearAll = () =>
+    setSet((s) => {
+      const next = { ...s, conditions: [] };
+      emit(next);
+      return next;
+    });
+  const setCombinator = (c: Combinator) =>
+    setSet((s) => {
+      const next = { ...s, combinator: c };
+      emit(next);
+      return next;
+    });
 
   return (
     <div className="w-full">
@@ -396,55 +413,63 @@ export function FilterBuilder({
       </button>
 
       {open && (
-        <>
-          <div className="panel p-4 mt-2 w-full">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>Match</span>
-              <div className="flex gap-0.5">
-                {(["and", "or"] as Combinator[]).map((c) => (
-                  <button
-                    key={c}
-                    className="tag"
-                    style={set.combinator === c ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
-                    onClick={() => setSet((s) => ({ ...s, combinator: c }))}
-                  >
-                    {c === "and" ? "all" : "any"}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>of the conditions</span>
-              <span className="flex-1" />
-              {set.conditions.length > 0 && (
-                <button className="btn btn-sm" onClick={() => setSet((s) => ({ ...s, conditions: [] }))}>
-                  Clear
+        <div
+          className="panel p-4 mt-2 w-full"
+          onKeyDown={(e) => {
+            // Enter anywhere in the panel applies (chip inputs stop propagation)
+            if (e.key === "Enter") emit(set);
+          }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>Match</span>
+            <div className="flex gap-0.5">
+              {(["and", "or"] as Combinator[]).map((c) => (
+                <button
+                  key={c}
+                  className="tag"
+                  style={set.combinator === c ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
+                  onClick={() => setCombinator(c)}
+                >
+                  {c === "and" ? "all" : "any"}
                 </button>
-              )}
-            </div>
-
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto scrollbar-thin pr-1">
-              {set.conditions.length === 0 && (
-                <p className="text-[13px] py-2" style={{ color: "var(--text-faint)" }}>
-                  No conditions yet. Add one below.
-                </p>
-              )}
-              {set.conditions.map((c, i) => (
-                <ConditionRow
-                  key={i}
-                  columns={columns}
-                  cond={c}
-                  onChange={(nc) => update(i, nc)}
-                  onRemove={() => remove(i)}
-                />
               ))}
             </div>
-
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-              <button className="btn btn-sm btn-primary" onClick={addCondition}>＋ Add condition</button>
-              <span className="flex-1" />
-              <button className="btn btn-sm" onClick={() => setOpen(false)}>Done</button>
-            </div>
+            <span className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>of the conditions</span>
+            <span className="flex-1" />
+            {set.conditions.length > 0 && (
+              <button className="btn btn-sm" onClick={clearAll}>Clear</button>
+            )}
           </div>
-        </>
+
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto scrollbar-thin pr-1">
+            {set.conditions.length === 0 && (
+              <p className="text-[13px] py-2" style={{ color: "var(--text-faint)" }}>
+                No conditions yet. Add one below.
+              </p>
+            )}
+            {set.conditions.map((c, i) => (
+              <ConditionRow
+                key={i}
+                columns={columns}
+                cond={c}
+                onChange={(nc) => update(i, nc)}
+                onRemove={() => remove(i)}
+              />
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+            <button className="btn btn-sm" onClick={addCondition}>＋ Add condition</button>
+            {dirty && (
+              <span className="text-[12px]" style={{ color: "var(--amber)" }}>unapplied changes</span>
+            )}
+            <span className="flex-1" />
+            <button className="btn btn-sm" onClick={() => setOpen(false)}>Close</button>
+            <button className="btn btn-sm btn-primary" disabled={!dirty} onClick={() => emit(set)}>
+              Apply filters
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

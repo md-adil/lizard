@@ -58,6 +58,38 @@ export function connectionUri(conn: ConnectionConfig, role: Role): string {
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass ?? "")}@${conn.host}:${conn.port}/${encodeURIComponent(conn.database)}${ssl}`;
 }
 
+// One-off connectivity probe that does NOT touch the pool cache — used by the
+// "Test connection" button before a connection is saved. Returns null on
+// success or the error message.
+export async function probeCredentials(cfg: {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  ssl: boolean;
+}): Promise<string | null> {
+  const pool = new Pool({
+    host: cfg.host,
+    port: cfg.port,
+    database: cfg.database,
+    user: cfg.user,
+    password: cfg.password,
+    ssl: cfg.ssl ? { rejectUnauthorized: false } : undefined,
+    max: 1,
+    connectionTimeoutMillis: 7_000,
+    options: "-c statement_timeout=7000",
+  });
+  try {
+    await pool.query("SELECT 1");
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
 export async function testConnection(conn: ConnectionConfig): Promise<{ read: string | null; write: string | null }> {
   const result: { read: string | null; write: string | null } = { read: null, write: null };
   try {

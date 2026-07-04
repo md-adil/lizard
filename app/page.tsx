@@ -2,68 +2,20 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ConnectionForm, type ConnectionRow } from "@/components/ConnectionForm";
 
-interface ConnectionRow {
-  id: string;
-  name: string;
-  host: string;
-  port: number;
-  database: string;
-  readUser: string;
-  writeUser: string | null;
-  hasWrite: boolean;
-  ssl: boolean;
-  allowedSchemas: string[] | null;
+interface ConnectionWithStatus extends ConnectionRow {
   status: { read: string | null; write: string | null };
 }
 
-const EMPTY_FORM = {
-  name: "",
-  host: "localhost",
-  port: "5432",
-  database: "",
-  readUser: "",
-  readPassword: "",
-  writeUser: "",
-  writePassword: "",
-  ssl: false,
-};
-
 export default function ConnectionsPage() {
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [error, setError] = useState<string | null>(null);
+  const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
+  const [editing, setEditing] = useState<ConnectionRow | null>(null);
 
-  const { data: connections, isLoading } = useQuery<ConnectionRow[]>({
+  const { data: connections, isLoading } = useQuery<ConnectionWithStatus[]>({
     queryKey: ["connections"],
     queryFn: async () => (await fetch("/api/connections")).json(),
-  });
-
-  const addMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/connections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          port: Number(form.port),
-          writeUser: form.writeUser || null,
-          writePassword: form.writePassword || null,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed to add connection");
-      return body;
-    },
-    onSuccess: () => {
-      setForm(EMPTY_FORM);
-      setShowForm(false);
-      setError(null);
-      qc.invalidateQueries({ queryKey: ["connections"] });
-      qc.invalidateQueries({ queryKey: ["catalog"] });
-    },
-    onError: (e: Error) => setError(e.message),
   });
 
   const deleteMutation = useMutation({
@@ -76,73 +28,24 @@ export default function ConnectionsPage() {
     },
   });
 
-  const set = (k: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
-
   return (
     <div className="max-w-4xl mx-auto px-8 py-10">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-semibold">Connections</h1>
-        <button className="btn btn-primary" onClick={() => setShowForm((s) => !s)}>
-          {showForm ? "Cancel" : "+ Add connection"}
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setEditing(null);
+            setFormMode("create");
+          }}
+        >
+          + Add connection
         </button>
       </div>
       <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>
-        Register each microservice&apos;s Postgres database. Lizard introspects every schema and makes the
-        whole fleet browsable, editable, and queryable — including cross-database questions and charts.
+        Register each microservice&apos;s Postgres database. Paste a connection URI or fill the fields, test it,
+        then Lizard introspects every schema and makes the whole fleet browsable, editable, and queryable.
       </p>
-
-      {showForm && (
-        <div className="panel p-5 mb-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Name (identifier, e.g. users_service)</label>
-              <input className="input" value={form.name} onChange={set("name")} placeholder="users_service" />
-            </div>
-            <div>
-              <label className="label">Database</label>
-              <input className="input" value={form.database} onChange={set("database")} placeholder="users_service" />
-            </div>
-            <div>
-              <label className="label">Host</label>
-              <input className="input" value={form.host} onChange={set("host")} />
-            </div>
-            <div>
-              <label className="label">Port</label>
-              <input className="input" value={form.port} onChange={set("port")} />
-            </div>
-            <div>
-              <label className="label">Read user (SELECT-only role)</label>
-              <input className="input" value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
-            </div>
-            <div>
-              <label className="label">Read password</label>
-              <input className="input" type="password" value={form.readPassword} onChange={set("readPassword")} />
-            </div>
-            <div>
-              <label className="label">Write user (optional — enables CRUD)</label>
-              <input className="input" value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
-            </div>
-            <div>
-              <label className="label">Write password</label>
-              <input className="input" type="password" value={form.writePassword} onChange={set("writePassword")} />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 mt-4 text-[13px]" style={{ color: "var(--text-dim)" }}>
-            <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
-          </label>
-          {error && (
-            <p className="mt-3 text-[13px]" style={{ color: "var(--red)" }}>
-              {error}
-            </p>
-          )}
-          <div className="mt-4">
-            <button className="btn btn-primary" disabled={addMutation.isPending} onClick={() => addMutation.mutate()}>
-              {addMutation.isPending ? "Testing & saving…" : "Save connection"}
-            </button>
-          </div>
-        </div>
-      )}
 
       {isLoading && <p style={{ color: "var(--text-dim)" }}>Loading…</p>}
 
@@ -171,19 +74,30 @@ export default function ConnectionsPage() {
                 {c.host}:{c.port}/{c.database}
               </div>
             </div>
-            <button
-              className="btn btn-sm btn-danger"
-              onClick={() => {
-                if (confirm(`Remove connection "${c.name}"? (The database itself is untouched.)`)) {
-                  deleteMutation.mutate(c.id);
-                }
-              }}
-            >
-              Remove
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  setEditing(c);
+                  setFormMode("edit");
+                }}
+              >
+                Edit
+              </button>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  if (confirm(`Remove connection "${c.name}"? (The database itself is untouched.)`)) {
+                    deleteMutation.mutate(c.id);
+                  }
+                }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))}
-        {connections?.length === 0 && !showForm && (
+        {connections?.length === 0 && (
           <div className="panel px-6 py-10 text-center">
             <p className="text-[14px] mb-1">No connections yet</p>
             <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
@@ -192,6 +106,17 @@ export default function ConnectionsPage() {
           </div>
         )}
       </div>
+
+      {formMode && (
+        <ConnectionForm
+          mode={formMode}
+          initial={editing ?? undefined}
+          onClose={() => {
+            setFormMode(null);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }
