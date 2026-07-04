@@ -9,6 +9,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCatalog, buildTableMeta, formatCell, type TableMeta, type CatalogResponse } from "@/components/browse/useTableMeta";
 import { RowEditor } from "@/components/browse/RowEditor";
+import { JsonView } from "@/components/browse/JsonView";
 import { humanize } from "@/lib/introspect/heuristics";
 
 function Card({
@@ -23,6 +24,7 @@ function Card({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   return (
     <div className="panel p-4 min-w-0">
       <div className="flex items-center gap-2 mb-3">
@@ -33,6 +35,9 @@ function Card({
           </span>
         )}
         <span className="flex-1" />
+        <button className="btn btn-sm" title="Enlarge" onClick={() => setExpanded(true)}>
+          ⤢
+        </button>
         {menu && menu.length > 0 && (
           <div className="relative">
             <button className="btn btn-sm" onClick={() => setOpen((s) => !s)}>
@@ -77,6 +82,23 @@ function Card({
         )}
       </div>
       {children}
+      {expanded && (
+        <>
+          <div className="fixed inset-0 z-[60]" style={{ background: "var(--overlay)" }} onClick={() => setExpanded(false)} />
+          <div
+            className="fixed z-[70] inset-x-0 top-[5vh] mx-auto w-[960px] max-w-[95vw] panel p-6 max-h-[90vh] flex flex-col"
+            style={{ background: "var(--bg-panel)" }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-[16px] font-semibold">{title}</span>
+              {subtitle && <span className="tag code" style={{ fontSize: 10 }}>{subtitle}</span>}
+              <span className="flex-1" />
+              <button className="btn btn-sm" onClick={() => setExpanded(false)}>✕</button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto scrollbar-thin pr-1 text-[13.5px]">{children}</div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -116,6 +138,7 @@ function JsonCard({ meta, row, pk, column }: { meta: TableMeta; row: Record<stri
   const value = row[column];
   const pretty = value == null ? "" : JSON.stringify(value, null, 2);
   const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState(false);
   const [text, setText] = useState(pretty);
   const [err, setErr] = useState<string | null>(null);
 
@@ -151,15 +174,18 @@ function JsonCard({ meta, row, pk, column }: { meta: TableMeta; row: Record<stri
     <Card
       title={cm?.label ?? humanize(column)}
       subtitle="json"
-      menu={
-        meta.isView
+      menu={[
+        ...(value != null
+          ? [{ label: raw ? "Show structured" : "Show raw JSON", onClick: () => setRaw((r) => !r) }]
+          : []),
+        ...(meta.isView
           ? []
           : [
               editing
                 ? { label: "Cancel editing", onClick: () => { setEditing(false); setText(pretty); setErr(null); } }
                 : { label: "✎ Edit JSON", onClick: () => { setText(pretty); setEditing(true); } },
-            ]
-      }
+            ]),
+      ]}
     >
       {editing ? (
         <>
@@ -177,10 +203,14 @@ function JsonCard({ meta, row, pk, column }: { meta: TableMeta; row: Record<stri
         <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
           ∅ null
         </p>
-      ) : (
+      ) : raw ? (
         <pre className="code text-[12px] whitespace-pre-wrap max-h-64 overflow-auto scrollbar-thin" style={{ color: "var(--text)" }}>
           {pretty}
         </pre>
+      ) : (
+        <div className="max-h-80 overflow-auto scrollbar-thin">
+          <JsonView value={value} />
+        </div>
       )}
     </Card>
   );

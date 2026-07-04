@@ -7,19 +7,8 @@ import { useCatalog, buildTableMeta, type TableMeta } from "@/components/browse/
 import { RowEditor } from "@/components/browse/RowEditor";
 import { CustomizePanel } from "@/components/browse/CustomizePanel";
 import { DataGrid } from "@/components/browse/DataGrid";
-import type { Filter } from "@/lib/data/crud";
-
-const OPS: { value: Filter["op"]; label: string }[] = [
-  { value: "contains", label: "contains" },
-  { value: "eq", label: "=" },
-  { value: "neq", label: "≠" },
-  { value: "gt", label: ">" },
-  { value: "gte", label: "≥" },
-  { value: "lt", label: "<" },
-  { value: "lte", label: "≤" },
-  { value: "null", label: "is null" },
-  { value: "notnull", label: "not null" },
-];
+import { FilterBuilder } from "@/components/browse/FilterBuilder";
+import type { FilterSet } from "@/lib/data/filters";
 
 interface ListResponse {
   rows: Record<string, unknown>[];
@@ -41,20 +30,21 @@ export default function TablePage() {
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [filters, setFilters] = useState<Filter[]>([]);
-  const [draft, setDraft] = useState<Filter>({ column: "", op: "contains", value: "" });
+  const [filterSet, setFilterSet] = useState<FilterSet>({ combinator: "and", conditions: [] });
   const [editing, setEditing] = useState<Record<string, unknown> | null | "new">();
   const [customizing, setCustomizing] = useState(false);
 
   const pageSize = 50;
   const { data, isLoading, error } = useQuery<ListResponse>({
-    queryKey: ["rows", params.connection, params.schema, params.table, page, sort, sortDir, filters],
+    queryKey: ["rows", params.connection, params.schema, params.table, page, sort, sortDir, filterSet],
     queryFn: async () => {
       const qs = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
         ...(sort ? { sort, sortDir } : {}),
-        ...(filters.length ? { filters: JSON.stringify(filters) } : {}),
+        ...(filterSet.conditions.length
+          ? { filters: JSON.stringify(filterSet.conditions), combinator: filterSet.combinator }
+          : {}),
       });
       const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}?${qs}`);
       const body = await res.json();
@@ -110,73 +100,16 @@ export default function TablePage() {
         </div>
       </div>
 
-      {/* filter bar */}
-      <div className="flex items-center gap-2 mt-4 mb-3 flex-wrap">
-        {filters.map((f, i) => (
-          <span key={i} className="tag" style={{ color: "var(--accent)" }}>
-            {f.column} {OPS.find((o) => o.value === f.op)?.label} {f.value}
-            <button
-              className="ml-1.5"
-              onClick={() => {
-                setFilters((s) => s.filter((_, j) => j !== i));
-                setPage(0);
-              }}
-            >
-              ✕
-            </button>
-          </span>
-        ))}
-        <select
-          className="input w-36"
-          style={{ padding: "3px 8px", fontSize: 12 }}
-          value={draft.column}
-          onChange={(e) => setDraft((s) => ({ ...s, column: e.target.value }))}
-        >
-          <option value="">+ filter column…</option>
-          {meta.columns.map((c) => (
-            <option key={c.col.name} value={c.col.name}>{c.col.name}</option>
-          ))}
-        </select>
-        {draft.column && (
-          <>
-            <select
-              className="input w-28"
-              style={{ padding: "3px 8px", fontSize: 12 }}
-              value={draft.op}
-              onChange={(e) => setDraft((s) => ({ ...s, op: e.target.value as Filter["op"] }))}
-            >
-              {OPS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            {!["null", "notnull"].includes(draft.op) && (
-              <input
-                className="input w-40"
-                style={{ padding: "3px 8px", fontSize: 12 }}
-                placeholder="value"
-                value={draft.value ?? ""}
-                onChange={(e) => setDraft((s) => ({ ...s, value: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setFilters((s) => [...s, draft]);
-                    setDraft({ column: "", op: "contains", value: "" });
-                    setPage(0);
-                  }
-                }}
-              />
-            )}
-            <button
-              className="btn btn-sm"
-              onClick={() => {
-                setFilters((s) => [...s, draft]);
-                setDraft({ column: "", op: "contains", value: "" });
-                setPage(0);
-              }}
-            >
-              Apply
-            </button>
-          </>
-        )}
+      {/* filter — inline, full width below the title so nothing gets clipped */}
+      <div className="mt-4 mb-3">
+        <FilterBuilder
+          columns={meta.columns.filter((c) => !c.hidden)}
+          value={filterSet}
+          onChange={(s) => {
+            setFilterSet(s);
+            setPage(0);
+          }}
+        />
       </div>
 
       {error && (
@@ -203,7 +136,7 @@ export default function TablePage() {
       {isLoading && <p className="px-1 py-3 text-[13px]" style={{ color: "var(--text-dim)" }}>Loading…</p>}
       {!isLoading && data?.rows.length === 0 && (
         <p className="px-1 py-6 text-[13px]" style={{ color: "var(--text-dim)" }}>
-          No rows{filters.length ? " match the filters" : ""}.
+          No rows{filterSet.conditions.length ? " match the filters" : ""}.
         </p>
       )}
 
