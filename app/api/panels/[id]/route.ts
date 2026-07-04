@@ -2,11 +2,13 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { deletePanel, updatePanel } from "@/lib/metadata/store";
 import type { ChartSpec } from "@/lib/types";
+import { requireEditor } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {
   try {
+    await requireEditor();
     const { id } = await params;
     const body = (await req.json()) as { spec?: ChartSpec; x?: number; y?: number; w?: number; h?: number };
     updatePanel(id, body);
@@ -18,6 +20,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
 export async function DELETE(_req: Request, { params }: Params) {
   try {
+    await requireEditor();
     const { id } = await params;
     deletePanel(id);
     return ok({ deleted: true });

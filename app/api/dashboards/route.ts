@@ -1,13 +1,20 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addDashboard, listDashboards } from "@/lib/metadata/store";
+import { requireUser, requireEditor } from "@/lib/auth/session";
 
 export async function GET() {
-  return ok(listDashboards());
+  try {
+    await requireUser();
+    return ok(listDashboards());
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireEditor();
     const body = z
       .object({ name: z.string().min(1), refreshSeconds: z.number().nullable().optional() })
       .parse(await req.json());

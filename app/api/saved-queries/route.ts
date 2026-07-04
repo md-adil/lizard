@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addSavedQuery, listSavedQueries } from "@/lib/metadata/store";
+import { requireUser } from "@/lib/auth/session";
 
 const bodySchema = z.object({
   name: z.string().min(1),
@@ -12,11 +13,17 @@ const bodySchema = z.object({
 });
 
 export async function GET() {
-  return ok(listSavedQueries());
+  try {
+    await requireUser();
+    return ok(listSavedQueries());
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireUser();
     const body = bodySchema.parse(await req.json());
     return ok(addSavedQuery(body), { status: 201 });
   } catch (e) {

@@ -6,6 +6,7 @@ import {
   setTableOverride,
   setColumnOverride,
 } from "@/lib/metadata/store";
+import { requireUser, requireEditor } from "@/lib/auth/session";
 
 const tableOverrideSchema = z.object({
   kind: z.literal("table"),
@@ -32,11 +33,17 @@ const columnOverrideSchema = z.object({
 });
 
 export async function GET() {
-  return ok({ tables: listTableOverrides(), columns: listColumnOverrides() });
+  try {
+    await requireUser();
+    return ok({ tables: listTableOverrides(), columns: listColumnOverrides() });
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireEditor();
     const body = z.discriminatedUnion("kind", [tableOverrideSchema, columnOverrideSchema]).parse(await req.json());
     if (body.kind === "table") {
       setTableOverride(body);

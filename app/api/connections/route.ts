@@ -4,20 +4,29 @@ import { addConnection, listConnections } from "@/lib/metadata/store";
 import { testConnection } from "@/lib/db/pools";
 import { invalidateCatalog } from "@/lib/introspect/catalog";
 import { connectionSchema, redact } from "@/lib/connections-shared";
+import { requireUser, requireAdmin } from "@/lib/auth/session";
+import { readableConnectionIds } from "@/lib/auth/store";
 
 export async function GET() {
-  const conns = listConnections();
-  const withStatus = await Promise.all(
-    conns.map(async (c) => {
-      const status = await testConnection(c).catch(() => ({ read: "unreachable", write: null }));
-      return { ...redact(c), status };
-    })
-  );
-  return ok(withStatus);
+  try {
+    const user = await requireUser();
+    const readable = readableConnectionIds(user);
+    const conns = listConnections().filter((c) => readable === "all" || readable.has(c.id));
+    const withStatus = await Promise.all(
+      conns.map(async (c) => {
+        const status = await testConnection(c).catch(() => ({ read: "unreachable", write: null }));
+        return { ...redact(c), status };
+      })
+    );
+    return ok(withStatus);
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireAdmin();
     const body = connectionSchema.parse(await req.json());
     if (listConnections().some((c) => c.name === body.name)) {
       return fail(new Error(`A connection named "${body.name}" already exists`));

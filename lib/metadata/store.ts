@@ -111,8 +111,35 @@ function getDb(): DatabaseSync {
       error TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      disabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
+    -- per-connection access control; admins bypass this entirely
+    CREATE TABLE IF NOT EXISTS connection_grants (
+      user_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL,
+      access TEXT NOT NULL DEFAULT 'read',  -- 'read' | 'write'
+      PRIMARY KEY (user_id, connection_id)
+    );
   `);
   return db;
+}
+
+// Shared SQLite handle so the auth layer writes to the same metadata file.
+export function getMetaDb(): DatabaseSync {
+  return getDb();
 }
 
 // ---------- connections ----------

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { probeCredentials } from "@/lib/db/pools";
 import { parsePostgresUri } from "@/lib/parse-uri";
+import { requireAdmin } from "@/lib/auth/session";
 
 // Probe connectivity without saving. Accepts either explicit fields or a `uri`.
 const schema = z.object({
@@ -18,6 +19,7 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   try {
+    await requireAdmin();
     const b = schema.parse(await req.json());
     let host = b.host;
     let port = b.port ?? 5432;

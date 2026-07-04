@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { runGuardedQuery } from "@/lib/execute";
+import { requireAllReadable } from "@/lib/auth/session";
 
 const querySchema = z.object({
   target: z.enum(["single", "federated"]),
@@ -12,7 +13,8 @@ const querySchema = z.object({
 export async function POST(req: Request) {
   try {
     const body = querySchema.parse(await req.json());
-    const result = await runGuardedQuery(body);
+    const user = await requireAllReadable(body.connections);
+    const result = await runGuardedQuery(body, user.email);
     return ok(result);
   } catch (e) {
     if (e instanceof z.ZodError) {

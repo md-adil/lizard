@@ -4,11 +4,13 @@ import { deleteConnection, getConnection, updateConnection } from "@/lib/metadat
 import { connectionSchema, redact } from "@/lib/connections-shared";
 import { invalidateCatalog } from "@/lib/introspect/catalog";
 import { testConnection } from "@/lib/db/pools";
+import { requireAdmin } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {
   try {
+    await requireAdmin();
     const { id } = await params;
     const existing = getConnection(id);
     if (!existing) return fail(new Error("Connection not found"));
@@ -32,6 +34,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
 export async function DELETE(_req: Request, { params }: Params) {
   try {
+    await requireAdmin();
     const { id } = await params;
     deleteConnection(id);
     invalidateCatalog(id);

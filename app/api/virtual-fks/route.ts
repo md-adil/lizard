@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addVirtualFk, listVirtualFks } from "@/lib/metadata/store";
+import { requireUser, requireEditor } from "@/lib/auth/session";
 
 const vfkSchema = z.object({
   fromConnection: z.string().min(1),
@@ -15,11 +16,17 @@ const vfkSchema = z.object({
 });
 
 export async function GET() {
-  return ok(listVirtualFks());
+  try {
+    await requireUser();
+    return ok(listVirtualFks());
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 export async function POST(req: Request) {
   try {
+    await requireEditor();
     const body = vfkSchema.parse(await req.json());
     return ok(addVirtualFk(body), { status: 201 });
   } catch (e) {

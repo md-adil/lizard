@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addPanel, getDashboard } from "@/lib/metadata/store";
 import type { ChartSpec } from "@/lib/types";
+import { requireEditor } from "@/lib/auth/session";
 
 const specSchema = z.object({
   title: z.string(),
@@ -17,6 +18,7 @@ const specSchema = z.object({
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requireEditor();
     const { id } = await params;
     const dash = getDashboard(id);
     if (!dash) return fail(new Error("Dashboard not found"));
