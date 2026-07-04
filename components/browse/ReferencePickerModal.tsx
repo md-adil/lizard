@@ -7,19 +7,8 @@ import { useMemo, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useCatalog, buildTableMeta } from "./useTableMeta";
 import { DataGrid } from "./DataGrid";
-import type { Filter } from "@/lib/data/crud";
-
-const OPS: { value: Filter["op"]; label: string }[] = [
-  { value: "contains", label: "contains" },
-  { value: "eq", label: "=" },
-  { value: "neq", label: "≠" },
-  { value: "gt", label: ">" },
-  { value: "gte", label: "≥" },
-  { value: "lt", label: "<" },
-  { value: "lte", label: "≤" },
-  { value: "null", label: "is null" },
-  { value: "notnull", label: "not null" },
-];
+import { TableSearchBar } from "./TableSearchBar";
+import type { FilterSet } from "@/lib/data/filters";
 
 interface ListResponse {
   rows: Record<string, unknown>[];
@@ -41,27 +30,56 @@ export function ReferencePickerModal({
 }) {
   const { data: catalog } = useCatalog();
   const meta = useMemo(
-    () => (catalog ? buildTableMeta(catalog, target.connection, target.schema, target.table) : null),
-    [catalog, target]
+    () =>
+      catalog
+        ? buildTableMeta(
+            catalog,
+            target.connection,
+            target.schema,
+            target.table,
+          )
+        : null,
+    [catalog, target],
   );
 
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [filters, setFilters] = useState<Filter[]>([]);
-  const [draft, setDraft] = useState<Filter>({ column: "", op: "contains", value: "" });
+  const [filterSet, setFilterSet] = useState<FilterSet>({
+    combinator: "and",
+    conditions: [],
+  });
+  const [search, setSearch] = useState("");
   const pageSize = 25;
 
-  const { data, isLoading } = useQuery<ListResponse>({
-    queryKey: ["refpick", target.connection, target.schema, target.table, page, sort, sortDir, filters],
+  const { data, isLoading, isFetching } = useQuery<ListResponse>({
+    queryKey: [
+      "refpick",
+      target.connection,
+      target.schema,
+      target.table,
+      page,
+      sort,
+      sortDir,
+      filterSet,
+      search,
+    ],
     queryFn: async () => {
       const qs = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
         ...(sort ? { sort, sortDir } : {}),
-        ...(filters.length ? { filters: JSON.stringify(filters) } : {}),
+        ...(filterSet.conditions.length
+          ? {
+              filters: JSON.stringify(filterSet.conditions),
+              combinator: filterSet.combinator,
+            }
+          : {}),
+        ...(search ? { search } : {}),
       });
-      const res = await fetch(`/api/data/${target.connection}/${target.schema}/${target.table}?${qs}`);
+      const res = await fetch(
+        `/api/data/${target.connection}/${target.schema}/${target.table}?${qs}`,
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;
@@ -87,7 +105,9 @@ export function ReferencePickerModal({
   const select = (row: Record<string, unknown>) => {
     const value = row[target.column];
     if (value == null) return;
-    const label = meta?.displayColumn ? (row[meta.displayColumn] as string) ?? null : null;
+    const label = meta?.displayColumn
+      ? ((row[meta.displayColumn] as string) ?? null)
+      : null;
     onPick(String(value), label != null ? String(label) : null);
     onClose();
   };
@@ -96,9 +116,13 @@ export function ReferencePickerModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-[60]" style={{ background: "var(--overlay)" }} onClick={onClose} />
       <div
-        className="fixed z-[70] inset-x-0 top-[5vh] mx-auto w-[1040px] max-w-[95vw] panel p-5 max-h-[88vh] flex flex-col"
+        className="fixed inset-0 z-60"
+        style={{ background: "var(--overlay)" }}
+        onClick={onClose}
+      />
+      <div
+        className="fixed z-70 inset-x-0 top-[5vh] mx-auto w-260 max-w-[95vw] panel p-5 max-h-[88vh] flex flex-col"
         style={{ background: "var(--bg-panel)" }}
       >
         <div className="flex items-center gap-2 mb-3">
@@ -107,70 +131,27 @@ export function ReferencePickerModal({
             {target.connection} · {target.schema}.{target.table}
           </span>
           <span className="flex-1" />
-          <button className="btn btn-sm" onClick={onClose}>✕</button>
+          <button className="btn btn-sm" onClick={onClose}>
+            ✕
+          </button>
         </div>
 
-        {/* filter bar */}
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          {filters.map((f, i) => (
-            <span key={i} className="tag" style={{ color: "var(--accent)" }}>
-              {f.column} {OPS.find((o) => o.value === f.op)?.label} {f.value}
-              <button className="ml-1.5" onClick={() => { setFilters((s) => s.filter((_, j) => j !== i)); setPage(0); }}>
-                ✕
-              </button>
-            </span>
-          ))}
-          <select
-            className="input w-36"
-            style={{ padding: "3px 8px", fontSize: 12 }}
-            value={draft.column}
-            onChange={(e) => setDraft((s) => ({ ...s, column: e.target.value }))}
-          >
-            <option value="">+ filter column…</option>
-            {visibleCols.map((c) => (
-              <option key={c.col.name} value={c.col.name}>{c.col.name}</option>
-            ))}
-          </select>
-          {draft.column && (
-            <>
-              <select
-                className="input w-28"
-                style={{ padding: "3px 8px", fontSize: 12 }}
-                value={draft.op}
-                onChange={(e) => setDraft((s) => ({ ...s, op: e.target.value as Filter["op"] }))}
-              >
-                {OPS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              {!["null", "notnull"].includes(draft.op) && (
-                <input
-                  className="input w-40"
-                  style={{ padding: "3px 8px", fontSize: 12 }}
-                  placeholder="value"
-                  value={draft.value ?? ""}
-                  onChange={(e) => setDraft((s) => ({ ...s, value: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setFilters((s) => [...s, draft]);
-                      setDraft({ column: "", op: "contains", value: "" });
-                      setPage(0);
-                    }
-                  }}
-                />
-              )}
-              <button
-                className="btn btn-sm"
-                onClick={() => {
-                  setFilters((s) => [...s, draft]);
-                  setDraft({ column: "", op: "contains", value: "" });
-                  setPage(0);
-                }}
-              >
-                Apply
-              </button>
-            </>
-          )}
+        <div className="mb-3">
+          <TableSearchBar
+            columns={visibleCols}
+            rowEstimate={meta?.table.rowEstimate}
+            filterSet={filterSet}
+            onFilterChange={(s) => {
+              setFilterSet(s);
+              setPage(0);
+            }}
+            search={search}
+            onSearchChange={(s) => {
+              setSearch(s);
+              setPage(0);
+            }}
+            isLoading={isFetching}
+          />
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -184,25 +165,58 @@ export function ReferencePickerModal({
               onToggleSort={toggleSort}
               rowClickable
               onRowClick={select}
-              maxHeight="calc(88vh - 190px)"
+              maxHeight="calc(88vh - 220px)"
             />
           ) : (
-            <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>Loading…</p>
+            <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
+              Loading…
+            </p>
           )}
-          {isLoading && <p className="px-1 py-2 text-[12px]" style={{ color: "var(--text-faint)" }}>Loading…</p>}
+          {isLoading && (
+            <p
+              className="px-1 py-2 text-[12px]"
+              style={{ color: "var(--text-faint)" }}
+            >
+              Loading…
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--text-dim)" }}>
-          <button className="btn btn-sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>← Prev</button>
+        <div
+          className="flex items-center gap-3 mt-3 text-[13px]"
+          style={{ color: "var(--text-dim)" }}
+        >
+          <button
+            className="btn btn-sm"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            ← Prev
+          </button>
           <span>
             Page {page + 1}
             {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
           </span>
-          <button className="btn btn-sm" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>Next →</button>
+          <button
+            className="btn btn-sm"
+            disabled={!data?.hasMore}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next →
+          </button>
           <span className="flex-1" />
-          <span style={{ color: "var(--text-faint)" }}>Click a row to select it</span>
+          <span style={{ color: "var(--text-faint)" }}>
+            Click a row to select it
+          </span>
         </div>
       </div>
     </>
   );
+}
+
+interface ListResponse {
+  rows: Record<string, unknown>[];
+  hasMore: boolean;
+  total: number | null;
+  fkLabels: Record<string, Record<string, string>>;
 }

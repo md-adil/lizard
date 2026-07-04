@@ -35,7 +35,12 @@ function PanelCard({
       const res = await fetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: spec.target, connections: spec.connections, sql: spec.sql, dialect: spec.dialect }),
+        body: JSON.stringify({
+          target: spec.target,
+          connections: spec.connections,
+          sql: spec.sql,
+          dialect: spec.dialect,
+        }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "query failed");
@@ -66,17 +71,46 @@ function PanelCard({
           {menu && (
             <div
               className="absolute right-0 z-20 mt-1 w-44 rounded-md border p-2 space-y-1"
-              style={{ background: "var(--bg-raised)", borderColor: "var(--border-strong)" }}
+              style={{
+                background: "var(--bg-raised)",
+                borderColor: "var(--border-strong)",
+              }}
             >
-              <div className="flex items-center gap-1 text-[12px]" style={{ color: "var(--text-dim)" }}>
+              <div
+                className="flex items-center gap-1 text-[12px]"
+                style={{ color: "var(--text-dim)" }}
+              >
                 w
-                <button className="btn btn-sm" onClick={() => onResize(Math.max(3, panel.w - 1), panel.h)}>−</button>
-                <button className="btn btn-sm" onClick={() => onResize(Math.min(12, panel.w + 1), panel.h)}>＋</button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => onResize(Math.max(3, panel.w - 1), panel.h)}
+                >
+                  −
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => onResize(Math.min(12, panel.w + 1), panel.h)}
+                >
+                  ＋
+                </button>
                 h
-                <button className="btn btn-sm" onClick={() => onResize(panel.w, Math.max(4, panel.h - 1))}>−</button>
-                <button className="btn btn-sm" onClick={() => onResize(panel.w, Math.min(20, panel.h + 1))}>＋</button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => onResize(panel.w, Math.max(4, panel.h - 1))}
+                >
+                  −
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => onResize(panel.w, Math.min(20, panel.h + 1))}
+                >
+                  ＋
+                </button>
               </div>
-              <button className="btn btn-sm btn-danger w-full justify-center" onClick={onDelete}>
+              <button
+                className="btn btn-sm btn-danger w-full justify-center"
+                onClick={onDelete}
+              >
                 Delete panel
               </button>
             </div>
@@ -84,19 +118,32 @@ function PanelCard({
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        {isLoading && <div className="h-full rounded animate-pulse" style={{ background: "var(--bg-raised)" }} />}
+        {isLoading && (
+          <div
+            className="h-full rounded animate-pulse"
+            style={{ background: "var(--border)" }}
+          />
+        )}
         {error && (
           <p className="text-[12.5px] px-1" style={{ color: "var(--red)" }}>
             {(error as Error).message}
           </p>
         )}
-        {data && <ChartRenderer spec={spec} result={data} height={panel.h * 40 - 60} />}
+        {data && (
+          <ChartRenderer spec={spec} result={data} height={panel.h * 40 - 60} />
+        )}
       </div>
     </div>
   );
 }
 
-function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose: () => void }) {
+function AddPanelModal({
+  dashboardId,
+  onClose,
+}: {
+  dashboardId: string;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"ai" | "sql">("ai");
   const [prompt, setPrompt] = useState("");
@@ -105,13 +152,21 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
   const [sqlTarget, setSqlTarget] = useState<"single" | "federated">("single");
   const [sqlConns, setSqlConns] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<{ spec: ChartSpec; result?: QueryResult; error?: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    spec: ChartSpec;
+    result?: QueryResult;
+    error?: string;
+  } | null>(null);
 
-  const { data: catalog } = useQuery<{ connections: { connectionName: string; error?: string }[] }>({
+  const { data: catalog } = useQuery<{
+    connections: { connectionName: string; error?: string }[];
+  }>({
     queryKey: ["catalog"],
     queryFn: async () => (await fetch("/api/catalog")).json(),
   });
-  const connections = catalog?.connections.filter((c) => !c.error).map((c) => c.connectionName) ?? [];
+  const connections =
+    catalog?.connections.filter((c) => !c.error).map((c) => c.connectionName) ??
+    [];
 
   const generate = async () => {
     setBusy(true);
@@ -120,7 +175,10 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
       const res = await fetch("/api/ai/chart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, connections: scope.length ? scope : undefined }),
+        body: JSON.stringify({
+          prompt,
+          connections: scope.length ? scope : undefined,
+        }),
       });
       const body = await res.json();
       if (!res.ok) setPreview({ spec: emptySpec(), error: body.error });
@@ -146,12 +204,29 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
 
   const runSql = async () => {
     setBusy(true);
-    const spec = preview?.spec && tab === "sql" ? { ...preview.spec, sql, target: sqlTarget, connections: sqlConns, dialect: sqlTarget === "federated" ? ("duckdb" as const) : ("postgres" as const) } : emptySpec();
+    const spec =
+      preview?.spec && tab === "sql"
+        ? {
+            ...preview.spec,
+            sql,
+            target: sqlTarget,
+            connections: sqlConns,
+            dialect:
+              sqlTarget === "federated"
+                ? ("duckdb" as const)
+                : ("postgres" as const),
+          }
+        : emptySpec();
     try {
       const res = await fetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: spec.target, connections: spec.connections, sql: spec.sql, dialect: spec.dialect }),
+        body: JSON.stringify({
+          target: spec.target,
+          connections: spec.connections,
+          sql: spec.sql,
+          dialect: spec.dialect,
+        }),
       });
       const body = await res.json();
       if (!res.ok) setPreview({ spec, error: body.error });
@@ -174,32 +249,69 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
 
   return (
     <>
-      <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={onClose} />
-      <div className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-[940px] max-w-[95vw] panel p-5 max-h-[88vh] overflow-y-auto scrollbar-thin" style={{ background: "var(--bg-panel)" }}>
+      <div
+        className="fixed inset-0 z-40"
+        style={{ background: "var(--overlay)" }}
+        onClick={onClose}
+      />
+      <div
+        className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-235 max-w-[95vw] panel p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
+        style={{ background: "var(--bg-panel)" }}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-1">
-            <button className="tag" style={tab === "ai" ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}} onClick={() => setTab("ai")}>
+            <button
+              className="tag"
+              style={
+                tab === "ai"
+                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  : {}
+              }
+              onClick={() => setTab("ai")}
+            >
               ✦ Describe it
             </button>
-            <button className="tag" style={tab === "sql" ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}} onClick={() => setTab("sql")}>
+            <button
+              className="tag"
+              style={
+                tab === "sql"
+                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  : {}
+              }
+              onClick={() => setTab("sql")}
+            >
               From SQL
             </button>
           </div>
-          <button className="btn btn-sm" onClick={onClose}>✕</button>
+          <button className="btn btn-sm" onClick={onClose}>
+            ✕
+          </button>
         </div>
 
         {tab === "ai" ? (
           <div className="mb-4">
             <div className="flex gap-1.5 mb-2 flex-wrap">
-              <button className="tag" style={scope.length === 0 ? { color: "var(--accent)" } : {}} onClick={() => setScope([])}>
+              <button
+                className="tag"
+                style={scope.length === 0 ? { color: "var(--accent)" } : {}}
+                onClick={() => setScope([])}
+              >
                 all connections
               </button>
               {connections.map((c) => (
                 <button
                   key={c}
                   className="tag"
-                  style={scope.includes(c) ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
-                  onClick={() => setScope((s) => (s.includes(c) ? s.filter((x) => x !== c) : [...s, c]))}
+                  style={
+                    scope.includes(c)
+                      ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                      : {}
+                  }
+                  onClick={() =>
+                    setScope((s) =>
+                      s.includes(c) ? s.filter((x) => x !== c) : [...s, c],
+                    )
+                  }
                 >
                   {c}
                 </button>
@@ -213,7 +325,11 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && generate()}
               />
-              <button className="btn btn-primary" disabled={busy || !prompt.trim()} onClick={generate}>
+              <button
+                className="btn btn-primary"
+                disabled={busy || !prompt.trim()}
+                onClick={generate}
+              >
                 {busy ? "Generating…" : "Generate"}
               </button>
             </div>
@@ -224,7 +340,9 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
               <select
                 className="input w-32"
                 value={sqlTarget}
-                onChange={(e) => setSqlTarget(e.target.value as "single" | "federated")}
+                onChange={(e) =>
+                  setSqlTarget(e.target.value as "single" | "federated")
+                }
               >
                 <option value="single">single</option>
                 <option value="federated">federated</option>
@@ -233,10 +351,18 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
                 <button
                   key={c}
                   className="tag"
-                  style={sqlConns.includes(c) ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
+                  style={
+                    sqlConns.includes(c)
+                      ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                      : {}
+                  }
                   onClick={() =>
                     setSqlConns((s) =>
-                      sqlTarget === "single" ? [c] : s.includes(c) ? s.filter((x) => x !== c) : [...s, c]
+                      sqlTarget === "single"
+                        ? [c]
+                        : s.includes(c)
+                          ? s.filter((x) => x !== c)
+                          : [...s, c],
                     )
                   }
                 >
@@ -247,11 +373,19 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
             <textarea
               className="input code"
               rows={4}
-              placeholder={sqlTarget === "federated" ? "SELECT … FROM conn_a.public.t JOIN conn_b.public.u ON …" : "SELECT … FROM schema.table …"}
+              placeholder={
+                sqlTarget === "federated"
+                  ? "SELECT … FROM conn_a.public.t JOIN conn_b.public.u ON …"
+                  : "SELECT … FROM schema.table …"
+              }
               value={sql}
               onChange={(e) => setSql(e.target.value)}
             />
-            <button className="btn btn-primary" disabled={busy || !sql.trim() || sqlConns.length === 0} onClick={runSql}>
+            <button
+              className="btn btn-primary"
+              disabled={busy || !sql.trim() || sqlConns.length === 0}
+              onClick={runSql}
+            >
               {busy ? "Running…" : "Run preview"}
             </button>
           </div>
@@ -260,23 +394,49 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
         {preview && (
           <div>
             {preview.error && (
-              <div className="rounded-md border px-4 py-3 text-[13px] mb-3" style={{ color: "var(--red)", borderColor: "rgba(229,83,75,.4)" }}>
+              <div
+                className="rounded-md border px-4 py-3 text-[13px] mb-3"
+                style={{
+                  color: "var(--red)",
+                  borderColor: "rgba(229,83,75,.4)",
+                }}
+              >
                 {preview.error}
                 {preview.spec.sql && (
-                  <pre className="code mt-2 whitespace-pre-wrap" style={{ color: "var(--text-dim)" }}>{preview.spec.sql}</pre>
+                  <pre
+                    className="code mt-2 whitespace-pre-wrap"
+                    style={{ color: "var(--text-dim)" }}
+                  >
+                    {preview.spec.sql}
+                  </pre>
                 )}
               </div>
             )}
             {preview.result && (
               <div className="flex gap-5">
-                <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--bg)" }}>
-                  <div className="text-[13px] font-medium mb-2">{preview.spec.title}</div>
-                  <ChartRenderer spec={preview.spec} result={preview.result} height={300} />
+                <div
+                  className="flex-1 min-w-0 panel p-3"
+                  style={{ background: "var(--bg)" }}
+                >
+                  <div className="text-[13px] font-medium mb-2">
+                    {preview.spec.title}
+                  </div>
+                  <ChartRenderer
+                    spec={preview.spec}
+                    result={preview.result}
+                    height={300}
+                  />
                   <details className="mt-2">
-                    <summary className="text-[12px] cursor-pointer" style={{ color: "var(--text-faint)" }}>
+                    <summary
+                      className="text-[12px] cursor-pointer"
+                      style={{ color: "var(--text-faint)" }}
+                    >
                       SQL & data
                     </summary>
-                    <pre className="code text-[12px] whitespace-pre-wrap mt-1" style={{ color: "var(--text-dim)" }}>
+                    <pre
+                      className="code text-[12px] whitespace-pre-wrap mt-1"
+                      style={{ color: "var(--text-dim)" }}
+                    >
                       {preview.spec.sql}
                     </pre>
                     <ResultGrid result={preview.result} maxRows={20} />
@@ -286,9 +446,14 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
                   <SpecControls
                     spec={preview.spec}
                     result={preview.result}
-                    onChange={(spec) => setPreview((p) => (p ? { ...p, spec } : p))}
+                    onChange={(spec) =>
+                      setPreview((p) => (p ? { ...p, spec } : p))
+                    }
                   />
-                  <button className="btn btn-primary w-full justify-center mt-4" onClick={save}>
+                  <button
+                    className="btn btn-primary w-full justify-center mt-4"
+                    onClick={save}
+                  >
                     Add panel
                   </button>
                 </div>
@@ -318,7 +483,10 @@ export default function DashboardPage() {
     },
   });
 
-  const patch = async (fields: { name?: string; refreshSeconds?: number | null }) => {
+  const patch = async (fields: {
+    name?: string;
+    refreshSeconds?: number | null;
+  }) => {
     await fetch(`/api/dashboards/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -328,8 +496,18 @@ export default function DashboardPage() {
     qc.invalidateQueries({ queryKey: ["dashboards"] });
   };
 
-  if (error) return <div className="px-8 py-10" style={{ color: "var(--red)" }}>{(error as Error).message}</div>;
-  if (!dash) return <div className="px-8 py-10" style={{ color: "var(--text-dim)" }}>Loading…</div>;
+  if (error)
+    return (
+      <div className="px-8 py-10" style={{ color: "var(--red)" }}>
+        {(error as Error).message}
+      </div>
+    );
+  if (!dash)
+    return (
+      <div className="px-8 py-10" style={{ color: "var(--text-dim)" }}>
+        Loading…
+      </div>
+    );
 
   return (
     <div className="px-6 py-6">
@@ -364,13 +542,20 @@ export default function DashboardPage() {
           </h1>
         )}
         <span className="flex-1" />
-        <div className="flex items-center gap-1 text-[12px]" style={{ color: "var(--text-dim)" }}>
+        <div
+          className="flex items-center gap-1 text-[12px]"
+          style={{ color: "var(--text-dim)" }}
+        >
           refresh:
           {REFRESH_OPTIONS.map((o) => (
             <button
               key={o.label}
               className="tag"
-              style={dash.refreshSeconds === o.value ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
+              style={
+                dash.refreshSeconds === o.value
+                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  : {}
+              }
               onClick={() => patch({ refreshSeconds: o.value })}
             >
               {o.label}
@@ -383,11 +568,18 @@ export default function DashboardPage() {
       </div>
 
       {dash.panels.length === 0 ? (
-        <div className="panel px-6 py-14 text-center text-[13px]" style={{ color: "var(--text-dim)" }}>
-          Empty dashboard. Add a panel by describing a chart, pasting SQL, or hitting “Visualize” anywhere in Lizard.
+        <div
+          className="panel px-6 py-14 text-center text-[13px]"
+          style={{ color: "var(--text-dim)" }}
+        >
+          Empty dashboard. Add a panel by describing a chart, pasting SQL, or
+          hitting “Visualize” anywhere in Lizard.
         </div>
       ) : (
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(12, 1fr)", gridAutoRows: 40 }}>
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: "repeat(12, 1fr)", gridAutoRows: 40 }}
+        >
           {[...dash.panels]
             .sort((a, b) => a.y - b.y || a.x - b.x)
             .map((p) => (
@@ -412,7 +604,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {adding && <AddPanelModal dashboardId={id} onClose={() => setAdding(false)} />}
+      {adding && (
+        <AddPanelModal dashboardId={id} onClose={() => setAdding(false)} />
+      )}
     </div>
   );
 }
