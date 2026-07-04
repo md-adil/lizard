@@ -3,6 +3,7 @@
 // values are parameterized. Writes go through the connection's write role
 // inside a transaction and always target exactly one connection.
 import type { ConnectionConfig, TableInfo, VirtualFk } from "@/lib/types";
+import { findUpdatedAtColumn } from "@/lib/introspect/heuristics";
 import { getPool } from "@/lib/db/pools";
 import {
   getConnection,
@@ -428,10 +429,13 @@ export async function updateRow(
   const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c]));
   const sets = cols.map((c, i) => `${quoteIdent(c)} = $${i + 1}`);
   let where = pkWhere(table, pk, values);
-  // optimistic concurrency when the table has updated_at and caller sent the expected value
-  if (expectedUpdatedAt && table.columns.some((c) => c.name === "updated_at")) {
+  // optimistic concurrency when the table has a recognisable timestamp column
+  const updatedAtCol = findUpdatedAtColumn(table.columns);
+  if (expectedUpdatedAt && updatedAtCol) {
     values.push(expectedUpdatedAt);
-    where += ` AND updated_at = $${values.length}`;
+    // Cast both sides to timestamptz (session = UTC) and truncate to
+    // milliseconds so microsecond precision differences never cause a false mismatch.
+    where += ` AND date_trunc('milliseconds', ${quoteIdent(updatedAtCol)}::timestamptz) = date_trunc('milliseconds', $${values.length}::timestamptz)`;
   }
   const sql = `UPDATE ${quoteIdent(schema)}.${quoteIdent(tableName)} SET ${sets.join(", ")} WHERE ${where} RETURNING *`;
   const pool = getPool(conn, "write");

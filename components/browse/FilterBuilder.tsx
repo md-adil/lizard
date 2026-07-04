@@ -6,7 +6,8 @@
 // an adaptive value editor (search-select for references, multi-select for
 // enums, chip lists for "in", two inputs for "between"). Conditions combine
 // with a Match-all / Match-any toggle. Emits only complete conditions.
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnMeta } from "./useTableMeta";
 import type {
@@ -16,6 +17,7 @@ import type {
   Combinator,
 } from "@/lib/data/filters";
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
+import { ReferencePickerModal } from "./ReferencePickerModal";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference";
 
@@ -129,50 +131,68 @@ function RefSelect({
 }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { data } = useRefSearch(cm, search, open);
   return (
     <div className="relative flex-1 min-w-35">
       <input
+        ref={inputRef}
         className="input"
         style={{ padding: "3px 8px", fontSize: 12 }}
         placeholder={`Search ${cm.ref!.table}…`}
         value={search}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setRect(inputRef.current?.getBoundingClientRect() ?? null);
+          setOpen(true);
+        }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onChange={(e) => setSearch(e.target.value)}
       />
-      {open && (
-        <div
-          className="absolute z-30 mt-1 w-full max-h-52 overflow-auto rounded-md border scrollbar-thin"
-          style={{
-            background: "var(--bg-raised)",
-            borderColor: "var(--border-strong)",
-          }}
-        >
-          {data?.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
-              onMouseDown={() => {
-                onSelect(o.id, o.label);
-                setSearch("");
-              }}
-            >
-              {o.label}{" "}
-              <span style={{ color: "var(--text-faint)" }}>({o.id})</span>
-            </button>
-          ))}
-          {data?.length === 0 && (
-            <div
-              className="px-3 py-2 text-[12px]"
-              style={{ color: "var(--text-faint)" }}
-            >
-              No matches
-            </div>
-          )}
-        </div>
-      )}
+      {open &&
+        rect &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: rect.bottom + 2,
+              left: rect.left,
+              width: rect.width,
+              maxHeight: 208,
+              overflow: "auto",
+              zIndex: 9999,
+              borderRadius: 6,
+              border: "1px solid var(--border-strong)",
+              background: "var(--bg-raised)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+            }}
+            className="scrollbar-thin"
+          >
+            {data?.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
+                onMouseDown={() => {
+                  onSelect(o.id, o.label);
+                  setSearch("");
+                }}
+              >
+                {o.label}{" "}
+                <span style={{ color: "var(--text-faint)" }}>({o.id})</span>
+              </button>
+            ))}
+            {data?.length === 0 && (
+              <div
+                className="px-3 py-2 text-[12px]"
+                style={{ color: "var(--text-faint)" }}
+              >
+                No matches
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -226,6 +246,7 @@ function ConditionRow({
   const [chipDraft, setChipDraft] = useState("");
   // remembered labels for reference "in" chips
   const [refLabels, setRefLabels] = useState<Record<string, string>>({});
+  const [browsing, setBrowsing] = useState(false);
 
   const setCol = (name: string) => {
     const next = columns.find((c) => c.col.name === name)!;
@@ -300,6 +321,19 @@ function ConditionRow({
       if (kind === "reference") {
         return (
           <div className="min-w-45">
+            {browsing && (
+              <ReferencePickerModal
+                target={cm.ref!}
+                title={`Pick ${cm.label}`}
+                onPick={(id, label) => {
+                  setRefLabels((m) => ({ ...m, [id]: label ?? id }));
+                  if (!values.includes(id))
+                    onChange({ ...cond, values: [...values, id] });
+                  setBrowsing(false);
+                }}
+                onClose={() => setBrowsing(false)}
+              />
+            )}
             <Chips
               values={values}
               labels={refLabels}
@@ -307,14 +341,24 @@ function ConditionRow({
                 onChange({ ...cond, values: values.filter((x) => x !== v) })
               }
             />
-            <RefSelect
-              cm={cm}
-              onSelect={(id, label) => {
-                setRefLabels((m) => ({ ...m, [id]: label }));
-                if (!values.includes(id))
-                  onChange({ ...cond, values: [...values, id] });
-              }}
-            />
+            <div className="flex items-center gap-1">
+              <RefSelect
+                cm={cm}
+                onSelect={(id, label) => {
+                  setRefLabels((m) => ({ ...m, [id]: label }));
+                  if (!values.includes(id))
+                    onChange({ ...cond, values: [...values, id] });
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-sm"
+                title="Browse"
+                onClick={() => setBrowsing(true)}
+              >
+                ⤢
+              </button>
+            </div>
           </div>
         );
       }
@@ -384,6 +428,18 @@ function ConditionRow({
     if (kind === "reference") {
       return (
         <div className="flex items-center gap-1.5 flex-1">
+          {browsing && (
+            <ReferencePickerModal
+              target={cm.ref!}
+              title={`Pick ${cm.label}`}
+              onPick={(id, label) => {
+                setRefLabels((m) => ({ ...m, [id]: label ?? id }));
+                onChange({ ...cond, value: id });
+                setBrowsing(false);
+              }}
+              onClose={() => setBrowsing(false)}
+            />
+          )}
           {cond.value ? (
             <span className="tag" style={{ color: "var(--accent)" }}>
               {refLabels[cond.value] ?? cond.value}
@@ -403,6 +459,14 @@ function ConditionRow({
               }}
             />
           )}
+          <button
+            type="button"
+            className="btn btn-sm"
+            title="Browse"
+            onClick={() => setBrowsing(true)}
+          >
+            ⤢
+          </button>
         </div>
       );
     }
@@ -515,24 +579,24 @@ export function FilterPanel({
       conditions: s.conditions.map((x, j) => (j === i ? c : x)),
     }));
 
-  const remove = (i: number) =>
-    setSet((s) => {
-      const next = { ...s, conditions: s.conditions.filter((_, j) => j !== i) };
-      emit(next);
-      return next;
-    });
-  const clearAll = () =>
-    setSet((s) => {
-      const next = { ...s, conditions: [] };
-      emit(next);
-      return next;
-    });
-  const setCombinator = (c: Combinator) =>
-    setSet((s) => {
-      const next = { ...s, combinator: c };
-      emit(next);
-      return next;
-    });
+  const remove = (i: number) => {
+    const next = {
+      ...set,
+      conditions: set.conditions.filter((_, j) => j !== i),
+    };
+    setSet(next);
+    emit(next);
+  };
+  const clearAll = () => {
+    const next = { ...set, conditions: [] };
+    setSet(next);
+    emit(next);
+  };
+  const setCombinator = (c: Combinator) => {
+    const next = { ...set, combinator: c };
+    setSet(next);
+    emit(next);
+  };
 
   return (
     <div
@@ -603,7 +667,13 @@ export function FilterPanel({
         )}
         <span className="flex-1" />
         {onClose && (
-          <button className="btn btn-sm" onClick={onClose}>
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              emit(set);
+              onClose();
+            }}
+          >
             Close
           </button>
         )}

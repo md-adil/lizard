@@ -1,9 +1,15 @@
 // One pg Pool per (connection, role). Read pools carry statement timeouts and
 // are the only pools AI/chart/list queries ever touch. Write pools exist only
 // for the CRUD service.
-import { Pool } from "pg";
+import { Pool, types } from "pg";
 import type { ConnectionConfig } from "@/lib/types";
 import { getConnection } from "@/lib/metadata/store";
+
+// Return timestamps as raw strings instead of JS Date objects so the
+// machine's local timezone never shifts the value during parsing.
+types.setTypeParser(1114, (v) => v); // timestamp without timezone
+types.setTypeParser(1184, (v) => v); // timestamp with timezone
+types.setTypeParser(1082, (v) => v); // date
 
 const READ_STATEMENT_TIMEOUT_MS = 10_000;
 const WRITE_STATEMENT_TIMEOUT_MS = 15_000;
@@ -19,7 +25,9 @@ function poolKey(conn: ConnectionConfig, role: Role): string {
 
 export function getPool(conn: ConnectionConfig, role: Role): Pool {
   if (role === "write" && (!conn.writeUser || !conn.writePassword)) {
-    throw new Error(`Connection "${conn.name}" is read-only (no write credentials registered)`);
+    throw new Error(
+      `Connection "${conn.name}" is read-only (no write credentials registered)`,
+    );
   }
   const key = poolKey(conn, role);
   let pool = pools.get(key);
@@ -39,12 +47,20 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
     pool.on("error", () => {
       /* keep a broken backend connection from crashing the process */
     });
+    // Use UTC for every session so timestamp↔timestamptz comparisons are
+    // deterministic regardless of the server's local timezone setting.
+    pool.on("connect", (client) => {
+      client.query("SET timezone = 'UTC'");
+    });
     pools.set(key, pool);
   }
   return pool;
 }
 
-export function getPoolByName(connectionName: string, role: Role): { conn: ConnectionConfig; pool: Pool } {
+export function getPoolByName(
+  connectionName: string,
+  role: Role,
+): { conn: ConnectionConfig; pool: Pool } {
   const conn = getConnection(connectionName);
   if (!conn) throw new Error(`Unknown connection: ${connectionName}`);
   return { conn, pool: getPool(conn, role) };
@@ -53,7 +69,8 @@ export function getPoolByName(connectionName: string, role: Role): { conn: Conne
 export function connectionUri(conn: ConnectionConfig, role: Role): string {
   const user = role === "read" ? conn.readUser : conn.writeUser;
   const pass = role === "read" ? conn.readPassword : conn.writePassword;
-  if (!user) throw new Error(`Connection "${conn.name}" has no ${role} credentials`);
+  if (!user)
+    throw new Error(`Connection "${conn.name}" has no ${role} credentials`);
   const ssl = conn.ssl ? "?sslmode=require" : "";
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass ?? "")}@${conn.host}:${conn.port}/${encodeURIComponent(conn.database)}${ssl}`;
 }
@@ -90,8 +107,13 @@ export async function probeCredentials(cfg: {
   }
 }
 
-export async function testConnection(conn: ConnectionConfig): Promise<{ read: string | null; write: string | null }> {
-  const result: { read: string | null; write: string | null } = { read: null, write: null };
+export async function testConnection(
+  conn: ConnectionConfig,
+): Promise<{ read: string | null; write: string | null }> {
+  const result: { read: string | null; write: string | null } = {
+    read: null,
+    write: null,
+  };
   try {
     const r = await getPool(conn, "read").query("SELECT 1");
     if (r.rowCount !== 1) result.read = "unexpected response";

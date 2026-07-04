@@ -256,7 +256,9 @@ export function RowEditor({ meta, row, onClose }: Props) {
               pk,
               data,
               expectedUpdatedAt:
-                meta.hasUpdatedAt && row ? row.updated_at : undefined,
+                meta.updatedAtColumn && row
+                  ? row[meta.updatedAtColumn]
+                  : undefined,
             }),
           });
       const body = await res.json();
@@ -309,7 +311,7 @@ export function RowEditor({ meta, row, onClose }: Props) {
         onClick={onClose}
       />
       <div
-        className="fixed right-0 top-0 bottom-0 z-40 w-[440px] max-w-full overflow-y-auto scrollbar-thin border-l p-6"
+        className="fixed right-0 top-0 bottom-0 z-40 w-110 max-w-full overflow-y-auto scrollbar-thin border-l p-6"
         style={{ background: "var(--bg-panel)" }}
       >
         <div className="flex items-center justify-between mb-5">
