@@ -17,7 +17,8 @@ import type {
   Combinator,
 } from "@/lib/data/filters";
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
-import { ReferencePickerModal } from "./ReferencePickerModal";
+import { ReferencePickerModal } from "./reference-picker-modal";
+import { Button } from "@/components/ui/button";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference";
 
@@ -169,10 +170,10 @@ function RefSelect({
             className="scrollbar-thin"
           >
             {data?.map((o) => (
-              <button
+              <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
                 key={o.id}
                 type="button"
-                className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
+               
                 onMouseDown={() => {
                   onSelect(o.id, o.label);
                   setSearch("");
@@ -180,7 +181,7 @@ function RefSelect({
               >
                 {o.label}{" "}
                 <span style={{ color: "var(--text-faint)" }}>({o.id})</span>
-              </button>
+              </Button>
             ))}
             {data?.length === 0 && (
               <div
@@ -214,9 +215,9 @@ function Chips({
       {values.map((v) => (
         <span key={v} className="tag" style={{ color: "var(--accent)" }}>
           {labels?.[v] ?? v}
-          <button className="ml-1.5" onClick={() => onRemove(v)}>
+          <Button variant="ghost" className="ml-1.5" onClick={() => onRemove(v)}>
             ✕
-          </button>
+          </Button>
         </span>
       ))}
     </div>
@@ -350,14 +351,14 @@ function ConditionRow({
                     onChange({ ...cond, values: [...values, id] });
                 }}
               />
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
-                className="btn btn-sm"
+               
                 title="Browse"
                 onClick={() => setBrowsing(true)}
               >
                 ⤢
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -443,12 +444,12 @@ function ConditionRow({
           {cond.value ? (
             <span className="tag" style={{ color: "var(--accent)" }}>
               {refLabels[cond.value] ?? cond.value}
-              <button
-                className="ml-1.5"
+              <Button variant="ghost" className="ml-1.5"
+               
                 onClick={() => onChange({ ...cond, value: "" })}
               >
                 ✕
-              </button>
+              </Button>
             </span>
           ) : (
             <RefSelect
@@ -459,14 +460,14 @@ function ConditionRow({
               }}
             />
           )}
-          <button
+          <Button variant="outline" size="sm"
             type="button"
-            className="btn btn-sm"
+           
             title="Browse"
             onClick={() => setBrowsing(true)}
           >
             ⤢
-          </button>
+          </Button>
         </div>
       );
     }
@@ -520,14 +521,14 @@ function ConditionRow({
         ))}
       </select>
       {valueEditor()}
-      <button
-        className="btn btn-sm btn-danger"
+      <Button variant="destructive" size="sm"
+       
         style={{ padding: "2px 7px" }}
         onClick={onRemove}
         title="Remove condition"
       >
         ✕
-      </button>
+      </Button>
     </div>
   );
 }
@@ -630,9 +631,9 @@ export function FilterPanel({
         </span>
         <span className="flex-1" />
         {set.conditions.length > 0 && (
-          <button className="btn btn-sm" onClick={clearAll}>
+          <Button variant="outline" size="sm" onClick={clearAll}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
@@ -657,9 +658,9 @@ export function FilterPanel({
       </div>
 
       <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-        <button className="btn btn-sm" onClick={addCondition}>
+        <Button variant="outline" size="sm" onClick={addCondition}>
           ＋ Add condition
-        </button>
+        </Button>
         {dirty && (
           <span className="text-[12px]" style={{ color: "var(--amber)" }}>
             unapplied changes
@@ -667,23 +668,23 @@ export function FilterPanel({
         )}
         <span className="flex-1" />
         {onClose && (
-          <button
-            className="btn btn-sm"
+          <Button variant="outline" size="sm"
+           
             onClick={() => {
               emit(set);
               onClose();
             }}
           >
             Close
-          </button>
+          </Button>
         )}
-        <button
-          className="btn btn-sm btn-primary"
+        <Button size="sm"
+         
           disabled={!dirty}
           onClick={() => emit(set)}
         >
           Apply filters
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -704,8 +705,8 @@ export function FilterBuilder({
 
   return (
     <div>
-      <button
-        className="btn shrink-0"
+      <Button variant="outline" className="shrink-0"
+       
         style={
           activeCount
             ? { color: "var(--accent)", borderColor: "var(--accent)" }
@@ -725,7 +726,7 @@ export function FilterBuilder({
         <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
           {open ? "▲" : "▼"}
         </span>
-      </button>
+      </Button>
       {open && (
         <FilterPanel
           columns={columns}

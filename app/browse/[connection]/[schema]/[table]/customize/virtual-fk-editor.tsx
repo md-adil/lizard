@@ -7,6 +7,8 @@
 import { useState } from "react";
 import type { VfkTransform, VfkPair, VfkConstant } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   TableMeta,
@@ -89,6 +91,7 @@ export function VirtualFkEditor({
   }
 
   function reset() {
+    setMode("simple");
     setToConnection(meta.connection);
     setToSchema(defaultToSchema);
     setToTable("");
@@ -157,9 +160,10 @@ export function VirtualFkEditor({
   return (
     <div>
       {meta.virtualFks.map((v) => (
-        <div
+        <Card
           key={v.id}
-          className="panel px-3 py-2 mb-2 flex items-start justify-between gap-2 text-[12.5px]"
+          size="sm"
+          className="px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2 text-[12.5px]"
         >
           <div className="min-w-0">
             {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
@@ -167,35 +171,39 @@ export function VirtualFkEditor({
               {v.fromSchema}.{v.fromTable} → {vfkSummary(v)}
             </span>
           </div>
-          <button className="btn btn-sm shrink-0" onClick={() => remove(v.id)}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="shrink-0"
+            onClick={() => remove(v.id)}
+          >
             ✕
-          </button>
-        </div>
+          </Button>
+        </Card>
       ))}
 
       {!adding ? (
-        <button className="btn mt-1" onClick={() => setAdding(true)}>
+        <Button variant="outline" className="mt-1" onClick={() => setAdding(true)}>
           + Add relationship
-        </button>
+        </Button>
       ) : (
-        <div className="panel p-4 mt-2">
-          <Tabs
-            value={mode}
-            onValueChange={(v) => switchMode(v as "simple" | "advanced")}
-            className="mb-3"
-          >
-            <TabsList variant="line">
-              <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
-              <TabsTrigger value="advanced">
-                Advanced (cross-service)
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <Card className="p-4 mt-2 gap-3">
+          <div>
+            <div className="text-[11px] mb-1.5" style={{ color: "var(--text-faint)" }}>
+              Target
+            </div>
+            <Tabs
+              value={mode}
+              onValueChange={(v) => switchMode(v as "simple" | "advanced")}
+            >
+              <TabsList variant="default">
+                <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
+                <TabsTrigger value="advanced">Advanced (cross-service)</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
-          <p
-            className="text-[12.5px] mb-3"
-            style={{ color: "var(--text-dim)" }}
-          >
+          <p className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
             Links{" "}
             <span className="code">
               {fromSchema}.{fromTable}
@@ -204,7 +212,7 @@ export function VirtualFkEditor({
           </p>
 
           <div
-            className={`grid gap-3 mb-3 ${showTargetScope ? "grid-cols-3" : "grid-cols-1"}`}
+            className={`grid gap-3 ${showTargetScope ? "grid-cols-3" : "grid-cols-1"}`}
           >
             {showTargetScope && (
               <>
@@ -268,126 +276,139 @@ export function VirtualFkEditor({
             </div>
           </div>
 
-          <label className="label">Join on</label>
-          <div className="space-y-2 mb-3">
-            {pairs.map((p, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <select
-                  className="input"
-                  value={p.from}
-                  onChange={(e) => setPair(i, { from: e.target.value })}
-                >
-                  <option value="">— this column —</option>
-                  {meta.table.columns.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <span
-                  className="shrink-0"
-                  style={{ color: "var(--text-faint)" }}
-                >
-                  =
-                </span>
-                <select
-                  className="input"
-                  value={p.to}
-                  disabled={!targetTable}
-                  onChange={(e) => setPair(i, { to: e.target.value })}
-                >
-                  <option value="">— target column —</option>
-                  {targetColumns.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input"
-                  value={p.transform ?? "none"}
-                  onChange={(e) =>
-                    setPair(i, { transform: e.target.value as VfkTransform })
-                  }
-                  title="Value transform applied to both sides"
-                >
-                  {TRANSFORMS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-sm"
-                  disabled={pairs.length === 1}
-                  onClick={() =>
-                    setPairs((s) => s.filter((_, idx) => idx !== i))
-                  }
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button
-              className="btn btn-sm"
-              onClick={() =>
-                setPairs((s) => [...s, { from: "", to: "", transform: "none" }])
-              }
-            >
-              + Add column (composite key)
-            </button>
+          <div>
+            <label className="label">Join on</label>
+            <div className="space-y-2">
+              {pairs.map((p, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    className="input flex-1 min-w-0"
+                    value={p.from}
+                    onChange={(e) => setPair(i, { from: e.target.value })}
+                  >
+                    <option value="">— this column —</option>
+                    {meta.table.columns.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="shrink-0"
+                    style={{ color: "var(--text-faint)" }}
+                  >
+                    =
+                  </span>
+                  <select
+                    className="input flex-1 min-w-0"
+                    value={p.to}
+                    disabled={!targetTable}
+                    onChange={(e) => setPair(i, { to: e.target.value })}
+                  >
+                    <option value="">— target column —</option>
+                    {targetColumns.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input w-24 shrink-0"
+                    value={p.transform ?? "none"}
+                    onChange={(e) =>
+                      setPair(i, { transform: e.target.value as VfkTransform })
+                    }
+                    title="Value transform applied to both sides"
+                  >
+                    {TRANSFORMS.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0"
+                    disabled={pairs.length === 1}
+                    onClick={() =>
+                      setPairs((s) => s.filter((_, idx) => idx !== i))
+                    }
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPairs((s) => [
+                    ...s,
+                    { from: "", to: "", transform: "none" },
+                  ])
+                }
+              >
+                + Add column (composite key)
+              </Button>
+            </div>
           </div>
 
-          <label className="label">Constant filters (optional)</label>
-          <div className="space-y-2 mb-3">
-            {constants.map((c, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <select
-                  className="input flex-1 min-w-0"
-                  value={c.toColumn}
-                  disabled={!targetTable}
-                  onChange={(e) => setConst(i, { toColumn: e.target.value })}
-                >
-                  <option value="">— target column —</option>
-                  {targetColumns.map((tc) => (
-                    <option key={tc.name} value={tc.name}>
-                      {tc.name}
-                    </option>
-                  ))}
-                </select>
-                <span
-                  className="shrink-0"
-                  style={{ color: "var(--text-faint)" }}
-                >
-                  =
-                </span>
-                <input
-                  className="input flex-1 min-w-0"
-                  placeholder="value, e.g. user"
-                  value={c.value}
-                  onChange={(e) => setConst(i, { value: e.target.value })}
-                />
-                <button
-                  className="btn btn-sm shrink-0"
-                  onClick={() =>
-                    setConstants((s) => s.filter((_, idx) => idx !== i))
-                  }
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button
-              className="btn btn-sm"
-              onClick={() =>
-                setConstants((s) => [...s, { toColumn: "", value: "" }])
-              }
-            >
-              + Add constant filter
-            </button>
+          <div>
+            <label className="label">Constant filters (optional)</label>
+            <div className="space-y-2">
+              {constants.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    className="input flex-1 min-w-0"
+                    value={c.toColumn}
+                    disabled={!targetTable}
+                    onChange={(e) => setConst(i, { toColumn: e.target.value })}
+                  >
+                    <option value="">— target column —</option>
+                    {targetColumns.map((tc) => (
+                      <option key={tc.name} value={tc.name}>
+                        {tc.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="shrink-0"
+                    style={{ color: "var(--text-faint)" }}
+                  >
+                    =
+                  </span>
+                  <input
+                    className="input flex-1 min-w-0"
+                    placeholder="value, e.g. user"
+                    value={c.value}
+                    onChange={(e) => setConst(i, { value: e.target.value })}
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0"
+                    onClick={() =>
+                      setConstants((s) => s.filter((_, idx) => idx !== i))
+                    }
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setConstants((s) => [...s, { toColumn: "", value: "" }])
+                }
+              >
+                + Add constant filter
+              </Button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Label (optional)</label>
               <input
@@ -409,30 +430,26 @@ export function VirtualFkEditor({
           </div>
 
           {error && (
-            <p className="mb-2 text-[12px]" style={{ color: "var(--red)" }}>
+            <p className="text-[12px]" style={{ color: "var(--red)" }}>
               {error}
             </p>
           )}
 
           <div className="flex gap-2">
-            <button
-              className="btn btn-primary"
-              disabled={!canAdd || saving}
-              onClick={submit}
-            >
+            <Button disabled={!canAdd || saving} onClick={submit}>
               {saving ? "Adding…" : "Add relationship"}
-            </button>
-            <button
-              className="btn"
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => {
                 reset();
                 setAdding(false);
               }}
             >
               Cancel
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

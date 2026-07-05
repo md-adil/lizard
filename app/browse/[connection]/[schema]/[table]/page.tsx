@@ -9,10 +9,12 @@ import {
   type TableMeta,
 } from "@/components/browse/useTableMeta";
 import Link from "next/link";
-import { RowEditor } from "@/components/browse/RowEditor";
-import { DataGrid } from "@/components/browse/DataGrid";
-import { TableSearchBar } from "@/components/browse/TableSearchBar";
+import { RowEditor } from "@/components/browse/row-editor";
+import { DataGrid } from "@/components/browse/data-grid";
+import { useColumnVisibility } from "@/components/browse/use-column-visibility";
+import { TableSearchBar } from "@/components/browse/table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
+import { Button } from "@/components/ui/button";
 
 interface ListResponse {
   rows: Record<string, unknown>[];
@@ -58,6 +60,11 @@ export default function TablePage() {
     Record<string, unknown> | null | "new"
   >();
   const [search, setSearch] = useState("");
+  const [columnVisibility, setColumnVisibility] = useColumnVisibility(
+    meta?.connectionId,
+    params.schema,
+    params.table,
+  );
 
   const pageSize = 50;
   const { data, isLoading, isFetching, error } = useQuery<ListResponse>({
@@ -156,12 +163,12 @@ export default function TablePage() {
             ⚙ Customize
           </Link>
           {!meta.isView && (
-            <button
-              className="btn btn-primary"
+            <Button
+             
               onClick={() => setEditing("new")}
             >
               ＋ New row
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -200,6 +207,8 @@ export default function TablePage() {
         sort={sort}
         sortDir={sortDir}
         onToggleSort={toggleSort}
+        columnVisibility={columnVisibility}
+        onColumnVisibilityChange={setColumnVisibility}
         rowClickable={meta.table.primaryKey.length > 0}
         onRowClick={(row) => {
           if (meta.table.primaryKey.length === 0) return;
@@ -223,24 +232,24 @@ export default function TablePage() {
         className="flex items-center gap-3 mt-3 text-[13px]"
         style={{ color: "var(--text-dim)" }}
       >
-        <button
-          className="btn btn-sm"
+        <Button variant="outline" size="sm"
+         
           disabled={page === 0}
           onClick={() => setPage((p) => p - 1)}
         >
           ← Prev
-        </button>
+        </Button>
         <span>
           Page {page + 1}
           {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
         </span>
-        <button
-          className="btn btn-sm"
+        <Button variant="outline" size="sm"
+         
           disabled={!data?.hasMore}
           onClick={() => setPage((p) => p + 1)}
         >
           Next →
-        </button>
+        </Button>
       </div>
 
       {editing !== undefined && (

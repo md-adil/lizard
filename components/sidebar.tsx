@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTheme, toggleTheme } from "@/components/useTheme";
+import { useTheme } from "next-themes";
 import { useAuth } from "@/components/auth-context";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 
 interface CatalogTable {
   name: string;
@@ -46,18 +48,20 @@ function loadedSchemasKey(conn: string) {
 }
 
 function ThemeToggle() {
-  const theme = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  const theme = resolvedTheme === "light" ? "light" : "dark";
   return (
-    <button
-      className="btn btn-sm"
+    <Button
+      variant="outline"
+      size="sm"
       style={{ padding: "2px 8px" }}
       title={
         theme === "light" ? "Switch to dark theme" : "Switch to light theme"
       }
-      onClick={toggleTheme}
+      onClick={() => setTheme(theme === "light" ? "dark" : "light")}
     >
       {theme === "light" ? "🌙" : "☀️"}
-    </button>
+    </Button>
   );
 }
 
@@ -84,14 +88,19 @@ export function Sidebar() {
   const [schemaSearch, setSchemaSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const [showHidden, setShowHidden] = useState(false);
-  const [activeSchema, setActiveSchema] = useState<string | null>(null);
+  // Schema filter chip, remembered per connection in memory (the sidebar
+  // never unmounts across navigation, so no localStorage needed) — switching
+  // databases restores that database's own filter instead of leaking the
+  // previous one or losing it.
+  const [activeSchemaByConn, setActiveSchemaByConn] = useState<
+    Record<string, string | null>
+  >({});
 
   // follow the URL when browsing; otherwise keep/first connection
   useEffect(() => {
     if (params.connection && params.connection !== selected) {
       setSelected(params.connection);
       setShowHidden(false);
-      setActiveSchema(null);
     } else if (!selected && connections.length > 0) {
       setSelected(connections[0].connectionName);
     }
@@ -130,6 +139,14 @@ export function Sidebar() {
     setSchemaSearch("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, allSchemas.join(","), params.schema]);
+
+  // fall back to null if the remembered filter no longer matches a loaded
+  // schema (e.g. it was just removed, or the schema list changed underneath).
+  const activeSchemaRaw = activeSchemaByConn[selected] ?? null;
+  const activeSchema =
+    activeSchemaRaw && loaded.includes(activeSchemaRaw) ? activeSchemaRaw : null;
+  const setActiveSchema = (next: string | null) =>
+    setActiveSchemaByConn((m) => ({ ...m, [selected]: next }));
 
   const persist = (next: string[], removedSchema?: string) => {
     setLoaded(next);
@@ -252,62 +269,42 @@ export function Sidebar() {
               Schemas
             </span>
             {remaining.length > 0 && (
-              <button
-                className="btn btn-sm"
+              <Button variant="outline" size="sm"
+               
                 style={{ padding: "0 7px" }}
                 title="Load another schema"
                 onClick={() => setAddingSchema((s) => !s)}
               >
                 ＋
-              </button>
+              </Button>
             )}
           </div>
           <div className="flex flex-wrap gap-1">
             {loaded.map((s) => {
               const isActive = activeSchema === s;
               return (
-                <span
+                <Chip
                   key={s}
-                  className="tag"
-                  style={{
-                    color: isActive
-                      ? "var(--accent)"
-                      : activeSchema && !isActive
-                        ? "var(--text-faint)"
-                        : "var(--text)",
-                    background: isActive ? "var(--accent-soft)" : undefined,
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
+                  active={isActive}
+                  title={
+                    isActive
+                      ? `Showing only ${s} — click to show all`
+                      : `Filter to ${s}`
+                  }
+                  onClick={() => setActiveSchema(isActive ? null : s)}
+                  onRemove={
+                    loaded.length > 1
+                      ? () =>
+                          persist(
+                            loaded.filter((x) => x !== s),
+                            s,
+                          )
+                      : undefined
+                  }
+                  removeLabel={`Remove ${s}`}
                 >
-                  <button
-                    className="truncate max-w-24"
-                    title={
-                      isActive
-                        ? `Showing only ${s} — click to show all`
-                        : `Filter to ${s}`
-                    }
-                    onClick={() => setActiveSchema(isActive ? null : s)}
-                  >
-                    {s}
-                  </button>
-                  {loaded.length > 1 && (
-                    <button
-                      className="ml-1.5"
-                      style={{ color: "var(--text-faint)" }}
-                      title={`Remove ${s}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        persist(
-                          loaded.filter((x) => x !== s),
-                          s,
-                        );
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </span>
+                  {s}
+                </Chip>
               );
             })}
           </div>
@@ -330,9 +327,9 @@ export function Sidebar() {
                   return (
                     <>
                       {matches.slice(0, 50).map((s) => (
-                        <button
+                        <Button variant="ghost" className="block w-full text-left rounded px-2 py-1 text-[13px] hoverable truncate"
                           key={s}
-                          className="block w-full text-left rounded px-2 py-1 text-[13px] hoverable truncate"
+                         
                           style={{ color: "var(--text-dim)" }}
                           onClick={() => {
                             persist([...loaded, s]);
@@ -341,7 +338,7 @@ export function Sidebar() {
                           }}
                         >
                           ＋ {s}
-                        </button>
+                        </Button>
                       ))}
                       {matches.length > 50 && (
                         <p
@@ -438,31 +435,48 @@ export function Sidebar() {
                     const active =
                       pathname === href || pathname.startsWith(href + "/");
                     return (
-                      <Link
+                      <div
                         key={t.name}
-                        href={href}
-                        title={t.label !== t.name ? t.name : undefined}
-                        className="block rounded px-2.5 py-1 text-[14px] truncate"
+                        className="group flex items-center rounded"
                         style={{
                           background: active
                             ? "var(--accent-soft)"
                             : "transparent",
-                          color: active ? "var(--accent)" : "var(--text-dim)",
                         }}
                       >
-                        {t.label}
-                      </Link>
+                        <Link
+                          href={href}
+                          title={t.label !== t.name ? t.name : undefined}
+                          className="flex-1 min-w-0 px-2.5 py-1 text-[14px] truncate"
+                          style={{
+                            color: active ? "var(--accent)" : "var(--text-dim)",
+                          }}
+                        >
+                          {t.label}
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          nativeButton={false}
+                          render={<Link href={`${href}/customize`} />}
+                          className="mr-1 shrink-0 opacity-0 group-hover:opacity-100"
+                          style={{ color: "var(--text-faint)" }}
+                          title={`Customize ${t.label}`}
+                        >
+                          ⚙
+                        </Button>
+                      </div>
                     );
                   })}
                   {hiddenTables.length > 0 && !showHidden && (
-                    <button
-                      className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
+                    <Button variant="ghost" className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
+                     
                       style={{ color: "var(--text-faint)" }}
                       onClick={() => setShowHidden(true)}
                     >
                       <span>⊘</span>
                       <span>{hiddenTables.length} hidden</span>
-                    </button>
+                    </Button>
                   )}
                   {showHidden &&
                     hiddenTables.map((t) => {
@@ -491,13 +505,13 @@ export function Sidebar() {
               );
             })}
         {showHidden && conn && !conn.error && (
-          <button
-            className="flex items-center gap-1 mx-2.5 mt-1 mb-2 text-[12px] hoverable px-1 rounded"
+          <Button variant="ghost" className="flex items-center gap-1 mx-2.5 mt-1 mb-2 text-[12px] hoverable px-1 rounded"
+           
             style={{ color: "var(--text-faint)" }}
             onClick={() => setShowHidden(false)}
           >
             <span>⊘</span> hide hidden
-          </button>
+          </Button>
         )}
         {conn && !conn.error && tableQ && (
           <p
@@ -528,8 +542,8 @@ export function Sidebar() {
             {user?.role}
           </p>
         </div>
-        <button
-          className="btn btn-sm shrink-0"
+        <Button variant="outline" size="sm" className="shrink-0"
+         
           title="Sign out"
           onClick={async () => {
             await fetch("/api/auth/logout", { method: "POST" });
@@ -538,7 +552,7 @@ export function Sidebar() {
           }}
         >
           ⏻
-        </button>
+        </Button>
       </div>
     </aside>
   );

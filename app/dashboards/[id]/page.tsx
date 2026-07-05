@@ -6,9 +6,10 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ChartSpec, Dashboard, Panel, QueryResult } from "@/lib/types";
-import { ChartRenderer } from "@/components/charts/ChartRenderer";
-import { SpecControls } from "@/components/charts/SpecControls";
-import { ResultGrid } from "@/components/ai/ResultGrid";
+import { ChartRenderer } from "@/components/charts/chart-renderer";
+import { SpecControls } from "@/components/charts/spec-controls";
+import { ResultGrid } from "@/components/ai/result-grid";
+import { Button } from "@/components/ui/button";
 
 const REFRESH_OPTIONS = [
   { label: "off", value: null },
@@ -65,9 +66,9 @@ function PanelCard({
         ))}
         <span className="flex-1" />
         <div className="relative">
-          <button className="btn btn-sm" onClick={() => setMenu((m) => !m)}>
+          <Button variant="outline" size="sm" onClick={() => setMenu((m) => !m)}>
             ⋮
-          </button>
+          </Button>
           {menu && (
             <div
               className="absolute right-0 z-20 mt-1 w-44 rounded-md border p-2 space-y-1"
@@ -81,38 +82,38 @@ function PanelCard({
                 style={{ color: "var(--text-dim)" }}
               >
                 w
-                <button
-                  className="btn btn-sm"
+                <Button variant="outline" size="sm"
+                 
                   onClick={() => onResize(Math.max(3, panel.w - 1), panel.h)}
                 >
                   −
-                </button>
-                <button
-                  className="btn btn-sm"
+                </Button>
+                <Button variant="outline" size="sm"
+                 
                   onClick={() => onResize(Math.min(12, panel.w + 1), panel.h)}
                 >
                   ＋
-                </button>
+                </Button>
                 h
-                <button
-                  className="btn btn-sm"
+                <Button variant="outline" size="sm"
+                 
                   onClick={() => onResize(panel.w, Math.max(4, panel.h - 1))}
                 >
                   −
-                </button>
-                <button
-                  className="btn btn-sm"
+                </Button>
+                <Button variant="outline" size="sm"
+                 
                   onClick={() => onResize(panel.w, Math.min(20, panel.h + 1))}
                 >
                   ＋
-                </button>
+                </Button>
               </div>
-              <button
-                className="btn btn-sm btn-danger w-full justify-center"
+              <Button variant="destructive" size="sm" className="w-full justify-center"
+               
                 onClick={onDelete}
               >
                 Delete panel
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -283,9 +284,9 @@ function AddPanelModal({
               From SQL
             </button>
           </div>
-          <button className="btn btn-sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         {tab === "ai" ? (
@@ -325,13 +326,13 @@ function AddPanelModal({
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && generate()}
               />
-              <button
-                className="btn btn-primary"
+              <Button
+               
                 disabled={busy || !prompt.trim()}
                 onClick={generate}
               >
                 {busy ? "Generating…" : "Generate"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -381,13 +382,13 @@ function AddPanelModal({
               value={sql}
               onChange={(e) => setSql(e.target.value)}
             />
-            <button
-              className="btn btn-primary"
+            <Button
+             
               disabled={busy || !sql.trim() || sqlConns.length === 0}
               onClick={runSql}
             >
               {busy ? "Running…" : "Run preview"}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -450,12 +451,12 @@ function AddPanelModal({
                       setPreview((p) => (p ? { ...p, spec } : p))
                     }
                   />
-                  <button
-                    className="btn btn-primary w-full justify-center mt-4"
+                  <Button className="w-full justify-center mt-4"
+                   
                     onClick={save}
                   >
                     Add panel
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -562,9 +563,9 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>
+        <Button onClick={() => setAdding(true)}>
           ＋ Add panel
-        </button>
+        </Button>
       </div>
 
       {dash.panels.length === 0 ? (

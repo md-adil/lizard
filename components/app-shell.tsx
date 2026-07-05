@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
+import { Sidebar } from "@/components/sidebar";
 import { useAuth } from "@/components/auth-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {

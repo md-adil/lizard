@@ -76,6 +76,19 @@ function getDb(): DatabaseSync {
       help TEXT,
       PRIMARY KEY (connection_id, schema_name, table_name, column_name)
     );
+    -- per-user grid column visibility ("Columns" toggle) -- distinct from
+    -- column_overrides.hidden, which is a shared structural hide applied to
+    -- every user and every surface (grid, record page, RowEditor). This is
+    -- just one person's personal view preference for the grid.
+    CREATE TABLE IF NOT EXISTS user_column_prefs (
+      user_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL,
+      schema_name TEXT NOT NULL,
+      table_name TEXT NOT NULL,
+      column_name TEXT NOT NULL,
+      hidden INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, connection_id, schema_name, table_name, column_name)
+    );
     CREATE TABLE IF NOT EXISTS saved_queries (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -354,6 +367,44 @@ export function setColumnOverride(o: ColumnOverride): void {
       o.sortOrder,
       o.help
     );
+}
+
+// ---------- per-user grid column visibility ----------
+
+// { [columnName]: hidden } for one user's view of one table.
+export function getUserColumnPrefs(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+): Record<string, boolean> {
+  const rows = getDb()
+    .prepare(
+      `SELECT column_name, hidden FROM user_column_prefs
+       WHERE user_id=? AND connection_id=? AND schema_name=? AND table_name=?`,
+    )
+    .all(userId, connectionId, schema, table) as Record<string, unknown>[];
+  const out: Record<string, boolean> = {};
+  for (const r of rows) out[r.column_name as string] = !!r.hidden;
+  return out;
+}
+
+export function setUserColumnPref(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+  column: string,
+  hidden: boolean,
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO user_column_prefs (user_id, connection_id, schema_name, table_name, column_name, hidden)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, connection_id, schema_name, table_name, column_name)
+       DO UPDATE SET hidden=excluded.hidden`,
+    )
+    .run(userId, connectionId, schema, table, column, hidden ? 1 : 0);
 }
 
 // ---------- saved queries ----------

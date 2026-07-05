@@ -7,8 +7,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ChartSpec, Dashboard, QueryRequest, QueryResult } from "@/lib/types";
 import { suggestCharts } from "@/lib/charts/suggest";
-import { ChartRenderer } from "./ChartRenderer";
-import { SpecControls } from "./SpecControls";
+import { ChartRenderer } from "./chart-renderer";
+import { SpecControls } from "./spec-controls";
+import { Button } from "@/components/ui/button";
 
 export function VisualizeButton({ result, source }: { result: QueryResult; source: QueryRequest }) {
   const [open, setOpen] = useState(false);
@@ -73,9 +74,9 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
 
   return (
     <>
-      <button className="btn btn-sm" onClick={openModal}>
+      <Button variant="outline" size="sm" onClick={openModal}>
         📊 Visualize
-      </button>
+      </Button>
       {open && spec && (
         <>
           <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={() => setOpen(false)} />
@@ -85,7 +86,7 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[15px] font-semibold">Visualize result</h3>
-              <button className="btn btn-sm" onClick={() => setOpen(false)}>✕</button>
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>✕</Button>
             </div>
             <div className="flex gap-5">
               <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--bg)" }}>
@@ -115,9 +116,9 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
                       Saved ✓ — open “{savedTo.name}”
                     </Link>
                   ) : (
-                    <button className="btn btn-primary w-full justify-center" disabled={saving} onClick={addToDashboard}>
+                    <Button className="w-full justify-center" disabled={saving} onClick={addToDashboard}>
                       {saving ? "Saving…" : "Add to dashboard"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

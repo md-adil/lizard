@@ -10,6 +10,7 @@ import type {
   TableOverride,
   ColumnOverride,
   ColumnInfo,
+  VfkTransform,
 } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -62,6 +63,9 @@ export interface ColumnMeta {
     schema: string;
     table: string;
     column: string;
+    // value transform applied symmetrically to both sides of the join (see
+    // VfkPair.transform) — "none" for real FKs, which are always exact.
+    transform: VfkTransform;
   } | null;
   required: boolean;
 }
@@ -122,6 +126,7 @@ export function buildTableMeta(
           schema: realFk.referencedSchema,
           table: realFk.referencedTable,
           column: realFk.referencedColumns[0],
+          transform: "none" as VfkTransform,
         }
       : vfk
         ? {
@@ -129,6 +134,7 @@ export function buildTableMeta(
             schema: resolveToSchema(vfk, schema),
             table: vfk.toTable,
             column: vfkTargetColumn(vfk)!,
+            transform: vfk.pairs[0]?.transform ?? "none",
           }
         : null;
     return {

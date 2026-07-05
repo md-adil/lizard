@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -87,13 +88,13 @@ export default function LoginPage() {
           <p className="mt-3 text-[13px]" style={{ color: "var(--red)" }}>{error}</p>
         )}
 
-        <button
-          className="btn btn-primary w-full justify-center mt-5"
+        <Button className="w-full justify-center mt-5"
+         
           disabled={busy || !email || !password}
           onClick={submit}
         >
           {busy ? "…" : needsSetup ? "Create admin & sign in" : "Sign in"}
-        </button>
+        </Button>
       </div>
     </div>
   );

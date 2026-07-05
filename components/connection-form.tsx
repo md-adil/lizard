@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parsePostgresUri } from "@/lib/parse-uri";
+import { Button } from "@/components/ui/button";
 
 export interface ConnectionRow {
   id: string;
@@ -193,7 +194,7 @@ export function ConnectionForm({
           <h2 className="text-[16px] font-semibold">
             {mode === "create" ? "Add connection" : `Edit “${initial?.name}”`}
           </h2>
-          <button className="btn btn-sm" onClick={onClose}>✕</button>
+          <Button variant="outline" size="sm" onClick={onClose}>✕</Button>
         </div>
 
         <div className="mb-4">
@@ -276,18 +277,18 @@ export function ConnectionForm({
         )}
 
         <div className="mt-5 flex items-center gap-2">
-          <button
-            className="btn"
+          <Button variant="outline"
+           
             disabled={testMutation.isPending || !form.host || !form.database || !form.readUser}
             onClick={() => testMutation.mutate()}
           >
             {testMutation.isPending ? "Testing…" : "Test connection"}
-          </button>
+          </Button>
           <span className="flex-1" />
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
             {saveMutation.isPending ? "Saving…" : mode === "create" ? "Save connection" : "Save changes"}
-          </button>
+          </Button>
         </div>
       </div>
     </>

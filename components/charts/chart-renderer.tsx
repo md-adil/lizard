@@ -4,7 +4,7 @@
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
 import type { ChartSpec, QueryResult } from "@/lib/types";
-import { ResultGrid } from "@/components/ai/ResultGrid";
+import { ResultGrid } from "@/components/ai/result-grid";
 import { useTheme, type ThemeName } from "@/components/useTheme";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });

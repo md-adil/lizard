@@ -4,7 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
-import { ReferencePickerModal } from "./ReferencePickerModal";
+import { ReferencePickerModal } from "./reference-picker-modal";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   meta: TableMeta;
@@ -125,25 +126,25 @@ function ReferenceInput({
               }}
             >
               {cm.col.nullable && (
-                <button
+                <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
                   type="button"
-                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
+                 
                   style={{ color: "var(--text-faint)" }}
                   onMouseDown={() => pick("", null)}
                 >
                   ∅ null
-                </button>
+                </Button>
               )}
               {options?.map((o) => (
-                <button
+                <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
                   type="button"
                   key={o.id}
-                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
+                 
                   onMouseDown={() => pick(o.id, o.label)}
                 >
                   {o.label}{" "}
                   <span style={{ color: "var(--text-faint)" }}>({o.id})</span>
-                </button>
+                </Button>
               ))}
               {options?.length === 0 && (
                 <div
@@ -156,14 +157,14 @@ function ReferenceInput({
             </div>
           )}
         </div>
-        <button
+        <Button variant="outline"
           type="button"
-          className="btn"
+         
           title={`Browse ${ref.table} in a full table with filters`}
           onClick={() => setBrowsing(true)}
         >
           ⤢
-        </button>
+        </Button>
       </div>
       {browsing && (
         <ReferencePickerModal
@@ -318,9 +319,9 @@ export function RowEditor({ meta, row, onClose }: Props) {
           <h2 className="text-[15px] font-semibold">
             {isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}
           </h2>
-          <button className="btn btn-sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-4">
@@ -438,8 +439,8 @@ export function RowEditor({ meta, row, onClose }: Props) {
         )}
 
         <div className="mt-6 flex items-center gap-2">
-          <button
-            className="btn btn-primary"
+          <Button
+           
             disabled={save.isPending}
             onClick={() => save.mutate()}
           >
@@ -448,15 +449,15 @@ export function RowEditor({ meta, row, onClose }: Props) {
               : isCreate
                 ? "Create row"
                 : "Save changes"}
-          </button>
+          </Button>
           {!isCreate && (
-            <button
-              className="btn btn-danger"
+            <Button variant="destructive"
+             
               disabled={del.isPending}
               onClick={() => confirm("Delete this row?") && del.mutate()}
             >
               Delete
-            </button>
+            </Button>
           )}
         </div>
       </div>

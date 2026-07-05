@@ -4,25 +4,34 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Light is the default (bare :root); dark is the .dark class next-themes
+   toggles on <html> (attribute="class" — the shadcn/next-themes convention).
+   Two token vocabularies share this scope on purpose: the app's own
+   long-standing custom properties (--bg/--text/--accent/...) and shadcn's
+   reserved names (--background/--foreground/--primary/...). Where a name
+   means the same thing in both (e.g. --border), one shared value is correct.
+   --accent is the one deliberate semantic reuse: the app's brand highlight
+   color doubles as shadcn's hover/highlight tint (see combobox's
+   data-highlighted:bg-accent) — intentional, not a collision. */
 :root {
-  --bg: #0b0e14;
-  --bg-panel: #11151f;
-  --bg-raised: #171c28;
-  --border: oklch(0.922 0 0);
-  --border-strong: #2f3850;
-  --text: #e6e9f0;
-  --text-dim: #8b93a7;
-  --text-faint: #5c6478;
-  --accent: oklch(0.97 0 0);
-  --accent-soft: rgba(79, 140, 255, 0.14);
-  --green: #3fb96e;
-  --red: #e5534b;
-  --amber: #d9a13c;
-  --purple: #a07bf5;
-  --hover: rgba(255, 255, 255, 0.05);
-  --overlay: rgba(0, 0, 0, 0.55);
+  --bg: #f6f7f9;
+  --bg-panel: #ffffff;
+  --bg-raised: #f0f2f5;
+  --border: #e3e6eb;
+  --border-strong: #ccd2db;
+  --text: #1a1f2b;
+  --text-dim: #5b6474;
+  --text-faint: #8a92a3;
+  --accent: #2a6fe8;
+  --accent-soft: rgba(42, 111, 232, 0.1);
+  --green: #1a8f4d;
+  --red: #d13438;
+  --amber: #b07708;
+  --purple: #6d4fd0;
+  --hover: rgba(15, 23, 42, 0.05);
+  --overlay: rgba(15, 23, 42, 0.35);
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-  color-scheme: dark;
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -55,24 +64,53 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-html[data-theme="light"] {
-  --bg: #f6f7f9;
-  --bg-panel: #ffffff;
-  --bg-raised: #f0f2f5;
-  --border: #e3e6eb;
-  --border-strong: #ccd2db;
-  --text: #1a1f2b;
-  --text-dim: #5b6474;
-  --text-faint: #8a92a3;
-  --accent: #2a6fe8;
-  --accent-soft: rgba(42, 111, 232, 0.1);
-  --green: #1a8f4d;
-  --red: #d13438;
-  --amber: #b07708;
-  --purple: #6d4fd0;
-  --hover: rgba(15, 23, 42, 0.05);
-  --overlay: rgba(15, 23, 42, 0.35);
-  color-scheme: light;
+.dark {
+  --bg: #0b0e14;
+  --bg-panel: #11151f;
+  --bg-raised: #171c28;
+  --border: #232a3a;
+  --border-strong: #2f3850;
+  --text: #e6e9f0;
+  --text-dim: #8b93a7;
+  --text-faint: #5c6478;
+  --accent: #4f8cff;
+  --accent-soft: rgba(79, 140, 255, 0.14);
+  --green: #3fb96e;
+  --red: #e5534b;
+  --amber: #d9a13c;
+  --purple: #a07bf5;
+  --hover: rgba(255, 255, 255, 0.05);
+  --overlay: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.439 0 0);
 }
 
 html,

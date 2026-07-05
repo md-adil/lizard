@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ConnectionForm, type ConnectionRow } from "@/components/ConnectionForm";
+import { ConnectionForm, type ConnectionRow } from "@/components/connection-form";
+import { Button } from "@/components/ui/button";
 
 interface ConnectionWithStatus extends ConnectionRow {
   status: { read: string | null; write: string | null };
@@ -32,15 +33,15 @@ export default function ConnectionsPage() {
     <div className="max-w-4xl mx-auto px-8 py-10">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-semibold">Connections</h1>
-        <button
-          className="btn btn-primary"
+        <Button
+         
           onClick={() => {
             setEditing(null);
             setFormMode("create");
           }}
         >
           + Add connection
-        </button>
+        </Button>
       </div>
       <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>
         Register each microservice&apos;s Postgres database. Paste a connection URI or fill the fields, test it,
@@ -75,17 +76,17 @@ export default function ConnectionsPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button
-                className="btn btn-sm"
+              <Button variant="outline" size="sm"
+               
                 onClick={() => {
                   setEditing(c);
                   setFormMode("edit");
                 }}
               >
                 Edit
-              </button>
-              <button
-                className="btn btn-sm btn-danger"
+              </Button>
+              <Button variant="destructive" size="sm"
+               
                 onClick={() => {
                   if (confirm(`Remove connection "${c.name}"? (The database itself is untouched.)`)) {
                     deleteMutation.mutate(c.id);
@@ -93,7 +94,7 @@ export default function ConnectionsPage() {
                 }}
               >
                 Remove
-              </button>
+              </Button>
             </div>
           </div>
         ))}
