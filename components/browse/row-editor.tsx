@@ -6,6 +6,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 interface Props {
   meta: TableMeta;
@@ -126,9 +132,10 @@ function ReferenceInput({
               }}
             >
               {cm.col.nullable && (
-                <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
+                <Button
+                  variant="ghost"
+                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
                   type="button"
-                 
                   style={{ color: "var(--text-faint)" }}
                   onMouseDown={() => pick("", null)}
                 >
@@ -136,10 +143,11 @@ function ReferenceInput({
                 </Button>
               )}
               {options?.map((o) => (
-                <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
+                <Button
+                  variant="ghost"
+                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
                   type="button"
                   key={o.id}
-                 
                   onMouseDown={() => pick(o.id, o.label)}
                 >
                   {o.label}{" "}
@@ -157,9 +165,9 @@ function ReferenceInput({
             </div>
           )}
         </div>
-        <Button variant="outline"
+        <Button
+          variant="outline"
           type="button"
-         
           title={`Browse ${ref.table} in a full table with filters`}
           onClick={() => setBrowsing(true)}
         >
@@ -304,25 +312,23 @@ export function RowEditor({ meta, row, onClose }: Props) {
     setTouched((s) => new Set(s).add(name));
   };
 
+  const [open, setOpen] = useState(true);
+  const close = () => {
+    setOpen(false);
+    setTimeout(onClose, 200);
+  };
+
   return (
-    <>
-      <div
-        className="fixed inset-0 z-30"
-        style={{ background: "var(--overlay)" }}
-        onClick={onClose}
-      />
-      <div
-        className="fixed right-0 top-0 bottom-0 z-40 w-150 max-w-full overflow-y-auto scrollbar-thin border-l p-6"
-        style={{ background: "var(--bg-panel)" }}
+    <Sheet open={open} onOpenChange={(v) => !v && close()}>
+      <SheetContent
+        side="right"
+        className="w-150 max-w-full overflow-y-auto scrollbar-thin p-6"
       >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-[15px] font-semibold">
+        <SheetHeader className="mb-5">
+          <SheetTitle>
             {isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}
-          </h2>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            ✕
-          </Button>
-        </div>
+          </SheetTitle>
+        </SheetHeader>
 
         <div className="space-y-4">
           {editable.map((cm) => {
@@ -439,11 +445,7 @@ export function RowEditor({ meta, row, onClose }: Props) {
         )}
 
         <div className="mt-6 flex items-center gap-2">
-          <Button
-           
-            disabled={save.isPending}
-            onClick={() => save.mutate()}
-          >
+          <Button disabled={save.isPending} onClick={() => save.mutate()}>
             {save.isPending
               ? "Saving…"
               : isCreate
@@ -451,8 +453,8 @@ export function RowEditor({ meta, row, onClose }: Props) {
                 : "Save changes"}
           </Button>
           {!isCreate && (
-            <Button variant="destructive"
-             
+            <Button
+              variant="destructive"
               disabled={del.isPending}
               onClick={() => confirm("Delete this row?") && del.mutate()}
             >
@@ -460,7 +462,7 @@ export function RowEditor({ meta, row, onClose }: Props) {
             </Button>
           )}
         </div>
-      </div>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }

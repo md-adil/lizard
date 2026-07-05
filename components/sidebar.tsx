@@ -165,7 +165,9 @@ export function Sidebar() {
   // schema (e.g. it was just removed, or the schema list changed underneath).
   const activeSchemaRaw = activeSchemaByConn[selected] ?? null;
   const activeSchema =
-    activeSchemaRaw && loaded.includes(activeSchemaRaw) ? activeSchemaRaw : null;
+    activeSchemaRaw && loaded.includes(activeSchemaRaw)
+      ? activeSchemaRaw
+      : null;
   const setActiveSchema = (next: string | null) =>
     setActiveSchemaByConn((m) => ({ ...m, [selected]: next }));
 
@@ -233,18 +235,7 @@ export function Sidebar() {
 
         {/* database selector */}
         <SidebarGroup>
-          <div className="flex items-center justify-between">
-            <SidebarGroupLabel>Database</SidebarGroupLabel>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              nativeButton={false}
-              render={<Link href="/" />}
-              title="Add another database connection"
-            >
-              ＋
-            </Button>
-          </div>
+          <SidebarGroupLabel>Database</SidebarGroupLabel>
           {connections.length === 0 ? (
             <p
               className="text-[12px] py-1 px-2"
@@ -361,8 +352,7 @@ export function Sidebar() {
                             className="px-2 py-1 text-[11.5px]"
                             style={{ color: "var(--text-faint)" }}
                           >
-                            …{matches.length - 50} more — keep typing to
-                            narrow
+                            …{matches.length - 50} more — keep typing to narrow
                           </p>
                         )}
                         {matches.length === 0 && (
@@ -468,9 +458,7 @@ export function Sidebar() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" side="right">
                                 <DropdownMenuItem
-                                  render={
-                                    <Link href={`${href}/customize`} />
-                                  }
+                                  render={<Link href={`${href}/customize`} />}
                                 >
                                   ⚙ Customize
                                 </DropdownMenuItem>

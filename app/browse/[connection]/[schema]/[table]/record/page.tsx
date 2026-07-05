@@ -16,6 +16,7 @@ import {
 } from "@/components/browse/useTableMeta";
 import type { VfkTransform } from "@/lib/types";
 import { RowEditor } from "@/components/browse/row-editor";
+import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
 import { humanize } from "@/lib/introspect/heuristics";
 import {
@@ -25,6 +26,14 @@ import {
 } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 function Card({
   title,
@@ -54,8 +63,9 @@ function Card({
           </span>
         )}
         <span className="flex-1" />
-        <Button variant="outline" size="sm"
-         
+        <Button
+          variant="outline"
+          size="sm"
           title="Enlarge"
           onClick={() => setExpanded(true)}
         >
@@ -63,7 +73,11 @@ function Card({
         </Button>
         {menu && menu.length > 0 && (
           <div className="relative">
-            <Button variant="outline" size="sm" onClick={() => setOpen((s) => !s)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpen((s) => !s)}
+            >
               ⋯
             </Button>
             {open && (
@@ -93,9 +107,10 @@ function Card({
                         {m.label}
                       </Link>
                     ) : (
-                      <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
+                      <Button
+                        variant="ghost"
+                        className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
                         key={m.label}
-                       
                         style={{
                           color: m.danger ? "var(--red)" : "var(--text)",
                         }}
@@ -299,8 +314,9 @@ function JsonCard({
               {err}
             </p>
           )}
-          <Button size="sm" className="mt-2"
-           
+          <Button
+            size="sm"
+            className="mt-2"
             disabled={save.isPending}
             onClick={() => save.mutate()}
           >
@@ -446,6 +462,8 @@ function HasManyCard({
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(
     null,
   );
+  const [sort, setSort] = useState<string | undefined>();
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const { data, error } = useQuery<{
     rows: Record<string, unknown>[];
     total: number | null;
@@ -474,9 +492,7 @@ function HasManyCard({
   });
 
   if (!meta) return null;
-  const cols = meta.columns
-    .filter((c) => !c.hidden && c.col.name !== fkColumn)
-    .slice(0, 4);
+  const cols = meta.columns.filter((c) => !c.hidden && c.col.name !== fkColumn);
   return (
     <Card
       title={meta.label}
@@ -503,65 +519,33 @@ function HasManyCard({
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto scrollbar-thin">
-            <table className="grid">
-              <thead>
-                <tr>
-                  {cols.map((c) => (
-                    <th key={c.col.name}>{c.label}</th>
-                  ))}
-                  {!meta.isView && <th style={{ width: 36 }} />}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((r, i) => {
-                  const pkObj: Record<string, unknown> = {};
-                  for (const k of meta.table.primaryKey) pkObj[k] = r[k];
-                  const href = `/browse/${source.connection}/${source.schema}/${source.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`;
-                  return (
-                    <tr
-                      key={i}
-                      className="cursor-pointer"
-                      onClick={() => (window.location.href = href)}
-                    >
-                      {cols.map((c) => {
-                        const f = formatCell(r[c.col.name]);
-                        const lbl =
-                          c.ref && r[c.col.name] != null
-                            ? data.fkLabels[c.col.name]?.[String(r[c.col.name])]
-                            : undefined;
-                        return (
-                          <td
-                            key={c.col.name}
-                            style={{
-                              color: f.muted ? "var(--text-faint)" : undefined,
-                            }}
-                          >
-                            {lbl ?? f.text}
-                          </td>
-                        );
-                      })}
-                      {!meta.isView && (
-                        <td>
-                          <Button variant="outline" size="sm"
-                           
-                            style={{ padding: "0 6px", fontSize: 11 }}
-                            title="Edit this record here"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingRow(r);
-                            }}
-                          >
-                            ✎
-                          </Button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataGrid
+            columns={cols}
+            rows={data.rows}
+            fkLabels={data.fkLabels}
+            sort={sort}
+            sortDir={sortDir}
+            onToggleSort={(col) => {
+              if (sort === col) {
+                if (sortDir === "asc") setSortDir("desc");
+                else {
+                  setSort(undefined);
+                  setSortDir("asc");
+                }
+              } else {
+                setSort(col);
+                setSortDir("asc");
+              }
+            }}
+            rowClickable={!meta.isView}
+            onRowClick={(row) => {
+              if (meta.isView) return;
+              const pkObj: Record<string, unknown> = {};
+              for (const k of meta.table.primaryKey) pkObj[k] = row[k];
+              window.location.href = `/browse/${source.connection}/${source.schema}/${source.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`;
+            }}
+            maxHeight="calc(100vh - 400px)"
+          />
           {data.total != null && data.total > data.rows.length && (
             <p
               className="text-[12px] mt-1.5"
@@ -708,7 +692,8 @@ function RecordView() {
         v.toSchema === SAME_SCHEMA ? params.schema : v.fromSchema;
       const fkColumn = vfkDisplayColumn(v);
       // can't enumerate a concrete back-link when the source side is a pattern
-      if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
+      if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable))
+        continue;
       hasMany.push({
         connection: v.fromConnection,
         schema: fromSchema,
@@ -748,13 +733,41 @@ function RecordView() {
 
   return (
     <div className="px-8 py-7 max-w-6xl">
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/" />}>Connections</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>
+              {params.connection}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
+              {params.schema}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}`} />}>
+              {meta.label}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>
+              {meta.displayColumn && row
+                ? String(row[meta.displayColumn] ?? pkText)
+                : pkText}
+            </BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="flex items-center gap-3 mb-5">
-        <Link
-          href={`/browse/${params.connection}/${params.schema}/${params.table}`}
-          className="btn btn-sm"
-        >
-          ← {meta.label}
-        </Link>
         <h1 className="text-lg font-semibold">
           {meta.displayColumn && row
             ? String(row[meta.displayColumn] ?? pkText)
@@ -767,8 +780,8 @@ function RecordView() {
             <Button variant="outline" onClick={() => setEditing(true)}>
               ✎ Edit
             </Button>
-            <Button variant="destructive"
-             
+            <Button
+              variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
                 const res = await fetch(

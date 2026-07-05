@@ -9,6 +9,14 @@ import {
   type TableMeta,
 } from "@/components/browse/useTableMeta";
 import Link from "next/link";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { RowEditor } from "@/components/browse/row-editor";
 import { DataGrid } from "@/components/browse/data-grid";
 import { useColumnVisibility } from "@/components/browse/use-column-visibility";
@@ -133,13 +141,42 @@ export default function TablePage() {
 
   return (
     <div className="px-8 py-8">
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/" />}>
+              Connections
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink
+              render={<Link href={`/browse/${params.connection}`} />}
+            >
+              {params.connection}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink
+              render={
+                <Link href={`/browse/${params.connection}/${params.schema}`} />
+              }
+            >
+              {params.schema}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{meta.label}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="flex items-start justify-between mb-1">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-lg font-semibold">{meta.label}</h1>
-            <span className="tag code">
-              {params.connection} · {params.schema}.{params.table}
-            </span>
             {meta.isView && (
               <span className="tag" style={{ color: "var(--amber)" }}>
                 view · read-only
@@ -163,12 +200,7 @@ export default function TablePage() {
             ⚙ Customize
           </Link>
           {!meta.isView && (
-            <Button
-             
-              onClick={() => setEditing("new")}
-            >
-              ＋ New row
-            </Button>
+            <Button onClick={() => setEditing("new")}>＋ New row</Button>
           )}
         </div>
       </div>
@@ -232,8 +264,9 @@ export default function TablePage() {
         className="flex items-center gap-3 mt-3 text-[13px]"
         style={{ color: "var(--text-dim)" }}
       >
-        <Button variant="outline" size="sm"
-         
+        <Button
+          variant="outline"
+          size="sm"
           disabled={page === 0}
           onClick={() => setPage((p) => p - 1)}
         >
@@ -243,8 +276,9 @@ export default function TablePage() {
           Page {page + 1}
           {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
         </span>
-        <Button variant="outline" size="sm"
-         
+        <Button
+          variant="outline"
+          size="sm"
           disabled={!data?.hasMore}
           onClick={() => setPage((p) => p + 1)}
         >
