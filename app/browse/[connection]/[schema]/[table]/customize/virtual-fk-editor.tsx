@@ -10,6 +10,23 @@ import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
+import { Loader2 } from "lucide-react";
 import type {
   TableMeta,
   CatalogResponse,
@@ -183,13 +200,20 @@ export function VirtualFkEditor({
       ))}
 
       {!adding ? (
-        <Button variant="outline" className="mt-1" onClick={() => setAdding(true)}>
+        <Button
+          variant="outline"
+          className="mt-1"
+          onClick={() => setAdding(true)}
+        >
           + Add relationship
         </Button>
       ) : (
         <Card className="p-4 mt-2 gap-3">
           <div>
-            <div className="text-[11px] mb-1.5" style={{ color: "var(--text-faint)" }}>
+            <div
+              className="text-[11px] mb-1.5"
+              style={{ color: "var(--text-faint)" }}
+            >
               Target
             </div>
             <Tabs
@@ -198,7 +222,9 @@ export function VirtualFkEditor({
             >
               <TabsList variant="default">
                 <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
-                <TabsTrigger value="advanced">Advanced (cross-service)</TabsTrigger>
+                <TabsTrigger value="advanced">
+                  Advanced (cross-service)
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -218,41 +244,52 @@ export function VirtualFkEditor({
               <>
                 <div>
                   <label className="label">Target connection</label>
-                  <select
-                    className="input"
-                    value={toConnection}
-                    onChange={(e) => {
-                      setToConnection(e.target.value);
+                  <Select
+                    value={toConnection || null}
+                    onValueChange={(v) => {
+                      setToConnection(v ?? "");
                       setToTable("");
                     }}
                   >
-                    <option value="">— select —</option>
-                    {catalog.connections.map((c) => (
-                      <option key={c.connectionName} value={c.connectionName}>
-                        {c.connectionName}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="— select —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {catalog.connections.map((c) => (
+                        <SelectItem
+                          key={c.connectionName}
+                          value={c.connectionName}
+                        >
+                          {c.connectionName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="label">Target schema</label>
-                  <select
-                    className="input"
-                    value={toSchema}
+                  <Select
+                    value={toSchema || null}
                     disabled={!toConn}
-                    onChange={(e) => {
-                      setToSchema(e.target.value);
+                    onValueChange={(v) => {
+                      setToSchema(v ?? "");
                       setToTable("");
                     }}
                   >
-                    <option value="">— select —</option>
-                    <option value={SAME_SCHEMA}>Same schema as row</option>
-                    {toConn?.schemas.map((s) => (
-                      <option key={s.name} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="— select —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SAME_SCHEMA}>
+                        Same schema as row
+                      </SelectItem>
+                      {toConn?.schemas.map((s) => (
+                        <SelectItem key={s.name} value={s.name}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </>
             )}
@@ -260,19 +297,26 @@ export function VirtualFkEditor({
               <label className="label">
                 {showTargetScope ? "Target table" : "References table"}
               </label>
-              <select
-                className="input"
-                value={toTable}
+              <Combobox
+                value={toTable || null}
                 disabled={!toSchema}
-                onChange={(e) => pickTable(e.target.value)}
+                onValueChange={(v) => pickTable(v ?? "")}
               >
-                <option value="">— select —</option>
-                {tablesSchema?.tables.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+                <ComboboxInput
+                  placeholder="— type to search —"
+                  showClear={!!toTable}
+                />
+                <ComboboxContent>
+                  <ComboboxList>
+                    {tablesSchema?.tables.map((t) => (
+                      <ComboboxItem key={t.name} value={t.name}>
+                        {t.name}
+                      </ComboboxItem>
+                    ))}
+                  </ComboboxList>
+                  <ComboboxEmpty>No tables found</ComboboxEmpty>
+                </ComboboxContent>
+              </Combobox>
             </div>
           </div>
 
@@ -281,51 +325,68 @@ export function VirtualFkEditor({
             <div className="space-y-2">
               {pairs.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select
-                    className="input flex-1 min-w-0"
-                    value={p.from}
-                    onChange={(e) => setPair(i, { from: e.target.value })}
+                  <Combobox
+                    value={p.from || null}
+                    onValueChange={(v) => setPair(i, { from: v ?? "" })}
                   >
-                    <option value="">— this column —</option>
-                    {meta.table.columns.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    <ComboboxInput
+                      placeholder="— this column —"
+                      showClear={!!p.from}
+                    />
+                    <ComboboxContent>
+                      <ComboboxList>
+                        {meta.table.columns.map((c) => (
+                          <ComboboxItem key={c.name} value={c.name}>
+                            {c.name}
+                          </ComboboxItem>
+                        ))}
+                      </ComboboxList>
+                      <ComboboxEmpty>No columns found</ComboboxEmpty>
+                    </ComboboxContent>
+                  </Combobox>
                   <span
                     className="shrink-0"
                     style={{ color: "var(--text-faint)" }}
                   >
                     =
                   </span>
-                  <select
-                    className="input flex-1 min-w-0"
-                    value={p.to}
+                  <Combobox
+                    value={p.to || null}
                     disabled={!targetTable}
-                    onChange={(e) => setPair(i, { to: e.target.value })}
+                    onValueChange={(v) => setPair(i, { to: v ?? "" })}
                   >
-                    <option value="">— target column —</option>
-                    {targetColumns.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="input w-24 shrink-0"
+                    <ComboboxInput
+                      placeholder="— target column —"
+                      showClear={!!p.to}
+                    />
+                    <ComboboxContent>
+                      <ComboboxList>
+                        {targetColumns.map((c) => (
+                          <ComboboxItem key={c.name} value={c.name}>
+                            {c.name}
+                          </ComboboxItem>
+                        ))}
+                      </ComboboxList>
+                      <ComboboxEmpty>No columns found</ComboboxEmpty>
+                    </ComboboxContent>
+                  </Combobox>
+                  <Select
                     value={p.transform ?? "none"}
-                    onChange={(e) =>
-                      setPair(i, { transform: e.target.value as VfkTransform })
+                    onValueChange={(v) =>
+                      setPair(i, { transform: (v ?? "none") as VfkTransform })
                     }
-                    title="Value transform applied to both sides"
                   >
-                    {TRANSFORMS.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger title="Value transform applied to both sides">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRANSFORMS.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     variant="outline"
                     size="icon-sm"
@@ -359,27 +420,34 @@ export function VirtualFkEditor({
             <div className="space-y-2">
               {constants.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select
-                    className="input flex-1 min-w-0"
-                    value={c.toColumn}
+                  <Combobox
+                    value={c.toColumn || null}
                     disabled={!targetTable}
-                    onChange={(e) => setConst(i, { toColumn: e.target.value })}
+                    onValueChange={(v) => setConst(i, { toColumn: v ?? "" })}
                   >
-                    <option value="">— target column —</option>
-                    {targetColumns.map((tc) => (
-                      <option key={tc.name} value={tc.name}>
-                        {tc.name}
-                      </option>
-                    ))}
-                  </select>
+                    <ComboboxInput
+                      placeholder="— target column —"
+                      showClear={!!c.toColumn}
+                    />
+                    <ComboboxContent>
+                      <ComboboxList>
+                        {targetColumns.map((tc) => (
+                          <ComboboxItem key={tc.name} value={tc.name}>
+                            {tc.name}
+                          </ComboboxItem>
+                        ))}
+                      </ComboboxList>
+                      <ComboboxEmpty>No columns found</ComboboxEmpty>
+                    </ComboboxContent>
+                  </Combobox>
                   <span
                     className="shrink-0"
                     style={{ color: "var(--text-faint)" }}
                   >
                     =
                   </span>
-                  <input
-                    className="input flex-1 min-w-0"
+                  <Input
+                    className="flex-1"
                     placeholder="value, e.g. user"
                     value={c.value}
                     onChange={(e) => setConst(i, { value: e.target.value })}
@@ -411,8 +479,7 @@ export function VirtualFkEditor({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Label (optional)</label>
-              <input
-                className="input"
+              <Input
                 placeholder="e.g. Owner"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
@@ -420,8 +487,7 @@ export function VirtualFkEditor({
             </div>
             <div>
               <label className="label">AI join hint (optional)</label>
-              <input
-                className="input"
+              <Input
                 placeholder="free-text for complex joins"
                 value={joinHint}
                 onChange={(e) => setJoinHint(e.target.value)}
@@ -437,7 +503,14 @@ export function VirtualFkEditor({
 
           <div className="flex gap-2">
             <Button disabled={!canAdd || saving} onClick={submit}>
-              {saving ? "Adding…" : "Add relationship"}
+              {saving ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Adding…
+                </>
+              ) : (
+                "Add relationship"
+              )}
             </Button>
             <Button
               variant="outline"

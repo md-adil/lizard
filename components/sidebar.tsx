@@ -10,6 +10,14 @@ import { useAuth } from "@/components/auth-context";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
+import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -105,8 +113,7 @@ export function Sidebar() {
   const overrides = useMemo(() => data?.tableOverrides ?? [], [data]);
   const [selected, setSelected] = useState<string>("");
   const [loaded, setLoaded] = useState<string[]>([]);
-  const [addingSchema, setAddingSchema] = useState(false);
-  const [schemaSearch, setSchemaSearch] = useState("");
+  const [addKey, setAddKey] = useState(0);
   const [tableSearch, setTableSearch] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   // Schema filter chip, remembered per connection in memory (the sidebar
@@ -156,8 +163,7 @@ export function Sidebar() {
     if (next.length === 0)
       next = [allSchemas.includes("public") ? "public" : allSchemas[0]];
     setLoaded(next);
-    setAddingSchema(false);
-    setSchemaSearch("");
+    setAddKey((k) => k + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, allSchemas.join(","), params.schema]);
 
@@ -273,17 +279,6 @@ export function Sidebar() {
           <SidebarGroup>
             <div className="flex items-center justify-between mb-1">
               <SidebarGroupLabel>Schemas</SidebarGroupLabel>
-              {remaining.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  style={{ padding: "0 7px" }}
-                  title="Load another schema"
-                  onClick={() => setAddingSchema((s) => !s)}
-                >
-                  ＋
-                </Button>
-              )}
             </div>
             <div className="flex flex-wrap gap-1 px-2">
               {loaded.map((s) => {
@@ -314,59 +309,32 @@ export function Sidebar() {
                 );
               })}
             </div>
-            {addingSchema && (
+            {remaining.length > 0 && (
               <div className="mt-1.5 px-2">
-                <input
-                  className="input mb-1"
-                  style={{ padding: "4px 8px", fontSize: 12 }}
-                  placeholder={`Search ${remaining.length} schemas…`}
-                  value={schemaSearch}
-                  autoFocus
-                  onChange={(e) => setSchemaSearch(e.target.value)}
-                />
-                <div className="space-y-0.5 max-h-56 overflow-y-auto scrollbar-thin">
-                  {(() => {
-                    const q = schemaSearch.trim().toLowerCase();
-                    const matches = q
-                      ? remaining.filter((s) => s.toLowerCase().includes(q))
-                      : remaining;
-                    return (
-                      <>
-                        {matches.slice(0, 50).map((s) => (
-                          <Button
-                            variant="ghost"
-                            className="block w-full text-left rounded px-2 py-1 text-[13px] hoverable truncate"
-                            key={s}
-                            style={{ color: "var(--text-dim)" }}
-                            onClick={() => {
-                              persist([...loaded, s]);
-                              setAddingSchema(false);
-                              setSchemaSearch("");
-                            }}
-                          >
-                            ＋ {s}
-                          </Button>
-                        ))}
-                        {matches.length > 50 && (
-                          <p
-                            className="px-2 py-1 text-[11.5px]"
-                            style={{ color: "var(--text-faint)" }}
-                          >
-                            …{matches.length - 50} more — keep typing to narrow
-                          </p>
-                        )}
-                        {matches.length === 0 && (
-                          <p
-                            className="px-2 py-1 text-[11.5px]"
-                            style={{ color: "var(--text-faint)" }}
-                          >
-                            No schemas match
-                          </p>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
+                <Combobox
+                  key={addKey}
+                  value={null}
+                  onValueChange={(v) => {
+                    if (v) {
+                      persist([...loaded, v]);
+                      setAddKey((k) => k + 1);
+                    }
+                  }}
+                >
+                  <ComboboxInput
+                    placeholder={`Add schema… (${remaining.length} available)`}
+                  />
+                  <ComboboxContent>
+                    <ComboboxList>
+                      {remaining.map((s) => (
+                        <ComboboxItem key={s} value={s}>
+                          {s}
+                        </ComboboxItem>
+                      ))}
+                    </ComboboxList>
+                    <ComboboxEmpty>No schemas found</ComboboxEmpty>
+                  </ComboboxContent>
+                </Combobox>
               </div>
             )}
           </SidebarGroup>

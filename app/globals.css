@@ -6,13 +6,10 @@
 
 /* Light is the default (bare :root); dark is the .dark class next-themes
    toggles on <html> (attribute="class" — the shadcn/next-themes convention).
-   Two token vocabularies share this scope on purpose: the app's own
-   long-standing custom properties (--bg/--text/--accent/...) and shadcn's
-   reserved names (--background/--foreground/--primary/...). Where a name
-   means the same thing in both (e.g. --border), one shared value is correct.
-   --accent is the one deliberate semantic reuse: the app's brand highlight
-   color doubles as shadcn's hover/highlight tint (see combobox's
-   data-highlighted:bg-accent) — intentional, not a collision. */
+   The app's own custom properties (--bg/--text/--red/--green/...) and shadcn's
+   reserved names (--background/--foreground/--primary/--accent/...) coexist.
+   Where a name means the same thing in both (e.g. --border), one shared value
+   is correct. */
 :root {
   --bg: #f6f7f9;
   --bg-panel: #ffffff;
@@ -22,8 +19,6 @@
   --text: #1a1f2b;
   --text-dim: #5b6474;
   --text-faint: #8a92a3;
-  --accent: #2a6fe8;
-  --accent-soft: rgba(42, 111, 232, 0.1);
   --green: #1a8f4d;
   --red: #d13438;
   --amber: #b07708;
@@ -44,6 +39,7 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --input: oklch(0.922 0 0);
@@ -56,12 +52,12 @@
   --radius: 0.625rem;
   --sidebar: var(--bg-panel);
   --sidebar-foreground: var(--text);
-  --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: var(--hover);
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border);
-  --sidebar-ring: var(--accent);
+  --sidebar-ring: var(--ring);
 }
 
 .dark {
@@ -73,8 +69,6 @@
   --text: #e6e9f0;
   --text-dim: #8b93a7;
   --text-faint: #5c6478;
-  --accent: #4f8cff;
-  --accent-soft: rgba(79, 140, 255, 0.14);
   --green: #3fb96e;
   --red: #e5534b;
   --amber: #d9a13c;
@@ -117,7 +111,7 @@ body {
 }
 
 ::selection {
-  background: var(--accent-soft);
+  background: var(--muted);
 }
 
 .panel {
@@ -149,24 +143,12 @@ body {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 .btn-primary:hover {
-  filter: brightness(1.08);
-  background: var(--accent);
-}
-.btn-danger {
-  color: var(--red);
-  border-color: rgba(229, 83, 75, 0.4);
-}
-.btn-danger:hover {
-  background: rgba(229, 83, 75, 0.1);
-}
-.btn-sm {
-  padding: 3px 9px;
-  font-size: 12px;
+  opacity: 0.9;
 }
 
 .input {
@@ -180,7 +162,7 @@ body {
   width: 100%;
 }
 .input:focus {
-  border-color: var(--accent);
+  border-color: var(--ring);
 }
 .input::placeholder {
   color: var(--text-faint);
@@ -259,7 +241,7 @@ table.grid th .resizer-handle::after {
 }
 table.grid th .resizer-handle:hover,
 table.grid th .resizer-handle.is-resizing {
-  background: var(--accent);
+  background: var(--foreground);
 }
 table.grid th .resizer-handle:hover::after,
 table.grid th .resizer-handle.is-resizing::after {
@@ -363,8 +345,8 @@ table.grid tr:hover td {
   --chart-5: oklch(0.269 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);

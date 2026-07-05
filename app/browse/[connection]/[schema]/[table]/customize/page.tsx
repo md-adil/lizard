@@ -10,8 +10,15 @@ import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCatalog, buildTableMeta } from "@/components/browse/useTableMeta";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
 
@@ -84,17 +91,31 @@ export default function CustomizePage() {
 
   return (
     <div className="px-8 py-7 max-w-6xl">
-      <div className="flex items-center gap-3 mb-5">
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={backHref} />}
-        >
-          ← {meta.label}
-        </Button>
-        <h1 className="text-lg font-semibold">Customize “{meta.label}”</h1>
-      </div>
+      <Breadcrumb className="mb-5">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>
+              {params.connection}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
+              {params.schema}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={backHref} />}>
+              {meta.label}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Customize</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       <Tabs
         value={scope}
