@@ -17,6 +17,11 @@ import {
 import { RowEditor } from "@/components/browse/RowEditor";
 import { JsonView } from "@/components/browse/JsonView";
 import { humanize } from "@/lib/introspect/heuristics";
+import {
+  SAME_SCHEMA,
+  isPattern,
+  vfkDisplayColumn,
+} from "@/lib/introspect/virtual-fk";
 
 function Card({
   title,
@@ -660,18 +665,23 @@ function RecordView() {
     }
     // reverse virtual FKs (any connection → this table)
     for (const v of catalog.virtualFks) {
-      if (
-        v.toConnection === params.connection &&
-        v.toSchema === params.schema &&
-        v.toTable === params.table
-      ) {
-        hasMany.push({
-          connection: v.fromConnection,
-          schema: v.fromSchema,
-          table: v.fromTable,
-          fkColumn: v.fromColumn,
-        });
-      }
+      if (v.toConnection !== params.connection || v.toTable !== params.table)
+        continue;
+      // $schema resolves to the record's own schema; else must match literally
+      const targetSchemaMatches =
+        v.toSchema === SAME_SCHEMA || v.toSchema === params.schema;
+      if (!targetSchemaMatches) continue;
+      const fromSchema =
+        v.toSchema === SAME_SCHEMA ? params.schema : v.fromSchema;
+      const fkColumn = vfkDisplayColumn(v);
+      // can't enumerate a concrete back-link when the source side is a pattern
+      if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
+      hasMany.push({
+        connection: v.fromConnection,
+        schema: fromSchema,
+        table: v.fromTable,
+        fkColumn,
+      });
     }
     return { belongsTo, hasMany };
   }, [catalog, meta, params]);

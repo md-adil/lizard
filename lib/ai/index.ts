@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { AiQueryPlan, Catalog, ChartSpec } from "@/lib/types";
 import { getCatalog } from "@/lib/introspect/catalog";
+import { vfkSummary } from "@/lib/introspect/virtual-fk";
 
 const MODEL = () => process.env.LIZARD_AI_MODEL || "claude-sonnet-5";
 
@@ -48,7 +49,7 @@ export function serializeCatalog(catalog: Catalog, scope?: string[]): string {
   );
   for (const v of vfks) {
     parts.push(
-      `VIRTUAL FK: ${v.fromConnection}.${v.fromSchema}.${v.fromTable}.${v.fromColumn} → ${v.toConnection}.${v.toSchema}.${v.toTable}.${v.toColumn}`
+      `VIRTUAL FK: ${v.fromConnection}.${v.fromSchema}.${v.fromTable} → ${vfkSummary(v)}`
     );
   }
   return parts.join("\n");

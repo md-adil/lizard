@@ -8,8 +8,8 @@ import {
   buildTableMeta,
   type TableMeta,
 } from "@/components/browse/useTableMeta";
+import Link from "next/link";
 import { RowEditor } from "@/components/browse/RowEditor";
-import { CustomizePanel } from "@/components/browse/CustomizePanel";
 import { DataGrid } from "@/components/browse/DataGrid";
 import { TableSearchBar } from "@/components/browse/TableSearchBar";
 import type { FilterSet } from "@/lib/data/filters";
@@ -57,7 +57,6 @@ export default function TablePage() {
   const [editing, setEditing] = useState<
     Record<string, unknown> | null | "new"
   >();
-  const [customizing, setCustomizing] = useState(false);
   const [search, setSearch] = useState("");
 
   const pageSize = 50;
@@ -150,9 +149,12 @@ export default function TablePage() {
           )}
         </div>
         <div className="flex gap-2">
-          <button className="btn" onClick={() => setCustomizing(true)}>
+          <Link
+            className="btn"
+            href={`/browse/${params.connection}/${params.schema}/${params.table}/customize`}
+          >
             ⚙ Customize
-          </button>
+          </Link>
           {!meta.isView && (
             <button
               className="btn btn-primary"
@@ -246,13 +248,6 @@ export default function TablePage() {
           meta={meta}
           row={editing === "new" ? null : (editing as Record<string, unknown>)}
           onClose={() => setEditing(undefined)}
-        />
-      )}
-      {customizing && catalog && (
-        <CustomizePanel
-          meta={meta}
-          catalog={catalog}
-          onClose={() => setCustomizing(false)}
         />
       )}
     </div>

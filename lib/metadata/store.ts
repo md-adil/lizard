@@ -46,12 +46,13 @@ function getDb(): DatabaseSync {
       from_connection TEXT NOT NULL,
       from_schema TEXT NOT NULL,
       from_table TEXT NOT NULL,
-      from_column TEXT NOT NULL,
       to_connection TEXT NOT NULL,
       to_schema TEXT NOT NULL,
       to_table TEXT NOT NULL,
-      to_column TEXT NOT NULL,
-      label TEXT
+      pairs TEXT NOT NULL,      -- JSON: VfkPair[]
+      constants TEXT NOT NULL,  -- JSON: VfkConstant[]
+      label TEXT,
+      join_hint TEXT
     );
     CREATE TABLE IF NOT EXISTS table_overrides (
       connection_id TEXT NOT NULL,
@@ -233,12 +234,13 @@ export function listVirtualFks(): VirtualFk[] {
     fromConnection: r.from_connection as string,
     fromSchema: r.from_schema as string,
     fromTable: r.from_table as string,
-    fromColumn: r.from_column as string,
     toConnection: r.to_connection as string,
     toSchema: r.to_schema as string,
     toTable: r.to_table as string,
-    toColumn: r.to_column as string,
+    pairs: JSON.parse((r.pairs as string) || "[]"),
+    constants: JSON.parse((r.constants as string) || "[]"),
     label: (r.label as string) || null,
+    joinHint: (r.join_hint as string) || null,
   }));
 }
 
@@ -246,20 +248,21 @@ export function addVirtualFk(fk: Omit<VirtualFk, "id">): VirtualFk {
   const id = randomUUID();
   getDb()
     .prepare(
-      `INSERT INTO virtual_fks (id, from_connection, from_schema, from_table, from_column, to_connection, to_schema, to_table, to_column, label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO virtual_fks (id, from_connection, from_schema, from_table, to_connection, to_schema, to_table, pairs, constants, label, join_hint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
       fk.fromConnection,
       fk.fromSchema,
       fk.fromTable,
-      fk.fromColumn,
       fk.toConnection,
       fk.toSchema,
       fk.toTable,
-      fk.toColumn,
-      fk.label
+      JSON.stringify(fk.pairs),
+      JSON.stringify(fk.constants),
+      fk.label,
+      fk.joinHint
     );
   return { ...fk, id };
 }

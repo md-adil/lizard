@@ -19,6 +19,16 @@ import {
   humanize,
   type Widget,
 } from "@/lib/introspect/heuristics";
+import {
+  vfkMatchesSource,
+  resolveToSchema,
+  vfkDisplayColumn,
+  vfkTargetColumn,
+} from "@/lib/introspect/virtual-fk";
+import {
+  resolveTableOverride,
+  resolveColumnOverrides,
+} from "@/lib/introspect/overrides";
 
 export interface CatalogResponse {
   connections: ConnectionCatalog[];
@@ -82,24 +92,20 @@ export function buildTableMeta(
     ?.tables.find((t) => t.name === tableName);
   if (!conn || !table) return null;
 
-  const tOverride =
-    catalog.tableOverrides.find(
-      (o) =>
-        o.connectionId === conn.connectionId &&
-        o.schema === schema &&
-        o.table === tableName,
-    ) ?? null;
-  const cOverrides = catalog.columnOverrides.filter(
-    (o) =>
-      o.connectionId === conn.connectionId &&
-      o.schema === schema &&
-      o.table === tableName,
+  const tOverride = resolveTableOverride(
+    catalog.tableOverrides,
+    conn.connectionId,
+    schema,
+    tableName,
   );
-  const vfks = catalog.virtualFks.filter(
-    (v) =>
-      v.fromConnection === connection &&
-      v.fromSchema === schema &&
-      v.fromTable === tableName,
+  const cOverrides = resolveColumnOverrides(
+    catalog.columnOverrides,
+    conn.connectionId,
+    schema,
+    tableName,
+  );
+  const vfks = catalog.virtualFks.filter((v) =>
+    vfkMatchesSource(v, connection, schema, tableName),
   );
 
   const columns: ColumnMeta[] = table.columns.map((col) => {
@@ -109,7 +115,7 @@ export function buildTableMeta(
     const realFk = table.foreignKeys.find(
       (fk) => fk.columns.length === 1 && fk.columns[0] === col.name,
     );
-    const vfk = vfks.find((v) => v.fromColumn === col.name);
+    const vfk = vfks.find((v) => vfkDisplayColumn(v) === col.name);
     const ref = realFk
       ? {
           connection,
@@ -120,9 +126,9 @@ export function buildTableMeta(
       : vfk
         ? {
             connection: vfk.toConnection,
-            schema: vfk.toSchema,
+            schema: resolveToSchema(vfk, schema),
             table: vfk.toTable,
-            column: vfk.toColumn,
+            column: vfkTargetColumn(vfk)!,
           }
         : null;
     return {
