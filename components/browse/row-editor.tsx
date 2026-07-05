@@ -4,7 +4,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
-import { ReferencePickerModal } from "./ReferencePickerModal";
+import { ReferencePickerModal } from "./reference-picker-modal";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 interface Props {
   meta: TableMeta;
@@ -125,25 +132,27 @@ function ReferenceInput({
               }}
             >
               {cm.col.nullable && (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
+                  type="button"
                   style={{ color: "var(--text-faint)" }}
                   onMouseDown={() => pick("", null)}
                 >
                   ∅ null
-                </button>
+                </Button>
               )}
               {options?.map((o) => (
-                <button
+                <Button
+                  variant="ghost"
+                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
                   type="button"
                   key={o.id}
-                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
                   onMouseDown={() => pick(o.id, o.label)}
                 >
                   {o.label}{" "}
                   <span style={{ color: "var(--text-faint)" }}>({o.id})</span>
-                </button>
+                </Button>
               ))}
               {options?.length === 0 && (
                 <div
@@ -156,14 +165,14 @@ function ReferenceInput({
             </div>
           )}
         </div>
-        <button
+        <Button
+          variant="outline"
           type="button"
-          className="btn"
           title={`Browse ${ref.table} in a full table with filters`}
           onClick={() => setBrowsing(true)}
         >
           ⤢
-        </button>
+        </Button>
       </div>
       {browsing && (
         <ReferencePickerModal
@@ -303,25 +312,23 @@ export function RowEditor({ meta, row, onClose }: Props) {
     setTouched((s) => new Set(s).add(name));
   };
 
+  const [open, setOpen] = useState(true);
+  const close = () => {
+    setOpen(false);
+    setTimeout(onClose, 200);
+  };
+
   return (
-    <>
-      <div
-        className="fixed inset-0 z-30"
-        style={{ background: "var(--overlay)" }}
-        onClick={onClose}
-      />
-      <div
-        className="fixed right-0 top-0 bottom-0 z-40 w-150 max-w-full overflow-y-auto scrollbar-thin border-l p-6"
-        style={{ background: "var(--bg-panel)" }}
+    <Sheet open={open} onOpenChange={(v) => !v && close()}>
+      <SheetContent
+        side="right"
+        className="w-150 max-w-full overflow-y-auto scrollbar-thin p-6"
       >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-[15px] font-semibold">
+        <SheetHeader className="mb-5">
+          <SheetTitle>
             {isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}
-          </h2>
-          <button className="btn btn-sm" onClick={onClose}>
-            ✕
-          </button>
-        </div>
+          </SheetTitle>
+        </SheetHeader>
 
         <div className="space-y-4">
           {editable.map((cm) => {
@@ -438,28 +445,24 @@ export function RowEditor({ meta, row, onClose }: Props) {
         )}
 
         <div className="mt-6 flex items-center gap-2">
-          <button
-            className="btn btn-primary"
-            disabled={save.isPending}
-            onClick={() => save.mutate()}
-          >
+          <Button disabled={save.isPending} onClick={() => save.mutate()}>
             {save.isPending
               ? "Saving…"
               : isCreate
                 ? "Create row"
                 : "Save changes"}
-          </button>
+          </Button>
           {!isCreate && (
-            <button
-              className="btn btn-danger"
+            <Button
+              variant="destructive"
               disabled={del.isPending}
               onClick={() => confirm("Delete this row?") && del.mutate()}
             >
               Delete
-            </button>
+            </Button>
           )}
         </div>
-      </div>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -41,12 +41,13 @@ beforeAll(() => {
     fromConnection: "orders_service",
     fromSchema: "public",
     fromTable: "orders",
-    fromColumn: "customer_id",
     toConnection: "users_service",
     toSchema: "public",
     toTable: "customers",
-    toColumn: "id",
+    pairs: [{ from: "customer_id", to: "id", transform: "none" }],
+    constants: [],
     label: "customer",
+    joinHint: null,
   });
 });
 

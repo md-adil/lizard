@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { Sidebar } from "@/components/sidebar";
 import { useAuth } from "@/components/auth-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -27,9 +28,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <SidebarProvider
+      className="h-svh overflow-hidden"
+      style={{ "--sidebar-width": "17rem" } as React.CSSProperties}
+    >
       <Sidebar />
-      <main className="flex-1 overflow-auto scrollbar-thin">{children}</main>
-    </div>
+      <SidebarInset
+        className="h-screen overflow-auto scrollbar-thin"
+        style={{ background: "var(--bg)" }}
+      >
+        {children}
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -14,9 +14,26 @@ import {
   type TableMeta,
   type CatalogResponse,
 } from "@/components/browse/useTableMeta";
-import { RowEditor } from "@/components/browse/RowEditor";
-import { JsonView } from "@/components/browse/JsonView";
+import type { VfkTransform } from "@/lib/types";
+import { RowEditor } from "@/components/browse/row-editor";
+import { DataGrid } from "@/components/browse/data-grid";
+import { JsonView } from "@/components/browse/json-view";
 import { humanize } from "@/lib/introspect/heuristics";
+import {
+  SAME_SCHEMA,
+  isPattern,
+  vfkDisplayColumn,
+} from "@/lib/introspect/virtual-fk";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 function Card({
   title,
@@ -46,18 +63,23 @@ function Card({
           </span>
         )}
         <span className="flex-1" />
-        <button
-          className="btn btn-sm"
+        <Button
+          variant="outline"
+          size="sm"
           title="Enlarge"
           onClick={() => setExpanded(true)}
         >
           ⤢
-        </button>
+        </Button>
         {menu && menu.length > 0 && (
           <div className="relative">
-            <button className="btn btn-sm" onClick={() => setOpen((s) => !s)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpen((s) => !s)}
+            >
               ⋯
-            </button>
+            </Button>
             {open && (
               <>
                 <div
@@ -85,9 +107,10 @@ function Card({
                         {m.label}
                       </Link>
                     ) : (
-                      <button
-                        key={m.label}
+                      <Button
+                        variant="ghost"
                         className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
+                        key={m.label}
                         style={{
                           color: m.danger ? "var(--red)" : "var(--text)",
                         }}
@@ -97,7 +120,7 @@ function Card({
                         }}
                       >
                         {m.label}
-                      </button>
+                      </Button>
                     ),
                   )}
                 </div>
@@ -107,35 +130,35 @@ function Card({
         )}
       </div>
       {children}
-      {expanded && (
-        <>
-          <div
-            className="fixed inset-0 z-60"
-            style={{ background: "var(--overlay)" }}
-            onClick={() => setExpanded(false)}
-          />
-          <div
-            className="fixed z-70 inset-x-0 top-[5vh] mx-auto w-240 max-w-[95vw] panel p-6 max-h-[90vh] flex flex-col"
-            style={{ background: "var(--bg-panel)" }}
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[16px] font-semibold">{title}</span>
-              {subtitle && (
-                <span className="tag code" style={{ fontSize: 10 }}>
-                  {subtitle}
-                </span>
-              )}
-              <span className="flex-1" />
-              <button className="btn btn-sm" onClick={() => setExpanded(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-auto scrollbar-thin pr-1 text-[13.5px]">
-              {children}
-            </div>
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent
+          showCloseButton
+          className="top-[5vh] translate-y-0 flex flex-col resize overflow-auto gap-0 rounded-xl"
+          style={{
+            background: "var(--bg-panel)",
+            width: "min(90vw, 1100px)",
+            height: "min(60vh, 640px)",
+            minWidth: 360,
+            minHeight: 200,
+            maxWidth: "95vw",
+            maxHeight: "90vh",
+          }}
+        >
+          <div className="flex items-center gap-2 mb-4 pr-6">
+            <DialogTitle className="text-[16px] font-semibold">
+              {title}
+            </DialogTitle>
+            {subtitle && (
+              <span className="tag code" style={{ fontSize: 10 }}>
+                {subtitle}
+              </span>
+            )}
           </div>
-        </>
-      )}
+          <div className="flex-1 min-h-0 overflow-auto scrollbar-thin pr-1 text-[13.5px]">
+            {children}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -291,13 +314,14 @@ function JsonCard({
               {err}
             </p>
           )}
-          <button
-            className="btn btn-sm btn-primary mt-2"
+          <Button
+            size="sm"
+            className="mt-2"
             disabled={save.isPending}
             onClick={() => save.mutate()}
           >
             {save.isPending ? "Saving…" : "Save JSON"}
-          </button>
+          </Button>
         </>
       ) : value == null ? (
         <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
@@ -328,7 +352,13 @@ function BelongsToCard({
 }: {
   catalog: CatalogResponse;
   title: string;
-  target: { connection: string; schema: string; table: string; column: string };
+  target: {
+    connection: string;
+    schema: string;
+    table: string;
+    column: string;
+    transform: VfkTransform;
+  };
   value: unknown;
 }) {
   const targetMeta = useMemo(
@@ -337,6 +367,16 @@ function BelongsToCard({
     [catalog, target],
   );
   const [editing, setEditing] = useState(false);
+  const pkParam = encodeURIComponent(
+    JSON.stringify({ [target.column]: value }),
+  );
+  // only the reference column can carry a transform (e.g. case-insensitive),
+  // so this key is a single-entry map — but keyTransforms is shaped to
+  // support composite keys if that's ever needed here too.
+  const keyTransformsParam =
+    target.transform !== "none"
+      ? `&keyTransforms=${encodeURIComponent(JSON.stringify({ [target.column]: target.transform }))}`
+      : "";
   const { data, error } = useQuery<{
     row: Record<string, unknown>;
     fkLabels: Record<string, Record<string, string>>;
@@ -350,7 +390,7 @@ function BelongsToCard({
     ],
     queryFn: async () => {
       const res = await fetch(
-        `/api/data/${target.connection}/${target.schema}/${target.table}/row?pk=${encodeURIComponent(JSON.stringify({ [target.column]: value }))}`,
+        `/api/data/${target.connection}/${target.schema}/${target.table}/row?pk=${pkParam}${keyTransformsParam}`,
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
@@ -359,7 +399,7 @@ function BelongsToCard({
     enabled: value != null && !!targetMeta,
   });
 
-  const recordHref = `/browse/${target.connection}/${target.schema}/${target.table}/record?pk=${encodeURIComponent(JSON.stringify({ [target.column]: value }))}`;
+  const recordHref = `/browse/${target.connection}/${target.schema}/${target.table}/record?pk=${pkParam}${keyTransformsParam}`;
   return (
     <Card
       title={title}
@@ -422,6 +462,8 @@ function HasManyCard({
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(
     null,
   );
+  const [sort, setSort] = useState<string | undefined>();
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const { data, error } = useQuery<{
     rows: Record<string, unknown>[];
     total: number | null;
@@ -450,9 +492,7 @@ function HasManyCard({
   });
 
   if (!meta) return null;
-  const cols = meta.columns
-    .filter((c) => !c.hidden && c.col.name !== fkColumn)
-    .slice(0, 4);
+  const cols = meta.columns.filter((c) => !c.hidden && c.col.name !== fkColumn);
   return (
     <Card
       title={meta.label}
@@ -479,65 +519,33 @@ function HasManyCard({
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto scrollbar-thin">
-            <table className="grid">
-              <thead>
-                <tr>
-                  {cols.map((c) => (
-                    <th key={c.col.name}>{c.label}</th>
-                  ))}
-                  {!meta.isView && <th style={{ width: 36 }} />}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((r, i) => {
-                  const pkObj: Record<string, unknown> = {};
-                  for (const k of meta.table.primaryKey) pkObj[k] = r[k];
-                  const href = `/browse/${source.connection}/${source.schema}/${source.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`;
-                  return (
-                    <tr
-                      key={i}
-                      className="cursor-pointer"
-                      onClick={() => (window.location.href = href)}
-                    >
-                      {cols.map((c) => {
-                        const f = formatCell(r[c.col.name]);
-                        const lbl =
-                          c.ref && r[c.col.name] != null
-                            ? data.fkLabels[c.col.name]?.[String(r[c.col.name])]
-                            : undefined;
-                        return (
-                          <td
-                            key={c.col.name}
-                            style={{
-                              color: f.muted ? "var(--text-faint)" : undefined,
-                            }}
-                          >
-                            {lbl ?? f.text}
-                          </td>
-                        );
-                      })}
-                      {!meta.isView && (
-                        <td>
-                          <button
-                            className="btn btn-sm"
-                            style={{ padding: "0 6px", fontSize: 11 }}
-                            title="Edit this record here"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingRow(r);
-                            }}
-                          >
-                            ✎
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataGrid
+            columns={cols}
+            rows={data.rows}
+            fkLabels={data.fkLabels}
+            sort={sort}
+            sortDir={sortDir}
+            onToggleSort={(col) => {
+              if (sort === col) {
+                if (sortDir === "asc") setSortDir("desc");
+                else {
+                  setSort(undefined);
+                  setSortDir("asc");
+                }
+              } else {
+                setSort(col);
+                setSortDir("asc");
+              }
+            }}
+            rowClickable={!meta.isView}
+            onRowClick={(row) => {
+              if (meta.isView) return;
+              const pkObj: Record<string, unknown> = {};
+              for (const k of meta.table.primaryKey) pkObj[k] = row[k];
+              window.location.href = `/browse/${source.connection}/${source.schema}/${source.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`;
+            }}
+            maxHeight="calc(100vh - 400px)"
+          />
           {data.total != null && data.total > data.rows.length && (
             <p
               className="text-[12px] mt-1.5"
@@ -578,6 +586,17 @@ function RecordView() {
       return {};
     }
   }, [search]);
+  // present when this page was reached via a transformed reference (e.g.
+  // BelongsToCard's "Open record →" link on a case-insensitive join) — see
+  // getRow's keyTransforms.
+  const keyTransforms = useMemo(() => {
+    try {
+      const raw = search.get("keyTransforms");
+      return raw ? (JSON.parse(raw) as Record<string, string>) : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [search]);
 
   const meta = useMemo(
     () =>
@@ -602,10 +621,13 @@ function RecordView() {
       params.schema,
       params.table,
       JSON.stringify(pk),
+      JSON.stringify(keyTransforms ?? {}),
     ],
     queryFn: async () => {
+      const qs = new URLSearchParams({ pk: JSON.stringify(pk) });
+      if (keyTransforms) qs.set("keyTransforms", JSON.stringify(keyTransforms));
       const res = await fetch(
-        `/api/data/${params.connection}/${params.schema}/${params.table}/row?pk=${encodeURIComponent(JSON.stringify(pk))}`,
+        `/api/data/${params.connection}/${params.schema}/${params.table}/row?${qs}`,
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
@@ -660,18 +682,24 @@ function RecordView() {
     }
     // reverse virtual FKs (any connection → this table)
     for (const v of catalog.virtualFks) {
-      if (
-        v.toConnection === params.connection &&
-        v.toSchema === params.schema &&
-        v.toTable === params.table
-      ) {
-        hasMany.push({
-          connection: v.fromConnection,
-          schema: v.fromSchema,
-          table: v.fromTable,
-          fkColumn: v.fromColumn,
-        });
-      }
+      if (v.toConnection !== params.connection || v.toTable !== params.table)
+        continue;
+      // $schema resolves to the record's own schema; else must match literally
+      const targetSchemaMatches =
+        v.toSchema === SAME_SCHEMA || v.toSchema === params.schema;
+      if (!targetSchemaMatches) continue;
+      const fromSchema =
+        v.toSchema === SAME_SCHEMA ? params.schema : v.fromSchema;
+      const fkColumn = vfkDisplayColumn(v);
+      // can't enumerate a concrete back-link when the source side is a pattern
+      if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable))
+        continue;
+      hasMany.push({
+        connection: v.fromConnection,
+        schema: fromSchema,
+        table: v.fromTable,
+        fkColumn,
+      });
     }
     return { belongsTo, hasMany };
   }, [catalog, meta, params]);
@@ -705,13 +733,41 @@ function RecordView() {
 
   return (
     <div className="px-8 py-7 max-w-6xl">
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/" />}>Connections</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>
+              {params.connection}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
+              {params.schema}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}`} />}>
+              {meta.label}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>
+              {meta.displayColumn && row
+                ? String(row[meta.displayColumn] ?? pkText)
+                : pkText}
+            </BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="flex items-center gap-3 mb-5">
-        <Link
-          href={`/browse/${params.connection}/${params.schema}/${params.table}`}
-          className="btn btn-sm"
-        >
-          ← {meta.label}
-        </Link>
         <h1 className="text-lg font-semibold">
           {meta.displayColumn && row
             ? String(row[meta.displayColumn] ?? pkText)
@@ -721,11 +777,11 @@ function RecordView() {
         <span className="flex-1" />
         {!meta.isView && (
           <>
-            <button className="btn" onClick={() => setEditing(true)}>
+            <Button variant="outline" onClick={() => setEditing(true)}>
               ✎ Edit
-            </button>
-            <button
-              className="btn btn-danger"
+            </Button>
+            <Button
+              variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
                 const res = await fetch(
@@ -752,7 +808,7 @@ function RecordView() {
               }}
             >
               Delete
-            </button>
+            </Button>
           </>
         )}
       </div>

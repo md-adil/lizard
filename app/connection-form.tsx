@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parsePostgresUri } from "@/lib/parse-uri";
+import { Button } from "@/components/ui/button";
 
 export interface ConnectionRow {
   id: string;
@@ -65,15 +66,22 @@ export function ConnectionForm({
           writePassword: "",
           ssl: initial.ssl,
         }
-      : BLANK
+      : BLANK,
   );
   const [uri, setUri] = useState("");
   const [uriMsg, setUriMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<{ read: string | null; write: string | null } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    read: string | null;
+    write: string | null;
+  } | null>(null);
 
-  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+  const set =
+    (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm((f) => ({
+        ...f,
+        [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value,
+      }));
 
   const applyUri = (raw: string) => {
     setUri(raw);
@@ -87,7 +95,9 @@ export function ConnectionForm({
       setUriMsg("Not a valid postgres:// URI");
       return;
     }
-    setUriMsg("Parsed ✓ — fields filled below (add write credentials if you have them)");
+    setUriMsg(
+      "Parsed ✓ — read & write credentials filled (adjust write role if it differs)",
+    );
     setForm((f) => ({
       ...f,
       name: f.name || p.name,
@@ -96,6 +106,8 @@ export function ConnectionForm({
       database: p.database,
       readUser: p.user,
       readPassword: p.password,
+      writeUser: p.user,
+      writePassword: p.password,
       ssl: p.ssl,
     }));
   };
@@ -177,14 +189,22 @@ export function ConnectionForm({
 
   const statusPill = (label: string, result: string | null) =>
     result === null ? (
-      <span className="tag" style={{ color: "var(--green)" }}>{label} ok</span>
+      <span className="tag" style={{ color: "var(--green)" }}>
+        {label} ok
+      </span>
     ) : (
-      <span className="tag" style={{ color: "var(--red)" }} title={result}>{label} failed</span>
+      <span className="tag" style={{ color: "var(--red)" }} title={result}>
+        {label} failed
+      </span>
     );
 
   return (
     <>
-      <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={onClose} />
+      <div
+        className="fixed inset-0 z-40"
+        style={{ background: "var(--overlay)" }}
+        onClick={onClose}
+      />
       <div
         className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-[640px] max-w-[94vw] panel p-6 max-h-[90vh] overflow-y-auto scrollbar-thin"
         style={{ background: "var(--bg-panel)" }}
@@ -193,7 +213,9 @@ export function ConnectionForm({
           <h2 className="text-[16px] font-semibold">
             {mode === "create" ? "Add connection" : `Edit “${initial?.name}”`}
           </h2>
-          <button className="btn btn-sm" onClick={onClose}>✕</button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            ✕
+          </Button>
         </div>
 
         <div className="mb-4">
@@ -205,7 +227,14 @@ export function ConnectionForm({
             onChange={(e) => applyUri(e.target.value)}
           />
           {uriMsg && (
-            <p className="text-[12px] mt-1" style={{ color: uriMsg.startsWith("Parsed") ? "var(--green)" : "var(--amber)" }}>
+            <p
+              className="text-[12px] mt-1"
+              style={{
+                color: uriMsg.startsWith("Parsed")
+                  ? "var(--green)"
+                  : "var(--amber)",
+              }}
+            >
               {uriMsg}
             </p>
           )}
@@ -213,12 +242,23 @@ export function ConnectionForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="label">Name (identifier, e.g. users_service)</label>
-            <input className="input" value={form.name} onChange={set("name")} placeholder="users_service" />
+            <label className="label">
+              Name (identifier, e.g. users_service)
+            </label>
+            <input
+              className="input"
+              value={form.name}
+              onChange={set("name")}
+              placeholder="users_service"
+            />
           </div>
           <div>
             <label className="label">Database</label>
-            <input className="input" value={form.database} onChange={set("database")} />
+            <input
+              className="input"
+              value={form.database}
+              onChange={set("database")}
+            />
           </div>
           <div>
             <label className="label">Host</label>
@@ -230,7 +270,12 @@ export function ConnectionForm({
           </div>
           <div>
             <label className="label">Read user (SELECT-only role)</label>
-            <input className="input" value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
+            <input
+              className="input"
+              value={form.readUser}
+              onChange={set("readUser")}
+              placeholder="lizard_read"
+            />
           </div>
           <div>
             <label className="label">Read password</label>
@@ -243,8 +288,15 @@ export function ConnectionForm({
             />
           </div>
           <div>
-            <label className="label">Write user (optional — enables CRUD)</label>
-            <input className="input" value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
+            <label className="label">
+              Write user (optional — enables CRUD)
+            </label>
+            <input
+              className="input"
+              value={form.writeUser}
+              onChange={set("writeUser")}
+              placeholder="lizard_write"
+            />
           </div>
           <div>
             <label className="label">Write password</label>
@@ -258,8 +310,12 @@ export function ConnectionForm({
           </div>
         </div>
 
-        <label className="flex items-center gap-2 mt-4 text-[13px]" style={{ color: "var(--text-dim)" }}>
-          <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
+        <label
+          className="flex items-center gap-2 mt-4 text-[13px]"
+          style={{ color: "var(--text-dim)" }}
+        >
+          <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use
+          SSL
         </label>
 
         {testResult && (
@@ -267,27 +323,45 @@ export function ConnectionForm({
             {statusPill("read", testResult.read)}
             {form.writeUser && statusPill("write", testResult.write)}
             {testResult.read && (
-              <span className="text-[12px]" style={{ color: "var(--red)" }}>{testResult.read}</span>
+              <span className="text-[12px]" style={{ color: "var(--red)" }}>
+                {testResult.read}
+              </span>
             )}
           </div>
         )}
         {error && (
-          <p className="mt-3 text-[13px]" style={{ color: "var(--red)" }}>{error}</p>
+          <p className="mt-3 text-[13px]" style={{ color: "var(--red)" }}>
+            {error}
+          </p>
         )}
 
         <div className="mt-5 flex items-center gap-2">
-          <button
-            className="btn"
-            disabled={testMutation.isPending || !form.host || !form.database || !form.readUser}
+          <Button
+            variant="outline"
+            disabled={
+              testMutation.isPending ||
+              !form.host ||
+              !form.database ||
+              !form.readUser
+            }
             onClick={() => testMutation.mutate()}
           >
             {testMutation.isPending ? "Testing…" : "Test connection"}
-          </button>
+          </Button>
           <span className="flex-1" />
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-            {saveMutation.isPending ? "Saving…" : mode === "create" ? "Save connection" : "Save changes"}
-          </button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            {saveMutation.isPending
+              ? "Saving…"
+              : mode === "create"
+                ? "Save connection"
+                : "Save changes"}
+          </Button>
         </div>
       </div>
     </>

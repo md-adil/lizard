@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-context";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 type Role = "admin" | "editor" | "viewer";
 type Access = "read" | "write";
@@ -104,9 +105,9 @@ function GrantsEditor({
           </div>
         );
       })}
-      <button className="btn btn-sm mt-1" onClick={onDone}>
+      <Button variant="outline" size="sm" className="mt-1" onClick={onDone}>
         Done
-      </button>
+      </Button>
     </div>
   );
 }
@@ -210,42 +211,42 @@ function UserCard({
 
           {/* toggle disabled */}
           {!isSelf && (
-            <button
-              className="btn btn-sm"
+            <Button variant="outline" size="sm"
+             
               title={user.disabled ? "Enable user" : "Disable user"}
               disabled={patch.isPending}
               onClick={() => patch.mutate({ disabled: !user.disabled })}
             >
               {user.disabled ? "enable" : "disable"}
-            </button>
+            </Button>
           )}
 
           {/* delete */}
           {!isSelf &&
             (confirmDelete ? (
               <>
-                <button
-                  className="btn btn-sm"
+                <Button variant="outline" size="sm"
+                 
                   style={{ color: "var(--red)" }}
                   onClick={() => del.mutate()}
                 >
                   confirm
-                </button>
-                <button
-                  className="btn btn-sm"
+                </Button>
+                <Button variant="outline" size="sm"
+                 
                   onClick={() => setConfirmDelete(false)}
                 >
                   cancel
-                </button>
+                </Button>
               </>
             ) : (
-              <button
-                className="btn btn-sm"
+              <Button variant="outline" size="sm"
+               
                 style={{ color: "var(--red)" }}
                 onClick={() => setConfirmDelete(true)}
               >
                 delete
-              </button>
+              </Button>
             ))}
         </div>
       </div>
@@ -253,12 +254,12 @@ function UserCard({
       {/* grants toggle (not for admins — they get all) */}
       {user.role !== "admin" && connections.length > 0 && (
         <div>
-          <button
-            className="btn btn-sm text-[12px]"
+          <Button variant="outline" size="sm" className="text-[12px]"
+           
             onClick={() => setEditingGrants((v) => !v)}
           >
             {editingGrants ? "Hide grants" : "Manage grants"}
-          </button>
+          </Button>
           {editingGrants && (
             <GrantsEditor
               userId={user.id}
@@ -321,9 +322,9 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
 
   if (!open) {
     return (
-      <button className="btn btn-primary" onClick={() => setOpen(true)}>
+      <Button onClick={() => setOpen(true)}>
         + New user
-      </button>
+      </Button>
     );
   }
 
@@ -379,16 +380,16 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         </p>
       )}
       <div className="flex gap-2">
-        <button
-          className="btn btn-primary"
+        <Button
+         
           disabled={busy || !email || password.length < 8}
           onClick={submit}
         >
           {busy ? "Creating…" : "Create"}
-        </button>
-        <button className="btn" onClick={reset}>
+        </Button>
+        <Button variant="outline" onClick={reset}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

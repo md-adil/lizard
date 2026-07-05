@@ -2,15 +2,21 @@
 // must exist in the introspected catalog before it is quoted into SQL, and all
 // values are parameterized. Writes go through the connection's write role
 // inside a transaction and always target exactly one connection.
-import type { ConnectionConfig, TableInfo, VirtualFk } from "@/lib/types";
+import type { ConnectionConfig, TableInfo, VfkTransform } from "@/lib/types";
+import {
+  vfkMatchesSource,
+  resolveToSchema,
+  applyTransform,
+} from "@/lib/introspect/virtual-fk";
 import { findUpdatedAtColumn } from "@/lib/introspect/heuristics";
 import { getPool } from "@/lib/db/pools";
 import {
   getConnection,
-  getTableOverride,
+  listTableOverrides,
   listVirtualFks,
   logAudit,
 } from "@/lib/metadata/store";
+import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnectionCatalog } from "@/lib/introspect/catalog";
 import { guessDisplayColumn } from "@/lib/introspect/heuristics";
 import {
@@ -84,7 +90,12 @@ function displayColumnFor(
   conn: ConnectionConfig,
   table: TableInfo,
 ): string | null {
-  const override = getTableOverride(conn.id, table.schema, table.name);
+  const override = resolveTableOverride(
+    listTableOverrides(),
+    conn.id,
+    table.schema,
+    table.name,
+  );
   if (
     override?.displayColumn &&
     table.columns.some((c) => c.name === override.displayColumn)
@@ -160,9 +171,34 @@ export async function listRows(params: ListParams) {
   return { rows, hasMore, total, fkLabels };
 }
 
-// For each single-column FK (real, same connection) and virtual FK (possibly
-// cross-connection), resolve id → display label for the ids present in `rows`.
-// Returns { [columnName]: { [id]: label } }.
+function transformSql(expr: string, t: VfkTransform): string {
+  switch (t) {
+    case "lower":
+      return `LOWER(${expr})`;
+    case "upper":
+      return `UPPER(${expr})`;
+    case "trim":
+      return `TRIM(${expr})`;
+    default:
+      return expr;
+  }
+}
+
+interface LabelJob {
+  displayColumn: string; // source column that receives the labels
+  targetConn: ConnectionConfig;
+  schema: string; // concrete target schema (after $schema resolution)
+  table: string;
+  pairs: { from: string; to: string; transform: VfkTransform }[];
+  constants: { toColumn: string; value: string }[];
+}
+
+// For each single-column real FK and each matching virtual FK (composite,
+// transformed, constant-filtered, possibly cross-connection / multi-tenant),
+// resolve the target display label for the rows present. Returns
+// { [displayColumn]: { [rawSourceValue]: label } } — keyed by the raw value of
+// the display column so the grid's `fkLabels[col][String(v)]` lookup hits
+// regardless of composite arity or case/whitespace transforms.
 async function fetchFkLabels(
   conn: ConnectionConfig,
   table: TableInfo,
@@ -171,70 +207,128 @@ async function fetchFkLabels(
   const out: Record<string, Record<string, string>> = {};
   if (rows.length === 0) return out;
 
-  const jobs: {
-    column: string;
-    targetConn: ConnectionConfig;
-    schema: string;
-    table: string;
-    refColumn: string;
-  }[] = [];
+  const jobs: LabelJob[] = [];
 
   for (const fk of table.foreignKeys) {
     if (fk.columns.length !== 1) continue;
     jobs.push({
-      column: fk.columns[0],
+      displayColumn: fk.columns[0],
       targetConn: conn,
       schema: fk.referencedSchema,
       table: fk.referencedTable,
-      refColumn: fk.referencedColumns[0],
+      pairs: [
+        { from: fk.columns[0], to: fk.referencedColumns[0], transform: "none" },
+      ],
+      constants: [],
     });
   }
-  const vfks = listVirtualFks().filter(
-    (v) =>
-      v.fromConnection === conn.name &&
-      v.fromSchema === table.schema &&
-      v.fromTable === table.name,
+  const vfks = listVirtualFks().filter((v) =>
+    vfkMatchesSource(v, conn.name, table.schema, table.name),
   );
   for (const v of vfks) {
+    if (v.pairs.length === 0) continue;
     const target = getConnection(v.toConnection);
     if (!target) continue;
     jobs.push({
-      column: v.fromColumn,
+      displayColumn: v.pairs[0].from,
       targetConn: target,
-      schema: v.toSchema,
+      schema: resolveToSchema(v, table.schema),
       table: v.toTable,
-      refColumn: v.toColumn,
+      pairs: v.pairs.map((p) => ({
+        from: p.from,
+        to: p.to,
+        transform: p.transform ?? "none",
+      })),
+      constants: v.constants,
     });
   }
+
+  const SEP = " ";
 
   await Promise.all(
     jobs.map(async (job) => {
       try {
-        const ids = [
-          ...new Set(
-            rows
-              .map((r) => r[job.column])
-              .filter((v) => v !== null && v !== undefined),
-          ),
-        ];
-        if (ids.length === 0) return;
+        // Build normalized source tuples and remember the raw display value
+        // each tuple maps to (last write wins on collision — best effort).
+        const seen = new Set<string>();
+        const tuples: string[][] = [];
+        const rawByKey = new Map<string, string>();
+        for (const r of rows) {
+          const vals = job.pairs.map((p) => r[p.from]);
+          if (vals.some((v) => v === null || v === undefined)) continue;
+          const norm = job.pairs.map((p, i) => applyTransform(vals[i], p.transform));
+          const key = norm.join(SEP);
+          rawByKey.set(key, String(r[job.displayColumn]));
+          if (!seen.has(key)) {
+            seen.add(key);
+            tuples.push(norm);
+          }
+        }
+        if (tuples.length === 0) return;
+
         const targetCatalog = await getConnectionCatalog(job.targetConn);
         const targetTable = targetCatalog.schemas
           .find((s) => s.name === job.schema)
           ?.tables.find((t) => t.name === job.table);
         if (!targetTable) return;
+        for (const p of job.pairs)
+          if (!targetTable.columns.some((c) => c.name === p.to)) return;
+        for (const c of job.constants)
+          if (!targetTable.columns.some((col) => col.name === c.toColumn)) return;
+
         const display = displayColumnFor(job.targetConn, targetTable);
-        if (!display || display === job.refColumn) return;
+        if (!display) return;
+        // Nothing to resolve if the label would just echo the id.
+        if (job.pairs.length === 1 && display === job.pairs[0].to) return;
+
+        const params: unknown[] = [];
+        const targetExpr = (col: string, t: VfkTransform) =>
+          transformSql(`t.${quoteIdent(col)}::text`, t);
+
+        const valuesRows = tuples.map(
+          (tuple) =>
+            `(${tuple
+              .map((val) => {
+                params.push(val);
+                return `$${params.length}`;
+              })
+              .join(", ")})`,
+        );
+        const keyCols = job.pairs.map((_, i) => `k${i}`);
+        const onClause = job.pairs
+          .map((p, i) => `${targetExpr(p.to, p.transform)} = keys.k${i}`)
+          .join(" AND ");
+        const selectKeys = job.pairs.map(
+          (p, i) => `${targetExpr(p.to, p.transform)} AS k${i}`,
+        );
+        const constClause = job.constants.map((c) => {
+          params.push(c.value);
+          return `t.${quoteIdent(c.toColumn)}::text = $${params.length}`;
+        });
+        const where = constClause.length
+          ? `WHERE ${constClause.join(" AND ")}`
+          : "";
+
         const pool = getPool(job.targetConn, "read");
         const res = await pool.query(
-          `SELECT ${quoteIdent(job.refColumn)}::text AS id, ${quoteIdent(display)}::text AS label
-           FROM ${quoteIdent(job.schema)}.${quoteIdent(job.table)}
-           WHERE ${quoteIdent(job.refColumn)}::text = ANY($1)`,
-          [ids.map(String)],
+          `SELECT ${selectKeys.join(", ")}, ${quoteIdent(display)}::text AS label
+           FROM ${quoteIdent(job.schema)}.${quoteIdent(job.table)} t
+           JOIN (VALUES ${valuesRows.join(", ")}) AS keys(${keyCols.join(", ")})
+             ON ${onClause}
+           ${where}`,
+          params,
         );
+
+        const keyToLabel = new Map<string, string>();
+        for (const tr of res.rows) {
+          keyToLabel.set(keyCols.map((kc) => tr[kc]).join(SEP), tr.label);
+        }
         const map: Record<string, string> = {};
-        for (const r of res.rows) map[r.id] = r.label;
-        out[job.column] = map;
+        for (const [tupleKey, rawVal] of rawByKey) {
+          const label = keyToLabel.get(tupleKey);
+          if (label != null) map[rawVal] = label;
+        }
+        if (Object.keys(map).length) out[job.displayColumn] = map;
       } catch {
         /* label resolution is best-effort */
       }
@@ -260,15 +354,44 @@ function pkWhere(
   return parts.join(" AND ");
 }
 
+// Like pkWhere, but for read-only single-row lookups: accepts any validated
+// column(s), not just the table's primary key. FK/virtual-FK targets can
+// reference any unique column, not necessarily the primary key — requiring
+// the full PK here would 404 valid reference lookups. Writes still go through
+// the strict pkWhere below; RowEditor re-derives the real PK from the loaded
+// row before editing/deleting, so this never weakens mutation safety.
+// `keyTransforms` mirrors a virtual FK pair's value transform (see
+// fetchFkLabels) so a case-insensitive/trimmed join can still be looked up
+// one row at a time — without it, a lookup on a transformed reference column
+// would silently 404 (exact match against a value that only matches modulo
+// case/whitespace).
+function lookupWhere(
+  table: TableInfo,
+  key: Record<string, unknown>,
+  values: unknown[],
+  keyTransforms: Record<string, VfkTransform> = {},
+): string {
+  const cols = Object.keys(key);
+  if (cols.length === 0) throw new CrudError("No lookup key provided");
+  const parts = cols.map((col) => {
+    assertColumn(table, col);
+    const t = keyTransforms[col] ?? "none";
+    values.push(applyTransform(key[col], t));
+    return `${transformSql(`${quoteIdent(col)}::text`, t)} = $${values.length}`;
+  });
+  return parts.join(" AND ");
+}
+
 export async function getRow(
   connection: string,
   schema: string,
   tableName: string,
   pk: Record<string, unknown>,
+  keyTransforms?: Record<string, VfkTransform>,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   const values: unknown[] = [];
-  const where = pkWhere(table, pk, values);
+  const where = lookupWhere(table, pk, values, keyTransforms);
   const res = await getPool(conn, "read").query(
     `SELECT * FROM ${quoteIdent(schema)}.${quoteIdent(tableName)} WHERE ${where}`,
     values,

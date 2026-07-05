@@ -3,16 +3,28 @@ import { ok, fail } from "@/lib/api";
 import { addVirtualFk, listVirtualFks } from "@/lib/metadata/store";
 import { requireUser, requireEditor } from "@/lib/auth/session";
 
+const pairSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  transform: z.enum(["none", "lower", "upper", "trim"]).default("none"),
+});
+
+const constantSchema = z.object({
+  toColumn: z.string().min(1),
+  value: z.string(),
+});
+
 const vfkSchema = z.object({
   fromConnection: z.string().min(1),
   fromSchema: z.string().min(1),
   fromTable: z.string().min(1),
-  fromColumn: z.string().min(1),
   toConnection: z.string().min(1),
   toSchema: z.string().min(1),
   toTable: z.string().min(1),
-  toColumn: z.string().min(1),
+  pairs: z.array(pairSchema).min(1),
+  constants: z.array(constantSchema).default([]),
   label: z.string().nullable().default(null),
+  joinHint: z.string().nullable().default(null),
 });
 
 export async function GET() {

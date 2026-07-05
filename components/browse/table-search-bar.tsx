@@ -8,7 +8,8 @@ import { Search, Loader2 } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterSet } from "@/lib/data/filters";
 import { isComplete } from "@/lib/data/filters";
-import { FilterPanel } from "./FilterBuilder";
+import { FilterPanel } from "./filter-builder";
+import { Button } from "@/components/ui/button";
 
 const TEXT_LIKE = new Set([
   "text",
@@ -58,8 +59,8 @@ export function TableSearchBar({
     <div>
       <div className="flex items-center gap-2">
         {/* filter toggle button — left */}
-        <button
-          className="btn shrink-0"
+        <Button variant="outline" className="shrink-0"
+         
           style={
             activeCount
               ? { color: "var(--accent)", borderColor: "var(--accent)" }
@@ -79,7 +80,7 @@ export function TableSearchBar({
           <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
             {filterOpen ? "▲" : "▼"}
           </span>
-        </button>
+        </Button>
 
         {/* search input group: input + search button joined */}
         <div
@@ -113,19 +114,19 @@ export function TableSearchBar({
               onKeyDown={(e) => e.key === "Enter" && commit()}
             />
             {searchInput && (
-              <button
-                className="absolute right-2 top-1/2 -translate-y-1/2"
+              <Button variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2"
+               
                 style={{ color: "var(--text-faint)", fontSize: 12 }}
                 title="Clear search"
                 onClick={clear}
               >
                 ✕
-              </button>
+              </Button>
             )}
           </div>
 
-          <button
-            className="btn btn-primary"
+          <Button
+           
             style={{
               borderRadius: 0,
               border: "none",
@@ -141,7 +142,7 @@ export function TableSearchBar({
             ) : (
               <Search size={14} />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -5,8 +5,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AiQueryPlan, QueryResult, SavedQuery } from "@/lib/types";
-import { ResultGrid } from "@/components/ai/ResultGrid";
-import { VisualizeButton } from "@/components/charts/VisualizeButton";
+import { ResultGrid } from "@/components/ai/result-grid";
+import { VisualizeButton } from "@/components/charts/visualize-button";
+import { Button } from "@/components/ui/button";
 
 interface Turn {
   question: string;
@@ -176,9 +177,9 @@ export default function AiConsole() {
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && ask()}
           />
-          <button className="btn btn-primary" disabled={busy || !question.trim()} onClick={ask}>
+          <Button disabled={busy || !question.trim()} onClick={ask}>
             {busy ? "Thinking…" : "Ask"}
-          </button>
+          </Button>
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto scrollbar-thin pb-8">
@@ -214,14 +215,14 @@ export default function AiConsole() {
                         </span>
                       ))}
                       <span className="flex-1" />
-                      <button
-                        className="btn btn-sm"
+                      <Button variant="outline" size="sm"
+                       
                         onClick={() =>
                           setTurns((s) => s.map((x, j) => (j === i ? { ...x, editing: !x.editing, editedSql: x.plan!.sql } : x)))
                         }
                       >
                         {t.editing ? "Cancel edit" : "Edit SQL"}
-                      </button>
+                      </Button>
                     </div>
                     {t.editing ? (
                       <>
@@ -231,9 +232,9 @@ export default function AiConsole() {
                           value={t.editedSql}
                           onChange={(e) => setTurns((s) => s.map((x, j) => (j === i ? { ...x, editedSql: e.target.value } : x)))}
                         />
-                        <button className="btn btn-sm btn-primary mt-2" onClick={() => rerun(i, t.editedSql!)}>
+                        <Button size="sm" className="mt-2" onClick={() => rerun(i, t.editedSql!)}>
                           Run edited SQL
-                        </button>
+                        </Button>
                       </>
                     ) : (
                       <pre className="code whitespace-pre-wrap text-[12.5px]" style={{ color: "var(--text)" }}>
@@ -256,9 +257,9 @@ export default function AiConsole() {
                 <>
                   <ResultGrid result={t.result} />
                   <div className="flex gap-2 mt-2">
-                    <button className="btn btn-sm" onClick={() => saveQuery(t)}>
+                    <Button variant="outline" size="sm" onClick={() => saveQuery(t)}>
                       ☆ Save query
-                    </button>
+                    </Button>
                     {t.plan && (
                       <VisualizeButton
                         result={t.result}
@@ -284,9 +285,9 @@ export default function AiConsole() {
         )}
         {saved?.map((sq) => (
           <div key={sq.id} className="panel px-3 py-2 mb-2">
-            <button className="text-left text-[13px] font-medium w-full" onClick={() => runSaved(sq)}>
+            <Button variant="ghost" className="text-left text-[13px] font-medium w-full" onClick={() => runSaved(sq)}>
               {sq.name}
-            </button>
+            </Button>
             {sq.nlPrompt && (
               <p className="text-[11.5px] mt-0.5 truncate" style={{ color: "var(--text-faint)" }} title={sq.nlPrompt}>
                 {sq.nlPrompt}
@@ -295,8 +296,8 @@ export default function AiConsole() {
             <div className="flex items-center gap-1 mt-1">
               <span className="tag" style={{ fontSize: 10 }}>{sq.target}</span>
               <span className="flex-1" />
-              <button
-                className="btn btn-sm btn-danger"
+              <Button variant="destructive" size="sm"
+               
                 style={{ padding: "0 6px", fontSize: 11 }}
                 onClick={async () => {
                   await fetch(`/api/saved-queries/${sq.id}`, { method: "DELETE" });
@@ -304,7 +305,7 @@ export default function AiConsole() {
                 }}
               >
                 ✕
-              </button>
+              </Button>
             </div>
           </div>
         ))}

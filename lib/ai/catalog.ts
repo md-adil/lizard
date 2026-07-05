@@ -2,6 +2,7 @@
 // the model. One line per table keeps the schema scannable and cheap:
 //   users_service.public.users (~12000 rows): id uuid [pk] [not null], ...
 import type { Catalog, ConnectionCatalog, TableInfo, ColumnInfo, VirtualFk } from "@/lib/types";
+import { vfkSummary } from "@/lib/introspect/virtual-fk";
 
 // ~4 chars/token heuristic; default budget keeps the schema well under the
 // context ceiling while leaving room for prompt rules + history.
@@ -52,7 +53,7 @@ function connectionBlock(conn: ConnectionCatalog): string {
 }
 
 function virtualFkLine(fk: VirtualFk): string {
-  return `VIRTUAL FK: ${fk.fromConnection}.${fk.fromSchema}.${fk.fromTable}.${fk.fromColumn} → ${fk.toConnection}.${fk.toSchema}.${fk.toTable}.${fk.toColumn}${fk.label ? ` (${fk.label})` : ""}`;
+  return `VIRTUAL FK: ${fk.fromConnection}.${fk.fromSchema}.${fk.fromTable} → ${vfkSummary(fk)}${fk.label ? ` (${fk.label})` : ""}`;
 }
 
 // Serialize the catalog into a compact text schema. If the result exceeds the

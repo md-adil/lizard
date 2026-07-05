@@ -6,9 +6,10 @@
 import { useMemo, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useCatalog, buildTableMeta } from "./useTableMeta";
-import { DataGrid } from "./DataGrid";
-import { TableSearchBar } from "./TableSearchBar";
+import { DataGrid } from "./data-grid";
+import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
+import { Button } from "@/components/ui/button";
 
 interface ListResponse {
   rows: Record<string, unknown>[];
@@ -131,9 +132,9 @@ export function ReferencePickerModal({
             {target.connection} · {target.schema}.{target.table}
           </span>
           <span className="flex-1" />
-          <button className="btn btn-sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         <div className="mb-3">
@@ -186,24 +187,24 @@ export function ReferencePickerModal({
           className="flex items-center gap-3 mt-3 text-[13px]"
           style={{ color: "var(--text-dim)" }}
         >
-          <button
-            className="btn btn-sm"
+          <Button variant="outline" size="sm"
+           
             disabled={page === 0}
             onClick={() => setPage((p) => p - 1)}
           >
             ← Prev
-          </button>
+          </Button>
           <span>
             Page {page + 1}
             {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
           </span>
-          <button
-            className="btn btn-sm"
+          <Button variant="outline" size="sm"
+           
             disabled={!data?.hasMore}
             onClick={() => setPage((p) => p + 1)}
           >
             Next →
-          </button>
+          </Button>
           <span className="flex-1" />
           <span style={{ color: "var(--text-faint)" }}>
             Click a row to select it

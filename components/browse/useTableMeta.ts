@@ -10,6 +10,7 @@ import type {
   TableOverride,
   ColumnOverride,
   ColumnInfo,
+  VfkTransform,
 } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -19,6 +20,16 @@ import {
   humanize,
   type Widget,
 } from "@/lib/introspect/heuristics";
+import {
+  vfkMatchesSource,
+  resolveToSchema,
+  vfkDisplayColumn,
+  vfkTargetColumn,
+} from "@/lib/introspect/virtual-fk";
+import {
+  resolveTableOverride,
+  resolveColumnOverrides,
+} from "@/lib/introspect/overrides";
 
 export interface CatalogResponse {
   connections: ConnectionCatalog[];
@@ -52,6 +63,9 @@ export interface ColumnMeta {
     schema: string;
     table: string;
     column: string;
+    // value transform applied symmetrically to both sides of the join (see
+    // VfkPair.transform) — "none" for real FKs, which are always exact.
+    transform: VfkTransform;
   } | null;
   required: boolean;
 }
@@ -82,24 +96,20 @@ export function buildTableMeta(
     ?.tables.find((t) => t.name === tableName);
   if (!conn || !table) return null;
 
-  const tOverride =
-    catalog.tableOverrides.find(
-      (o) =>
-        o.connectionId === conn.connectionId &&
-        o.schema === schema &&
-        o.table === tableName,
-    ) ?? null;
-  const cOverrides = catalog.columnOverrides.filter(
-    (o) =>
-      o.connectionId === conn.connectionId &&
-      o.schema === schema &&
-      o.table === tableName,
+  const tOverride = resolveTableOverride(
+    catalog.tableOverrides,
+    conn.connectionId,
+    schema,
+    tableName,
   );
-  const vfks = catalog.virtualFks.filter(
-    (v) =>
-      v.fromConnection === connection &&
-      v.fromSchema === schema &&
-      v.fromTable === tableName,
+  const cOverrides = resolveColumnOverrides(
+    catalog.columnOverrides,
+    conn.connectionId,
+    schema,
+    tableName,
+  );
+  const vfks = catalog.virtualFks.filter((v) =>
+    vfkMatchesSource(v, connection, schema, tableName),
   );
 
   const columns: ColumnMeta[] = table.columns.map((col) => {
@@ -109,20 +119,22 @@ export function buildTableMeta(
     const realFk = table.foreignKeys.find(
       (fk) => fk.columns.length === 1 && fk.columns[0] === col.name,
     );
-    const vfk = vfks.find((v) => v.fromColumn === col.name);
+    const vfk = vfks.find((v) => vfkDisplayColumn(v) === col.name);
     const ref = realFk
       ? {
           connection,
           schema: realFk.referencedSchema,
           table: realFk.referencedTable,
           column: realFk.referencedColumns[0],
+          transform: "none" as VfkTransform,
         }
       : vfk
         ? {
             connection: vfk.toConnection,
-            schema: vfk.toSchema,
+            schema: resolveToSchema(vfk, schema),
             table: vfk.toTable,
-            column: vfk.toColumn,
+            column: vfkTargetColumn(vfk)!,
+            transform: vfk.pairs[0]?.transform ?? "none",
           }
         : null;
     return {

@@ -46,12 +46,13 @@ function getDb(): DatabaseSync {
       from_connection TEXT NOT NULL,
       from_schema TEXT NOT NULL,
       from_table TEXT NOT NULL,
-      from_column TEXT NOT NULL,
       to_connection TEXT NOT NULL,
       to_schema TEXT NOT NULL,
       to_table TEXT NOT NULL,
-      to_column TEXT NOT NULL,
-      label TEXT
+      pairs TEXT NOT NULL,      -- JSON: VfkPair[]
+      constants TEXT NOT NULL,  -- JSON: VfkConstant[]
+      label TEXT,
+      join_hint TEXT
     );
     CREATE TABLE IF NOT EXISTS table_overrides (
       connection_id TEXT NOT NULL,
@@ -74,6 +75,19 @@ function getDb(): DatabaseSync {
       sort_order INTEGER,
       help TEXT,
       PRIMARY KEY (connection_id, schema_name, table_name, column_name)
+    );
+    -- per-user grid column visibility ("Columns" toggle) -- distinct from
+    -- column_overrides.hidden, which is a shared structural hide applied to
+    -- every user and every surface (grid, record page, RowEditor). This is
+    -- just one person's personal view preference for the grid.
+    CREATE TABLE IF NOT EXISTS user_column_prefs (
+      user_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL,
+      schema_name TEXT NOT NULL,
+      table_name TEXT NOT NULL,
+      column_name TEXT NOT NULL,
+      hidden INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, connection_id, schema_name, table_name, column_name)
     );
     CREATE TABLE IF NOT EXISTS saved_queries (
       id TEXT PRIMARY KEY,
@@ -233,12 +247,13 @@ export function listVirtualFks(): VirtualFk[] {
     fromConnection: r.from_connection as string,
     fromSchema: r.from_schema as string,
     fromTable: r.from_table as string,
-    fromColumn: r.from_column as string,
     toConnection: r.to_connection as string,
     toSchema: r.to_schema as string,
     toTable: r.to_table as string,
-    toColumn: r.to_column as string,
+    pairs: JSON.parse((r.pairs as string) || "[]"),
+    constants: JSON.parse((r.constants as string) || "[]"),
     label: (r.label as string) || null,
+    joinHint: (r.join_hint as string) || null,
   }));
 }
 
@@ -246,20 +261,21 @@ export function addVirtualFk(fk: Omit<VirtualFk, "id">): VirtualFk {
   const id = randomUUID();
   getDb()
     .prepare(
-      `INSERT INTO virtual_fks (id, from_connection, from_schema, from_table, from_column, to_connection, to_schema, to_table, to_column, label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO virtual_fks (id, from_connection, from_schema, from_table, to_connection, to_schema, to_table, pairs, constants, label, join_hint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
       fk.fromConnection,
       fk.fromSchema,
       fk.fromTable,
-      fk.fromColumn,
       fk.toConnection,
       fk.toSchema,
       fk.toTable,
-      fk.toColumn,
-      fk.label
+      JSON.stringify(fk.pairs),
+      JSON.stringify(fk.constants),
+      fk.label,
+      fk.joinHint
     );
   return { ...fk, id };
 }
@@ -351,6 +367,44 @@ export function setColumnOverride(o: ColumnOverride): void {
       o.sortOrder,
       o.help
     );
+}
+
+// ---------- per-user grid column visibility ----------
+
+// { [columnName]: hidden } for one user's view of one table.
+export function getUserColumnPrefs(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+): Record<string, boolean> {
+  const rows = getDb()
+    .prepare(
+      `SELECT column_name, hidden FROM user_column_prefs
+       WHERE user_id=? AND connection_id=? AND schema_name=? AND table_name=?`,
+    )
+    .all(userId, connectionId, schema, table) as Record<string, unknown>[];
+  const out: Record<string, boolean> = {};
+  for (const r of rows) out[r.column_name as string] = !!r.hidden;
+  return out;
+}
+
+export function setUserColumnPref(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+  column: string,
+  hidden: boolean,
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO user_column_prefs (user_id, connection_id, schema_name, table_name, column_name, hidden)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, connection_id, schema_name, table_name, column_name)
+       DO UPDATE SET hidden=excluded.hidden`,
+    )
+    .run(userId, connectionId, schema, table, column, hidden ? 1 : 0);
 }
 
 // ---------- saved queries ----------
