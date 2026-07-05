@@ -5,9 +5,30 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
+import { MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sidebar as SidebarShell,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarMenuAction,
+  SidebarInput,
+  SidebarSeparator,
+} from "@/components/ui/sidebar";
 
 interface CatalogTable {
   name: string;
@@ -172,388 +193,383 @@ export function Sidebar() {
   const tableQ = tableSearch.trim().toLowerCase();
 
   return (
-    <aside
-      className="w-60 shrink-0 flex flex-col border-r overflow-y-auto scrollbar-thin"
-      style={{ background: "var(--bg-panel)" }}
-    >
-      <div className="flex items-center gap-2 px-4 py-4 border-b">
-        <Link href="/" className="flex items-center gap-2 min-w-0">
-          <span className="text-xl">🦎</span>
-          <span className="font-semibold tracking-tight">Lizard</span>
-        </Link>
-        <span className="flex-1" />
-        <ThemeToggle />
-      </div>
-
-      <nav className="px-2 py-3 space-y-0.5 border-b">
-        {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
-          const active =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[14px] font-medium transition-colors"
-              style={{
-                background: active ? "var(--accent-soft)" : "transparent",
-                color: active ? "var(--accent)" : "var(--text-dim)",
-              }}
-            >
-              <span className="w-4 text-center">{item.icon}</span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* database selector */}
-      <div className="px-3 pt-4">
-        <div className="flex items-center justify-between mb-1">
-          <span
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: "var(--text-faint)" }}
-          >
-            Database
-          </span>
-          <Link
-            href="/"
-            className="btn btn-sm"
-            title="Add another database connection"
-            style={{ padding: "0 7px" }}
-          >
-            ＋
+    <SidebarShell collapsible="none" className="border-r">
+      <SidebarHeader className="border-b">
+        <div className="flex items-center gap-2 px-2 py-2">
+          <Link href="/" className="flex items-center gap-2 min-w-0">
+            <span className="text-xl">🦎</span>
+            <span className="font-semibold tracking-tight">Lizard</span>
           </Link>
+          <span className="flex-1" />
+          <ThemeToggle />
         </div>
-        {connections.length === 0 ? (
-          <p
-            className="text-[12px] py-1"
-            style={{ color: "var(--text-faint)" }}
-          >
-            No connections yet
-          </p>
-        ) : (
-          <select
-            className="input"
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            {connections.map((c) => (
-              <option key={c.connectionName} value={c.connectionName}>
-                {c.connectionName}
-                {c.error ? " ⚠" : ""}
-              </option>
-            ))}
-          </select>
-        )}
-        {conn?.error && (
-          <p
-            className="text-[11.5px] mt-1"
-            style={{ color: "var(--red)" }}
-            title={conn.error}
-          >
-            connection error
-          </p>
-        )}
-      </div>
+      </SidebarHeader>
 
-      {/* schema selector */}
-      {conn && !conn.error && (
-        <div className="px-3 pt-4 pb-2">
-          <div className="flex items-center justify-between mb-1.5">
-            <span
-              className="text-[11px] font-semibold uppercase tracking-wider"
+      <SidebarContent className="overflow-hidden">
+        {/* nav */}
+        <SidebarGroup>
+          <SidebarMenu>
+            {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              return (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    isActive={active}
+                    render={<Link href={item.href} />}
+                  >
+                    <span className="w-4 text-center">{item.icon}</span>
+                    {item.label}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* database selector */}
+        <SidebarGroup>
+          <div className="flex items-center justify-between">
+            <SidebarGroupLabel>Database</SidebarGroupLabel>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              nativeButton={false}
+              render={<Link href="/" />}
+              title="Add another database connection"
+            >
+              ＋
+            </Button>
+          </div>
+          {connections.length === 0 ? (
+            <p
+              className="text-[12px] py-1 px-2"
               style={{ color: "var(--text-faint)" }}
             >
-              Schemas
-            </span>
-            {remaining.length > 0 && (
-              <Button variant="outline" size="sm"
-               
-                style={{ padding: "0 7px" }}
-                title="Load another schema"
-                onClick={() => setAddingSchema((s) => !s)}
-              >
-                ＋
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {loaded.map((s) => {
-              const isActive = activeSchema === s;
-              return (
-                <Chip
-                  key={s}
-                  active={isActive}
-                  title={
-                    isActive
-                      ? `Showing only ${s} — click to show all`
-                      : `Filter to ${s}`
-                  }
-                  onClick={() => setActiveSchema(isActive ? null : s)}
-                  onRemove={
-                    loaded.length > 1
-                      ? () =>
-                          persist(
-                            loaded.filter((x) => x !== s),
-                            s,
-                          )
-                      : undefined
-                  }
-                  removeLabel={`Remove ${s}`}
-                >
-                  {s}
-                </Chip>
-              );
-            })}
-          </div>
-          {addingSchema && (
-            <div className="mt-1.5">
-              <input
-                className="input mb-1"
-                style={{ padding: "4px 8px", fontSize: 12 }}
-                placeholder={`Search ${remaining.length} schemas…`}
-                value={schemaSearch}
-                autoFocus
-                onChange={(e) => setSchemaSearch(e.target.value)}
-              />
-              <div className="space-y-0.5 max-h-56 overflow-y-auto scrollbar-thin">
-                {(() => {
-                  const q = schemaSearch.trim().toLowerCase();
-                  const matches = q
-                    ? remaining.filter((s) => s.toLowerCase().includes(q))
-                    : remaining;
-                  return (
-                    <>
-                      {matches.slice(0, 50).map((s) => (
-                        <Button variant="ghost" className="block w-full text-left rounded px-2 py-1 text-[13px] hoverable truncate"
-                          key={s}
-                         
-                          style={{ color: "var(--text-dim)" }}
-                          onClick={() => {
-                            persist([...loaded, s]);
-                            setAddingSchema(false);
-                            setSchemaSearch("");
-                          }}
-                        >
-                          ＋ {s}
-                        </Button>
-                      ))}
-                      {matches.length > 50 && (
-                        <p
-                          className="px-2 py-1 text-[11.5px]"
-                          style={{ color: "var(--text-faint)" }}
-                        >
-                          …{matches.length - 50} more — keep typing to narrow
-                        </p>
-                      )}
-                      {matches.length === 0 && (
-                        <p
-                          className="px-2 py-1 text-[11.5px]"
-                          style={{ color: "var(--text-faint)" }}
-                        >
-                          No schemas match
-                        </p>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
+              No connections yet
+            </p>
+          ) : (
+            <select
+              className="input"
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              {connections.map((c) => (
+                <option key={c.connectionName} value={c.connectionName}>
+                  {c.connectionName}
+                  {c.error ? " ⚠" : ""}
+                </option>
+              ))}
+            </select>
           )}
-        </div>
-      )}
+          {conn?.error && (
+            <p
+              className="text-[11.5px] mt-1 px-2"
+              style={{ color: "var(--red)" }}
+              title={conn.error}
+            >
+              connection error
+            </p>
+          )}
+        </SidebarGroup>
 
-      {/* table filter */}
-      {conn && !conn.error && loaded.length > 0 && (
-        <div className="px-3 pb-1">
-          <input
-            className="input"
-            style={{ padding: "4px 8px", fontSize: 12 }}
-            placeholder="Filter tables…"
-            value={tableSearch}
-            onChange={(e) => setTableSearch(e.target.value)}
-          />
-        </div>
-      )}
-
-      {/* tables of loaded schemas */}
-      <div className="px-2 pb-4 flex-1">
-        {conn &&
-          !conn.error &&
-          loaded
-            .filter((s) => !activeSchema || s === activeSchema)
-            .map((schemaName) => {
-              const schema = conn.schemas.find((s) => s.name === schemaName);
-              if (!schema) return null;
-              const allTables = schema.tables.map((t) => {
-                const o = overrideFor(schemaName, t.name);
-                return {
-                  name: t.name,
-                  label: o?.label || t.name,
-                  hidden: o?.hidden ?? false,
-                };
-              });
-              const visibleTables = allTables
-                .filter((t) => !t.hidden)
-                .filter(
-                  (t) =>
-                    !tableQ ||
-                    t.label.toLowerCase().includes(tableQ) ||
-                    t.name.toLowerCase().includes(tableQ),
+        {/* schema selector */}
+        {conn && !conn.error && (
+          <SidebarGroup>
+            <div className="flex items-center justify-between mb-1">
+              <SidebarGroupLabel>Schemas</SidebarGroupLabel>
+              {remaining.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  style={{ padding: "0 7px" }}
+                  title="Load another schema"
+                  onClick={() => setAddingSchema((s) => !s)}
+                >
+                  ＋
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1 px-2">
+              {loaded.map((s) => {
+                const isActive = activeSchema === s;
+                return (
+                  <Chip
+                    key={s}
+                    active={isActive}
+                    title={
+                      isActive
+                        ? `Showing only ${s} — click to show all`
+                        : `Filter to ${s}`
+                    }
+                    onClick={() => setActiveSchema(isActive ? null : s)}
+                    onRemove={
+                      loaded.length > 1
+                        ? () =>
+                            persist(
+                              loaded.filter((x) => x !== s),
+                              s,
+                            )
+                        : undefined
+                    }
+                    removeLabel={`Remove ${s}`}
+                  >
+                    {s}
+                  </Chip>
                 );
-              const hiddenTables = allTables
-                .filter((t) => t.hidden)
-                .filter(
-                  (t) =>
-                    !tableQ ||
-                    t.label.toLowerCase().includes(tableQ) ||
-                    t.name.toLowerCase().includes(tableQ),
-                );
-              if (visibleTables.length === 0 && hiddenTables.length === 0)
-                return null;
-              const showDivider = loaded.length > 1 && !activeSchema;
-              return (
-                <div key={schemaName} className="mb-1">
-                  {showDivider && (
-                    <div className="flex items-center gap-2 px-1 pt-3 pb-1">
-                      <span
-                        className="text-[11px] font-semibold shrink-0"
-                        style={{ color: "var(--text-faint)" }}
-                      >
-                        {schemaName}
-                      </span>
-                      <span
-                        className="flex-1 border-t"
-                        style={{ borderColor: "var(--border)" }}
-                      />
-                    </div>
-                  )}
-                  {visibleTables.map((t) => {
-                    const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
-                    const active =
-                      pathname === href || pathname.startsWith(href + "/");
+              })}
+            </div>
+            {addingSchema && (
+              <div className="mt-1.5 px-2">
+                <input
+                  className="input mb-1"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  placeholder={`Search ${remaining.length} schemas…`}
+                  value={schemaSearch}
+                  autoFocus
+                  onChange={(e) => setSchemaSearch(e.target.value)}
+                />
+                <div className="space-y-0.5 max-h-56 overflow-y-auto scrollbar-thin">
+                  {(() => {
+                    const q = schemaSearch.trim().toLowerCase();
+                    const matches = q
+                      ? remaining.filter((s) => s.toLowerCase().includes(q))
+                      : remaining;
                     return (
-                      <div
-                        key={t.name}
-                        className="group flex items-center rounded"
-                        style={{
-                          background: active
-                            ? "var(--accent-soft)"
-                            : "transparent",
-                        }}
-                      >
-                        <Link
-                          href={href}
-                          title={t.label !== t.name ? t.name : undefined}
-                          className="flex-1 min-w-0 px-2.5 py-1 text-[14px] truncate"
-                          style={{
-                            color: active ? "var(--accent)" : "var(--text-dim)",
-                          }}
-                        >
-                          {t.label}
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          nativeButton={false}
-                          render={<Link href={`${href}/customize`} />}
-                          className="mr-1 shrink-0 opacity-0 group-hover:opacity-100"
-                          style={{ color: "var(--text-faint)" }}
-                          title={`Customize ${t.label}`}
-                        >
-                          ⚙
-                        </Button>
-                      </div>
+                      <>
+                        {matches.slice(0, 50).map((s) => (
+                          <Button
+                            variant="ghost"
+                            className="block w-full text-left rounded px-2 py-1 text-[13px] hoverable truncate"
+                            key={s}
+                            style={{ color: "var(--text-dim)" }}
+                            onClick={() => {
+                              persist([...loaded, s]);
+                              setAddingSchema(false);
+                              setSchemaSearch("");
+                            }}
+                          >
+                            ＋ {s}
+                          </Button>
+                        ))}
+                        {matches.length > 50 && (
+                          <p
+                            className="px-2 py-1 text-[11.5px]"
+                            style={{ color: "var(--text-faint)" }}
+                          >
+                            …{matches.length - 50} more — keep typing to
+                            narrow
+                          </p>
+                        )}
+                        {matches.length === 0 && (
+                          <p
+                            className="px-2 py-1 text-[11.5px]"
+                            style={{ color: "var(--text-faint)" }}
+                          >
+                            No schemas match
+                          </p>
+                        )}
+                      </>
                     );
-                  })}
-                  {hiddenTables.length > 0 && !showHidden && (
-                    <Button variant="ghost" className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
-                     
-                      style={{ color: "var(--text-faint)" }}
-                      onClick={() => setShowHidden(true)}
-                    >
-                      <span>⊘</span>
-                      <span>{hiddenTables.length} hidden</span>
-                    </Button>
-                  )}
-                  {showHidden &&
-                    hiddenTables.map((t) => {
-                      const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
-                      const active =
-                        pathname === href || pathname.startsWith(href + "/");
-                      return (
-                        <Link
-                          key={t.name}
-                          href={href}
-                          title={`${t.label !== t.name ? t.name + " · " : ""}hidden — open to customize`}
-                          className="block rounded px-2.5 py-1 text-[14px] truncate line-through"
-                          style={{
-                            background: active
-                              ? "var(--accent-soft)"
-                              : "transparent",
-                            color: "var(--text-faint)",
-                            opacity: 0.6,
-                          }}
-                        >
-                          {t.label}
-                        </Link>
-                      );
-                    })}
+                  })()}
                 </div>
-              );
-            })}
-        {showHidden && conn && !conn.error && (
-          <Button variant="ghost" className="flex items-center gap-1 mx-2.5 mt-1 mb-2 text-[12px] hoverable px-1 rounded"
-           
-            style={{ color: "var(--text-faint)" }}
-            onClick={() => setShowHidden(false)}
-          >
-            <span>⊘</span> hide hidden
-          </Button>
+              </div>
+            )}
+          </SidebarGroup>
         )}
-        {conn && !conn.error && tableQ && (
-          <p
-            className="px-2.5 pt-1 text-[11.5px]"
-            style={{ color: "var(--text-faint)" }}
-          >
-            filtering by "{tableSearch}"
-          </p>
+
+        {/* table filter */}
+        {conn && !conn.error && loaded.length > 0 && (
+          <div className="px-2 pb-1">
+            <SidebarInput
+              placeholder="Filter tables…"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+            />
+          </div>
         )}
-      </div>
+
+        {/* tables of loaded schemas — the one scrollable region; everything
+            above (nav, database, schema selector, filter) stays fixed */}
+        <SidebarGroup className="flex-1 min-h-0 pt-0 overflow-y-auto scrollbar-thin">
+          {conn &&
+            !conn.error &&
+            loaded
+              .filter((s) => !activeSchema || s === activeSchema)
+              .map((schemaName) => {
+                const schema = conn.schemas.find((s) => s.name === schemaName);
+                if (!schema) return null;
+                const allTables = schema.tables.map((t) => {
+                  const o = overrideFor(schemaName, t.name);
+                  return {
+                    name: t.name,
+                    label: o?.label || t.name,
+                    hidden: o?.hidden ?? false,
+                  };
+                });
+                const visibleTables = allTables
+                  .filter((t) => !t.hidden)
+                  .filter(
+                    (t) =>
+                      !tableQ ||
+                      t.label.toLowerCase().includes(tableQ) ||
+                      t.name.toLowerCase().includes(tableQ),
+                  );
+                const hiddenTables = allTables
+                  .filter((t) => t.hidden)
+                  .filter(
+                    (t) =>
+                      !tableQ ||
+                      t.label.toLowerCase().includes(tableQ) ||
+                      t.name.toLowerCase().includes(tableQ),
+                  );
+                if (visibleTables.length === 0 && hiddenTables.length === 0)
+                  return null;
+                const showDivider = loaded.length > 1 && !activeSchema;
+                return (
+                  <div key={schemaName} className="mb-1">
+                    {showDivider && (
+                      <SidebarGroupLabel className="mt-2">
+                        {schemaName}
+                      </SidebarGroupLabel>
+                    )}
+                    <SidebarMenu>
+                      {visibleTables.map((t) => {
+                        const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
+                        const active =
+                          pathname === href || pathname.startsWith(href + "/");
+                        return (
+                          <SidebarMenuItem key={t.name}>
+                            <SidebarMenuButton
+                              isActive={active}
+                              render={
+                                <Link
+                                  href={href}
+                                  title={
+                                    t.label !== t.name ? t.name : undefined
+                                  }
+                                />
+                              }
+                            >
+                              {t.label}
+                            </SidebarMenuButton>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={<SidebarMenuAction showOnHover />}
+                              >
+                                <MoreHorizontal />
+                                <span className="sr-only">
+                                  {t.label} actions
+                                </span>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" side="right">
+                                <DropdownMenuItem
+                                  render={
+                                    <Link href={`${href}/customize`} />
+                                  }
+                                >
+                                  ⚙ Customize
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                    {hiddenTables.length > 0 && !showHidden && (
+                      <Button
+                        variant="ghost"
+                        className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
+                        style={{ color: "var(--text-faint)" }}
+                        onClick={() => setShowHidden(true)}
+                      >
+                        <span>⊘</span>
+                        <span>{hiddenTables.length} hidden</span>
+                      </Button>
+                    )}
+                    {showHidden &&
+                      hiddenTables.map((t) => {
+                        const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
+                        const active =
+                          pathname === href || pathname.startsWith(href + "/");
+                        return (
+                          <Link
+                            key={t.name}
+                            href={href}
+                            title={`${t.label !== t.name ? t.name + " · " : ""}hidden — open to customize`}
+                            className="block rounded px-2.5 py-1 text-[14px] truncate line-through"
+                            style={{
+                              background: active
+                                ? "var(--accent-soft)"
+                                : "transparent",
+                              color: "var(--text-faint)",
+                              opacity: 0.6,
+                            }}
+                          >
+                            {t.label}
+                          </Link>
+                        );
+                      })}
+                  </div>
+                );
+              })}
+          {showHidden && conn && !conn.error && (
+            <Button
+              variant="ghost"
+              className="flex items-center gap-1 mx-2.5 mt-1 mb-2 text-[12px] hoverable px-1 rounded"
+              style={{ color: "var(--text-faint)" }}
+              onClick={() => setShowHidden(false)}
+            >
+              <span>⊘</span> hide hidden
+            </Button>
+          )}
+          {conn && !conn.error && tableQ && (
+            <p
+              className="px-2.5 pt-1 text-[11.5px]"
+              style={{ color: "var(--text-faint)" }}
+            >
+              filtering by "{tableSearch}"
+            </p>
+          )}
+        </SidebarGroup>
+      </SidebarContent>
 
       {/* user footer */}
-      <div
-        className="mt-auto px-3 py-3 border-t flex items-center gap-2"
-        style={{ background: "var(--bg-panel)" }}
-      >
-        <div className="min-w-0 flex-1">
-          <p
-            className="text-[13px] font-medium truncate"
-            style={{ color: "var(--text)" }}
+      <SidebarFooter className="border-t">
+        <div className="flex items-center gap-2 px-1 py-1">
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-[13px] font-medium truncate"
+              style={{ color: "var(--text)" }}
+            >
+              {user?.name || user?.email}
+            </p>
+            <p
+              className="text-[11px] truncate"
+              style={{ color: "var(--text-faint)" }}
+            >
+              {user?.role}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            title="Sign out"
+            onClick={async () => {
+              await fetch("/api/auth/logout", { method: "POST" });
+              qc.clear();
+              router.replace("/login");
+            }}
           >
-            {user?.name || user?.email}
-          </p>
-          <p
-            className="text-[11px] truncate"
-            style={{ color: "var(--text-faint)" }}
-          >
-            {user?.role}
-          </p>
+            ⏻
+          </Button>
         </div>
-        <Button variant="outline" size="sm" className="shrink-0"
-         
-          title="Sign out"
-          onClick={async () => {
-            await fetch("/api/auth/logout", { method: "POST" });
-            qc.clear();
-            router.replace("/login");
-          }}
-        >
-          ⏻
-        </Button>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </SidebarShell>
   );
 }
