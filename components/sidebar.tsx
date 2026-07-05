@@ -547,6 +547,16 @@ export function Sidebar() {
             variant="outline"
             size="sm"
             className="shrink-0"
+            title="Profile"
+            nativeButton={false}
+            render={<Link href="/profile" />}
+          >
+            ✎
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
             title="Sign out"
             onClick={async () => {
               await fetch("/api/auth/logout", { method: "POST" });

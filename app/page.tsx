@@ -3,10 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import {
-  ConnectionForm,
-  type ConnectionRow,
-} from "@/components/connection-form";
+import { ConnectionForm, type ConnectionRow } from "@/app/connection-form";
 import { Button } from "@/components/ui/button";
 
 interface ConnectionWithStatus extends ConnectionRow {
