@@ -1,6 +1,4 @@
 // Resolve table/column overrides for a concrete schema.table, honouring schema
-// (and table) glob patterns so one override can cover every tenant schema in a
-// multi-tenant DB (e.g. store under "org_*" and it applies to org_1, org_2, …).
 // Precedence: an exact schema+table match always beats a pattern; among patterns
 // the most specific (most non-wildcard characters) wins.
 import type { TableOverride, ColumnOverride } from "@/lib/types";

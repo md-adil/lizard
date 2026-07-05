@@ -102,13 +102,10 @@ export interface VfkConstant {
 export interface VirtualFk {
   id: string;
   fromConnection: string; // connection name
-  // fromSchema / fromTable may be literals OR glob patterns ("tenant_*", "*").
-  // A glob lets one definition cover every schema in a multi-tenant DB.
   fromSchema: string;
   fromTable: string;
   toConnection: string;
   // toSchema may be a literal, or the sentinel "$schema" meaning "resolve in the
-  // same schema as the source row" — the multi-tenant same-schema join.
   toSchema: string;
   toTable: string;
   // Equi-join column pairs (>= 1). pairs[0].from is the display column: the one

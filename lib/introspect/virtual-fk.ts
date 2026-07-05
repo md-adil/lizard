@@ -4,7 +4,6 @@ import picomatch from "picomatch";
 import type { VirtualFk, VfkTransform } from "@/lib/types";
 
 // Sentinel target schema meaning "same schema as the source row" — the
-// multi-tenant schema-per-tenant join. See VirtualFk.toSchema.
 export const SAME_SCHEMA = "$schema";
 
 // Glob matching via picomatch (the battle-tested core under micromatch/glob).
@@ -59,7 +58,10 @@ export function vfkTargetColumn(v: VirtualFk): string | undefined {
 
 // Normalize a source value in JS to mirror the SQL transform on the target,
 // so tuple keys computed on both sides line up.
-export function applyTransform(value: unknown, t: VfkTransform = "none"): string {
+export function applyTransform(
+  value: unknown,
+  t: VfkTransform = "none",
+): string {
   const s = String(value);
   switch (t) {
     case "lower":
@@ -81,7 +83,9 @@ export function vfkSummary(v: VirtualFk): string {
         `${p.from} = ${p.to}${p.transform && p.transform !== "none" ? ` [${p.transform}]` : ""}`,
     )
     .join(", ");
-  const consts = v.constants.map((c) => `${c.toColumn}='${c.value}'`).join(", ");
+  const consts = v.constants
+    .map((c) => `${c.toColumn}='${c.value}'`)
+    .join(", ");
   const target = `${v.toConnection}.${v.toSchema}.${v.toTable}`;
   return [
     `${target} ON ${pairs}`,

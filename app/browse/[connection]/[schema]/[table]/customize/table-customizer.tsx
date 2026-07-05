@@ -2,7 +2,6 @@
 
 // Full-page table customization: table + column overrides and virtual
 // relationships, with a page-level source scope (this schema, or a schema
-// pattern like org_* that applies the whole config to every matching tenant
 // schema). Replaces the old CustomizePanel drawer.
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -200,9 +199,7 @@ function CustomizeForm({
       >
         <TabsList variant="line">
           <TabsTrigger value="schema">This schema ({meta.schema})</TabsTrigger>
-          <TabsTrigger value="pattern">
-            Schema pattern (all tenants)
-          </TabsTrigger>
+          <TabsTrigger value="pattern">Schema pattern</TabsTrigger>
         </TabsList>
       </Tabs>
       {scope === "pattern" && (
