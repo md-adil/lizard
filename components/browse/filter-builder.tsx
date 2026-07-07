@@ -20,11 +20,21 @@ import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
-type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference";
+type Kind =
+  | "text"
+  | "number"
+  | "date"
+  | "boolean"
+  | "enum"
+  | "reference"
+  | "array"
+  | "jsonb";
 
 function kindOf(cm: ColumnMeta): Kind {
   if (cm.ref) return "reference";
   if (cm.options && cm.options.length) return "enum";
+  if (cm.widget === "array") return "array";
+  if (cm.widget === "json") return "jsonb";
   if (cm.col.udtName === "bool") return "boolean";
   if (cm.col.udtName === "date") return "date";
   if (cm.col.udtName.startsWith("timestamp")) return "date";
@@ -54,6 +64,10 @@ const OP_LABEL: Record<FilterOp, string> = {
   nempty: "is not empty",
   null: "is null",
   notnull: "is not null",
+  regex: "matches (regex)",
+  arraycontains: "contains all of",
+  arrayoverlap: "contains any of",
+  jsonbcontains: "contains (JSON)",
 };
 
 const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
@@ -64,6 +78,7 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
     "neq",
     "startswith",
     "endswith",
+    "regex",
     "in",
     "empty",
     "nempty",
@@ -86,6 +101,8 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
   boolean: ["eq", "null", "notnull"],
   enum: ["eq", "neq", "in", "null", "notnull"],
   reference: ["eq", "neq", "in", "null", "notnull"],
+  array: ["arraycontains", "arrayoverlap", "null", "notnull"],
+  jsonb: ["jsonbcontains", "null", "notnull"],
 };
 
 // friendlier labels for the date comparison ops
@@ -163,8 +180,8 @@ function RefSelect({
               overflow: "auto",
               zIndex: 9999,
               borderRadius: 6,
-              border: "1px solid var(--border-strong)",
-              background: "var(--bg-raised)",
+              border: "1px solid var(--input)",
+              background: "var(--muted)",
               boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
             }}
             className="scrollbar-thin"
@@ -180,13 +197,13 @@ function RefSelect({
                 }}
               >
                 {o.label}{" "}
-                <span style={{ color: "var(--text-faint)" }}>({o.id})</span>
+                <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
               </Button>
             ))}
             {data?.length === 0 && (
               <div
                 className="px-3 py-2 text-[12px]"
-                style={{ color: "var(--text-faint)" }}
+                style={{ color: "var(--muted-foreground-faint)" }}
               >
                 No matches
               </div>
@@ -213,7 +230,7 @@ function Chips({
   return (
     <div className="flex flex-wrap gap-1 mb-1">
       {values.map((v) => (
-        <span key={v} className="tag" style={{ color: "var(--accent)" }}>
+        <span key={v} className="tag" style={{ color: "var(--primary)" }}>
           {labels?.[v] ?? v}
           <Button variant="ghost" className="ml-1.5" onClick={() => onRemove(v)}>
             ✕
@@ -273,7 +290,7 @@ function ConditionRow({
             value={cond.value ?? ""}
             onChange={(e) => onChange({ ...cond, value: e.target.value })}
           />
-          <span style={{ color: "var(--text-faint)" }}>and</span>
+          <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
           <input
             className="input w-28"
             style={{ padding: "3px 8px", fontSize: 12 }}
@@ -285,7 +302,7 @@ function ConditionRow({
       );
     }
 
-    if (cond.op === "in") {
+    if (cond.op === "in" || cond.op === "arraycontains" || cond.op === "arrayoverlap") {
       const values = cond.values ?? [];
       // enum "in": checklist
       if (kind === "enum" && cm.options) {
@@ -299,7 +316,7 @@ function ConditionRow({
                   className="tag"
                   style={
                     on
-                      ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                      ? { color: "var(--primary)", borderColor: "var(--primary)" }
                       : {}
                   }
                   onClick={() =>
@@ -442,7 +459,7 @@ function ConditionRow({
             />
           )}
           {cond.value ? (
-            <span className="tag" style={{ color: "var(--accent)" }}>
+            <span className="tag" style={{ color: "var(--primary)" }}>
               {refLabels[cond.value] ?? cond.value}
               <Button variant="ghost" className="ml-1.5"
                
@@ -469,6 +486,17 @@ function ConditionRow({
             ⤢
           </Button>
         </div>
+      );
+    }
+    if (kind === "jsonb") {
+      return (
+        <input
+          className="input flex-1 min-w-40 code"
+          style={{ padding: "3px 8px", fontSize: 12 }}
+          placeholder={'{"key":"value"}'}
+          value={cond.value ?? ""}
+          onChange={(e) => onChange({ ...cond, value: e.target.value })}
+        />
       );
     }
     // text / number / date single value
@@ -607,7 +635,7 @@ export function FilterPanel({
       }}
     >
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
+        <span className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
           Match
         </span>
         <div className="flex gap-0.5">
@@ -617,7 +645,7 @@ export function FilterPanel({
               className="tag"
               style={
                 set.combinator === c
-                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  ? { color: "var(--primary)", borderColor: "var(--primary)" }
                   : {}
               }
               onClick={() => setCombinator(c)}
@@ -626,7 +654,7 @@ export function FilterPanel({
             </button>
           ))}
         </div>
-        <span className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
+        <span className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
           of the conditions
         </span>
         <span className="flex-1" />
@@ -641,7 +669,7 @@ export function FilterPanel({
         {set.conditions.length === 0 && (
           <p
             className="text-[13px] py-2"
-            style={{ color: "var(--text-faint)" }}
+            style={{ color: "var(--muted-foreground-faint)" }}
           >
             No conditions yet. Add one below.
           </p>
@@ -662,7 +690,7 @@ export function FilterPanel({
           ＋ Add condition
         </Button>
         {dirty && (
-          <span className="text-[12px]" style={{ color: "var(--amber)" }}>
+          <span className="text-[12px]" style={{ color: "var(--warning)" }}>
             unapplied changes
           </span>
         )}
@@ -709,7 +737,7 @@ export function FilterBuilder({
        
         style={
           activeCount
-            ? { color: "var(--accent)", borderColor: "var(--accent)" }
+            ? { color: "var(--primary)", borderColor: "var(--primary)" }
             : {}
         }
         onClick={() => setOpen((o) => !o)}
@@ -718,12 +746,12 @@ export function FilterBuilder({
         {activeCount > 0 && (
           <span
             className="ml-1 tag"
-            style={{ fontSize: 10, color: "var(--accent)" }}
+            style={{ fontSize: 10, color: "var(--primary)" }}
           >
             {activeCount}
           </span>
         )}
-        <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
+        <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>
           {open ? "▲" : "▼"}
         </span>
       </Button>

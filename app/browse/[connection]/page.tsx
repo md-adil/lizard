@@ -37,13 +37,13 @@ function TableCard({
         <div className="truncate">
           {table.name}
           {table.kind === "view" && (
-            <span className="ml-1.5 text-[10px] font-normal" style={{ color: "var(--amber)" }}>
+            <span className="ml-1.5 text-[10px] font-normal" style={{ color: "var(--warning)" }}>
               view
             </span>
           )}
         </div>
         {table.rowEstimate > 0 && (
-          <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--text-faint)" }}>
+          <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--muted-foreground-faint)" }}>
             ~{table.rowEstimate.toLocaleString()} rows
           </div>
         )}
@@ -84,7 +84,7 @@ export default function ConnectionPage() {
 
   if (isLoading) return <PagePad>Loading…</PagePad>;
   if (error)
-    return <PagePad style={{ color: "var(--red)" }}>Failed to load catalog.</PagePad>;
+    return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
   if (!conn)
     return <PagePad>Connection &quot;{connection}&quot; not found.</PagePad>;
 
@@ -97,7 +97,7 @@ export default function ConnectionPage() {
       <Breadcrumb className="mb-5">
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Connections</BreadcrumbLink>
+            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -107,12 +107,12 @@ export default function ConnectionPage() {
       </Breadcrumb>
 
       <h1 className="text-xl font-semibold mb-1">{conn.connectionName}</h1>
-      <p className="text-[13px] mb-4" style={{ color: "var(--text-dim)" }}>
+      <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
         {conn.database} · {conn.schemas.length} schema{conn.schemas.length !== 1 ? "s" : ""} · {totalTables} table{totalTables !== 1 ? "s" : ""}
       </p>
 
       {conn.error && (
-        <p className="text-[13px] mb-4 px-3 py-2 rounded-md border" style={{ color: "var(--red)", borderColor: "rgba(229,83,75,.4)" }}>
+        <p className="text-[13px] mb-4 px-3 py-2 rounded-md border" style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}>
           {conn.error}
         </p>
       )}
@@ -148,7 +148,7 @@ export default function ConnectionPage() {
                 style={{ display: "block" }}
               >
                 {schema.name}
-                <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--text-faint)" }}>
+                <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--muted-foreground-faint)" }}>
                   {schema.tables.length} table{schema.tables.length !== 1 ? "s" : ""}
                 </div>
               </Link>
@@ -167,7 +167,7 @@ function PagePad({
   style?: React.CSSProperties;
 }) {
   return (
-    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--text-dim)", ...style }}>
+    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
       {children}
     </div>
   );

@@ -2,6 +2,7 @@
 // are validated against the table catalog and every value is parameterized;
 // operators map to fixed SQL fragments (nothing user-supplied reaches SQL text).
 import type { TableInfo } from "@/lib/types";
+import { isArrayColumn, arrayElementUdt } from "@/lib/introspect/heuristics";
 
 export type FilterOp =
   | "eq"
@@ -19,7 +20,12 @@ export type FilterOp =
   | "empty"
   | "nempty"
   | "null"
-  | "notnull";
+  | "notnull"
+  // Phase 8.6 — richer operators
+  | "regex" // case-insensitive POSIX regex (~*)
+  | "arraycontains" // array column @> given values (row has all of them)
+  | "arrayoverlap" // array column && given values (row has any of them)
+  | "jsonbcontains"; // jsonb column @> given JSON (containment)
 
 export interface FilterCondition {
   column: string;
@@ -42,7 +48,8 @@ export const NO_VALUE_OPS: FilterOp[] = ["empty", "nempty", "null", "notnull"];
 export function isComplete(c: FilterCondition): boolean {
   if (NO_VALUE_OPS.includes(c.op)) return true;
   if (c.op === "between") return !!c.value && c.value !== "" && !!c.value2 && c.value2 !== "";
-  if (c.op === "in") return !!c.values && c.values.length > 0;
+  if (c.op === "in" || c.op === "arraycontains" || c.op === "arrayoverlap")
+    return !!c.values && c.values.length > 0;
   return c.value !== undefined && c.value !== "";
 }
 
@@ -132,6 +139,23 @@ export function buildFilterClause(
         parts.push(`${col}::text = ANY(${push(arr)})`);
         break;
       }
+      case "regex":
+        parts.push(`${col}::text ~* ${push(f.value!)}`);
+        break;
+      case "arraycontains":
+      case "arrayoverlap": {
+        const colInfo = table.columns.find((c) => c.name === f.column)!;
+        const elemCast = isArrayColumn(colInfo)
+          ? arrayElementUdt(colInfo)
+          : "text";
+        const arr = (f.values ?? []).map(String);
+        const sym = f.op === "arraycontains" ? "@>" : "&&";
+        parts.push(`${col} ${sym} ${push(arr)}::${elemCast}[]`);
+        break;
+      }
+      case "jsonbcontains":
+        parts.push(`${col} @> ${push(f.value!)}::jsonb`);
+        break;
     }
   }
 

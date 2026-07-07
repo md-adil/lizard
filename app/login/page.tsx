@@ -42,13 +42,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="h-screen flex items-center justify-center px-4" style={{ background: "var(--bg)" }}>
+    <div className="h-screen flex items-center justify-center px-4" style={{ background: "var(--background)" }}>
       <div className="panel p-7 w-[380px] max-w-full">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-2xl">🦎</span>
           <span className="text-lg font-semibold tracking-tight">Lizard</span>
         </div>
-        <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>
+        <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
           {needsSetup
             ? "Create the first admin account to get started."
             : "Sign in to your data console."}
@@ -85,7 +85,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <p className="mt-3 text-[13px]" style={{ color: "var(--red)" }}>{error}</p>
+          <p className="mt-3 text-[13px]" style={{ color: "var(--destructive)" }}>{error}</p>
         )}
 
         <Button className="w-full justify-center mt-5"

@@ -28,7 +28,7 @@ export function SpecControls({
             <button
               key={t}
               className="tag"
-              style={spec.chartType === t ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
+              style={spec.chartType === t ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
               onClick={() => onChange({ ...spec, chartType: t })}
             >
               {t}
@@ -61,7 +61,7 @@ export function SpecControls({
                 <button
                   key={c}
                   className="tag"
-                  style={active ? { color: "var(--green)", borderColor: "var(--green)" } : {}}
+                  style={active ? { color: "var(--success)", borderColor: "var(--success)" } : {}}
                   onClick={() =>
                     onChange({
                       ...spec,

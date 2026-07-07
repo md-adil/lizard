@@ -1,13 +1,12 @@
 "use client";
 
-// Data grid built on @tanstack/react-table + shadcn's Table primitives.
-// table-layout:fixed + an explicit width on every th/td (driven by TanStack
-// column sizing that we hold in React state) guarantees header/body alignment
-// AND live-updating column resize. Sorting stays server-side: header clicks
-// call back to the parent to refetch. The outer scroll container (not
-// shadcn's own Table wrapper, which would nest a second overflow-x-auto and
-// break the sticky header) is kept from the original implementation.
-import { useMemo, useState } from "react";
+// Data grid built on @tanstack/react-table + shadcn's Table primitives,
+// following shadcn's own data-table doc pattern (Table > TableHeader/
+// TableBody, flexRender per header/cell). table-layout:fixed + an explicit
+// width on every th/td (driven by TanStack column sizing held in React
+// state) keeps header/body aligned and drives live column-resize. Sorting
+// stays server-side: header clicks call back to the parent to refetch.
+import { useEffect, useMemo, useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -16,12 +15,15 @@ import {
   type ColumnDef,
   type ColumnSizingState,
   type VisibilityState,
+  type RowSelectionState,
   type Updater,
 } from "@tanstack/react-table";
-import { Loader2, Columns3 } from "lucide-react";
+import { Columns3 } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import { formatCell } from "./useTableMeta";
+import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -32,6 +34,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
+  Table,
   TableHeader,
   TableBody,
   TableRow,
@@ -58,6 +61,13 @@ interface Props {
   // need this to survive reloads).
   columnVisibility?: VisibilityState;
   onColumnVisibilityChange?: (updater: Updater<VisibilityState>) => void;
+  // Phase 8.2 — row-selection checkboxes for bulk actions. Omit to hide the
+  // selection column entirely (e.g. the reference picker modal).
+  onSelectionChange?: (rows: Row[]) => void;
+  // Bump this (e.g. a counter) to force-clear the current row selection —
+  // e.g. after "Clear" or a bulk delete completes, independent of `rows`
+  // changing (rowSelection already resets whenever `rows` itself changes).
+  clearSelectionSignal?: number;
 }
 
 const helper = createColumnHelper<Row>();
@@ -89,16 +99,51 @@ export function DataGrid({
   isFetching = false,
   columnVisibility: controlledVisibility,
   onColumnVisibilityChange,
+  onSelectionChange,
+  clearSelectionSignal,
 }: Props) {
   // holding sizing in React state guarantees a re-render on every resize tick
   const [colSizing, setColSizing] = useState<ColumnSizingState>({});
   const [localVisibility, setLocalVisibility] = useState<VisibilityState>({});
   const columnVisibility = controlledVisibility ?? localVisibility;
   const setColumnVisibility = onColumnVisibilityChange ?? setLocalVisibility;
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  // row identity is by index, which only stays valid for the currently-loaded
+  // page — drop any stale selection whenever the page's rows change.
+  useEffect(() => setRowSelection({}), [rows]);
+  useEffect(() => setRowSelection({}), [clearSelectionSignal]);
 
   const colDefs = useMemo<ColumnDef<Row>[]>(
-    () =>
-      columns.map((cm) =>
+    () => [
+      ...(onSelectionChange
+        ? [
+            helper.display({
+              id: "__select",
+              size: 32,
+              minSize: 32,
+              maxSize: 32,
+              header: ({ table }) => (
+                <Checkbox
+                  checked={table.getIsAllRowsSelected()}
+                  indeterminate={
+                    table.getIsSomeRowsSelected() &&
+                    !table.getIsAllRowsSelected()
+                  }
+                  onCheckedChange={(v) => table.toggleAllRowsSelected(!!v)}
+                  aria-label="Select all rows"
+                />
+              ),
+              cell: ({ row }) => (
+                <Checkbox
+                  checked={row.getIsSelected()}
+                  onCheckedChange={(v) => row.toggleSelected(!!v)}
+                  aria-label="Select row"
+                />
+              ),
+            }) as ColumnDef<Row>,
+          ]
+        : []),
+      ...columns.map((cm) =>
         helper.accessor((r) => r[cm.col.name], {
           id: cm.col.name,
           header: cm.label,
@@ -107,6 +152,9 @@ export function DataGrid({
           maxSize: 800,
           cell: (info) => {
             const v = info.getValue<unknown>();
+            if (cm.redacted) {
+              return <RedactedValue value={v} />;
+            }
             const label =
               cm.ref && v != null
                 ? fkLabels[cm.col.name]?.[String(v)]
@@ -115,7 +163,7 @@ export function DataGrid({
               return (
                 <>
                   {label}{" "}
-                  <span className="tag code" style={{ fontSize: 10 }}>
+                  <span className="rounded border px-1 font-mono text-[10px] text-muted-foreground">
                     {String(v)}
                   </span>
                 </>
@@ -123,27 +171,35 @@ export function DataGrid({
             }
             const f = formatCell(v);
             return (
-              <span
-                style={{ color: f.muted ? "var(--text-faint)" : undefined }}
-              >
+              <span className={f.muted ? "text-muted-foreground" : undefined}>
                 {f.text}
               </span>
             );
           },
         }),
       ),
-    [columns, fkLabels],
+    ],
+    [columns, fkLabels, onSelectionChange],
   );
 
   const table = useReactTable({
     data: rows,
     columns: colDefs,
-    state: { columnSizing: colSizing, columnVisibility },
+    state: { columnSizing: colSizing, columnVisibility, rowSelection },
     onColumnSizingChange: setColSizing,
     onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
+    enableRowSelection: !!onSelectionChange,
   });
+
+  // notify the parent with actual row objects whenever selection changes
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    onSelectionChange(table.getSelectedRowModel().rows.map((r) => r.original));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowSelection]);
 
   const leafColumns = table.getVisibleLeafColumns();
   const totalWidth = table.getTotalSize();
@@ -155,7 +211,9 @@ export function DataGrid({
       <div className="flex justify-end mb-2">
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button variant="outline" size="sm" className="gap-1.5" />}
+            render={
+              <Button variant="outline" size="sm" className="gap-1.5 bg-card" />
+            }
           >
             <Columns3 className="size-3.5" />
             Columns
@@ -164,67 +222,72 @@ export function DataGrid({
             <DropdownMenuGroup>
               <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {table.getAllLeafColumns().map((column) => {
-                const cm = columns.find((c) => c.col.name === column.id);
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(checked) =>
-                      column.toggleVisibility(checked)
-                    }
-                    closeOnClick={false}
-                  >
-                    {cm?.label ?? column.id}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
+              {table
+                .getAllLeafColumns()
+                .filter((column) => column.id !== "__select")
+                .map((column) => {
+                  const cm = columns.find((c) => c.col.name === column.id);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(checked) =>
+                        column.toggleVisibility(checked)
+                      }
+                      closeOnClick={false}
+                    >
+                      {cm?.label ?? column.id}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      <div style={{ position: "relative" }}>
+      <div className="relative">
+        {showRefetchOverlay && (
+          <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary" />
+        )}
         <div
-          className="panel overflow-auto scrollbar-thin"
-          style={{
-            maxHeight,
-            opacity: showRefetchOverlay ? 0.6 : 1,
-            transition: "opacity 120ms",
-          }}
+          className="overflow-auto rounded-md border"
+          style={{ maxHeight }}
         >
-          <table
-            className="grid"
-            style={{
-              tableLayout: "fixed",
-              width: totalWidth,
-              minWidth: totalWidth,
-            }}
-          >
+          <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
+                <TableRow key={hg.id} className="hover:bg-transparent">
                   {hg.headers.map((header) => {
+                    const w = header.getSize();
+                    // the leading row-selection column (Phase 8.2) has no
+                    // ColumnMeta — it's a UI control, not a data column.
+                    if (header.column.id === "__select") {
+                      return (
+                        <TableHead
+                          key={header.id}
+                          className="sticky top-0 z-1 bg-card"
+                          style={{ width: w, minWidth: w, maxWidth: w }}
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                        </TableHead>
+                      );
+                    }
                     const cm = columns.find(
                       (c) => c.col.name === header.column.id,
                     )!;
                     const active = sort === header.column.id;
-                    const w = header.getSize();
                     return (
                       <TableHead
                         key={header.id}
-                        style={{
-                          width: w,
-                          minWidth: w,
-                          maxWidth: w,
-                          position: "sticky",
-                          top: 0,
-                        }}
+                        className="sticky top-0 z-1 overflow-hidden bg-card"
+                        style={{ width: w, minWidth: w, maxWidth: w }}
                         title={`${cm.col.dataType}${cm.col.nullable ? "" : " · not null"}`}
                       >
                         <span
-                          className="th-label cursor-pointer"
-                          style={{ paddingRight: 12 }}
+                          className="block cursor-pointer truncate pr-3"
                           onClick={() => onToggleSort(header.column.id)}
                         >
                           {flexRender(
@@ -232,7 +295,7 @@ export function DataGrid({
                             header.getContext(),
                           )}
                           {active && (
-                            <span style={{ color: "var(--accent)" }}>
+                            <span className="text-primary">
                               {" "}
                               {sortDir === "asc" ? "▲" : "▼"}
                             </span>
@@ -243,7 +306,11 @@ export function DataGrid({
                           onTouchStart={header.getResizeHandler()}
                           onDoubleClick={() => header.column.resetSize()}
                           onClick={(e) => e.stopPropagation()}
-                          className={`resizer-handle${header.column.getIsResizing() ? " is-resizing" : ""}`}
+                          className={`absolute top-0 right-0 z-2 h-full w-1 cursor-col-resize touch-none select-none ${
+                            header.column.getIsResizing()
+                              ? "bg-primary"
+                              : "bg-transparent hover:bg-primary/60"
+                          }`}
                         />
                       </TableHead>
                     );
@@ -254,7 +321,7 @@ export function DataGrid({
             <TableBody>
               {isLoading && rows.length === 0
                 ? Array.from({ length: 10 }, (_, ri) => (
-                    <TableRow key={`sk-${ri}`}>
+                    <TableRow key={`sk-${ri}`} className="hover:bg-transparent">
                       {leafColumns.map((col, ci) => {
                         const w = col.getSize();
                         return (
@@ -263,10 +330,8 @@ export function DataGrid({
                             style={{ width: w, minWidth: w, maxWidth: w }}
                           >
                             <div
-                              className="animate-pulse rounded"
+                              className="h-3 animate-pulse rounded bg-muted"
                               style={{
-                                height: 12,
-                                background: "var(--border)",
                                 width: `${SK_WIDTHS[(ri * 3 + ci) % SK_WIDTHS.length]}%`,
                               }}
                             />
@@ -287,11 +352,17 @@ export function DataGrid({
                         return (
                           <TableCell
                             key={cell.id}
+                            className="truncate"
                             style={{ width: w, minWidth: w, maxWidth: w }}
                             title={
                               typeof v === "object" && v !== null
                                 ? JSON.stringify(v)
                                 : String(v ?? "")
+                            }
+                            onClick={
+                              cell.column.id === "__select"
+                                ? (e) => e.stopPropagation()
+                                : undefined
                             }
                           >
                             {flexRender(
@@ -304,25 +375,8 @@ export function DataGrid({
                     </TableRow>
                   ))}
             </TableBody>
-          </table>
-          {leafColumns.length === 0 && null}
+          </Table>
         </div>
-        {showRefetchOverlay && (
-          <div
-            className="flex items-center justify-center"
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-            }}
-          >
-            <Loader2
-              size={20}
-              className="animate-spin"
-              style={{ color: "var(--accent)" }}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

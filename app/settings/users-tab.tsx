@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-context";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Role = "admin" | "editor" | "viewer";
 type Access = "read" | "write";
@@ -44,14 +44,14 @@ async function apiJson(url: string, init?: RequestInit) {
 function RoleBadge({ role }: { role: Role }) {
   const color =
     role === "admin"
-      ? "var(--accent)"
+      ? "var(--primary)"
       : role === "editor"
-        ? "var(--green)"
-        : "var(--text-dim)";
+        ? "var(--success)"
+        : "var(--muted-foreground)";
   return (
     <span
       className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
-      style={{ background: "var(--accent-soft)", color }}
+      style={{ background: "var(--primary-soft)", color }}
     >
       {role}
     </span>
@@ -86,7 +86,7 @@ function GrantsEditor({
           <div key={c.id} className="flex items-center gap-2 text-[13px]">
             <span
               className="flex-1 truncate"
-              style={{ color: "var(--text-dim)" }}
+              style={{ color: "var(--muted-foreground)" }}
             >
               {c.name}
             </span>
@@ -144,20 +144,20 @@ function UserCard({
   const isSelf = user.id === currentUserId;
 
   return (
-    <div className="panel p-4 space-y-2">
+    <Card className="p-4 space-y-2">
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span
               className="font-medium text-[14px]"
-              style={{ color: "var(--text)" }}
+              style={{ color: "var(--foreground)" }}
             >
               {user.name || user.email}
             </span>
             {user.name && (
               <span
                 className="text-[12px]"
-                style={{ color: "var(--text-faint)" }}
+                style={{ color: "var(--muted-foreground-faint)" }}
               >
                 {user.email}
               </span>
@@ -167,8 +167,8 @@ function UserCard({
               <span
                 className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
                 style={{
-                  background: "var(--red-soft, rgba(239,68,68,.12))",
-                  color: "var(--red)",
+                  background: "var(--destructive-soft)",
+                  color: "var(--destructive)",
                 }}
               >
                 disabled
@@ -177,7 +177,7 @@ function UserCard({
             {isSelf && (
               <span
                 className="text-[11px]"
-                style={{ color: "var(--text-faint)" }}
+                style={{ color: "var(--muted-foreground-faint)" }}
               >
                 (you)
               </span>
@@ -185,7 +185,7 @@ function UserCard({
           </div>
           <p
             className="text-[11.5px] mt-0.5"
-            style={{ color: "var(--text-faint)" }}
+            style={{ color: "var(--muted-foreground-faint)" }}
           >
             {user.grants.length === 0
               ? user.role === "admin"
@@ -212,7 +212,7 @@ function UserCard({
           {/* toggle disabled */}
           {!isSelf && (
             <Button variant="outline" size="sm"
-             
+
               title={user.disabled ? "Enable user" : "Disable user"}
               disabled={patch.isPending}
               onClick={() => patch.mutate({ disabled: !user.disabled })}
@@ -226,14 +226,14 @@ function UserCard({
             (confirmDelete ? (
               <>
                 <Button variant="outline" size="sm"
-                 
-                  style={{ color: "var(--red)" }}
+
+                  style={{ color: "var(--destructive)" }}
                   onClick={() => del.mutate()}
                 >
                   confirm
                 </Button>
                 <Button variant="outline" size="sm"
-                 
+
                   onClick={() => setConfirmDelete(false)}
                 >
                   cancel
@@ -241,8 +241,8 @@ function UserCard({
               </>
             ) : (
               <Button variant="outline" size="sm"
-               
-                style={{ color: "var(--red)" }}
+
+                style={{ color: "var(--destructive)" }}
                 onClick={() => setConfirmDelete(true)}
               >
                 delete
@@ -255,7 +255,7 @@ function UserCard({
       {user.role !== "admin" && connections.length > 0 && (
         <div>
           <Button variant="outline" size="sm" className="text-[12px]"
-           
+
             onClick={() => setEditingGrants((v) => !v)}
           >
             {editingGrants ? "Hide grants" : "Manage grants"}
@@ -272,11 +272,11 @@ function UserCard({
       )}
 
       {patch.isError && (
-        <p className="text-[12px]" style={{ color: "var(--red)" }}>
+        <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
           {patch.error?.message}
         </p>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -329,8 +329,8 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <div className="panel p-4 space-y-3">
-      <p className="font-medium text-[14px]" style={{ color: "var(--text)" }}>
+    <Card className="p-4 space-y-3">
+      <p className="font-medium text-[14px]" style={{ color: "var(--foreground)" }}>
         Create user
       </p>
       <div className="grid grid-cols-2 gap-3">
@@ -375,13 +375,13 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
       {error && (
-        <p className="text-[12px]" style={{ color: "var(--red)" }}>
+        <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
       <div className="flex gap-2">
         <Button
-         
+
           disabled={busy || !email || password.length < 8}
           onClick={submit}
         >
@@ -391,15 +391,14 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
           Cancel
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
-// ---------- page ----------
+// ---------- tab ----------
 
-export default function UsersPage() {
-  const { user: self, isAdmin, loading } = useAuth();
-  const router = useRouter();
+export function UsersTab() {
+  const { user: self, isAdmin } = useAuth();
   const qc = useQueryClient();
 
   const { data: users, isLoading: usersLoading } = useQuery<UserRow[]>({
@@ -415,25 +414,14 @@ export default function UsersPage() {
   });
   const connections: Connection[] = connectionsData?.data ?? [];
 
-  // redirect non-admins
-  if (!loading && !isAdmin) {
-    router.replace("/");
-    return null;
-  }
-
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1
-            className="text-xl font-semibold"
-            style={{ color: "var(--text)" }}
-          >
-            Users
-          </h1>
+          <h2 className="text-lg font-semibold">Users</h2>
           <p
             className="text-[13px] mt-0.5"
-            style={{ color: "var(--text-dim)" }}
+            style={{ color: "var(--muted-foreground)" }}
           >
             Manage who can access Lizard and which databases they may read or
             write.
@@ -446,7 +434,7 @@ export default function UsersPage() {
       />
 
       {usersLoading ? (
-        <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
+        <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           Loading…
         </p>
       ) : (

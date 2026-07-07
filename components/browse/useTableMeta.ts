@@ -15,6 +15,8 @@ import type {
 import {
   findUpdatedAtColumn,
   guessWidget,
+  guessReadonly,
+  guessRedacted,
   guessDisplayColumn,
   selectOptions,
   humanize,
@@ -55,6 +57,7 @@ export interface ColumnMeta {
   widget: Widget;
   hidden: boolean;
   readonly: boolean;
+  redacted: boolean;
   help: string | null;
   options: string[] | null;
   // where a reference picker should search: real FK or virtual FK target
@@ -140,12 +143,10 @@ export function buildTableMeta(
     return {
       col,
       label: o?.label || humanize(col.name),
-      widget: ref && widget !== "readonly" ? "reference" : widget,
+      widget: ref ? "reference" : widget,
       hidden: o?.hidden ?? false,
-      readonly:
-        (o?.readonly ?? false) ||
-        widget === "readonly" ||
-        baseWidget === "readonly",
+      readonly: o?.readonly ?? guessReadonly(table, col),
+      redacted: o?.redacted ?? guessRedacted(col),
       help: o?.help ?? col.comment,
       options: selectOptions(table, col),
       ref,
@@ -175,12 +176,63 @@ export function buildTableMeta(
   };
 }
 
+const INTERVAL_KEYS = new Set([
+  "years",
+  "months",
+  "days",
+  "hours",
+  "minutes",
+  "seconds",
+  "milliseconds",
+]);
+const INTERVAL_SUFFIX: Record<string, string> = {
+  years: "y",
+  months: "mo",
+  days: "d",
+  hours: "h",
+  minutes: "m",
+  seconds: "s",
+  milliseconds: "ms",
+};
+
+// Values arrive JSON-serialized from the API, so Postgres arrays stay arrays,
+// bytea becomes { type: "Buffer", data: [...] }, and interval becomes an object
+// of {hours,minutes,...}. Render each readably instead of dumping raw JSON.
 export function formatCell(value: unknown): { text: string; muted: boolean } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
   if (typeof value === "boolean")
     return { text: value ? "✓" : "✗", muted: !value };
-  if (typeof value === "object")
+  if (Array.isArray(value)) {
+    if (value.length === 0) return { text: "[]", muted: true };
+    const parts = value.map((v) =>
+      v === null || v === undefined
+        ? "∅"
+        : typeof v === "object"
+          ? JSON.stringify(v)
+          : String(v),
+    );
+    const text = parts.join(", ");
+    return {
+      text: text.length > 120 ? text.slice(0, 120) + "…" : text,
+      muted: false,
+    };
+  }
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    // bytea → { type: "Buffer", data: number[] }
+    if (o.type === "Buffer" && Array.isArray(o.data)) {
+      return { text: `⬇ ${o.data.length} bytes`, muted: true };
+    }
+    // interval → { hours, minutes, ... }
+    const keys = Object.keys(o);
+    if (keys.length > 0 && keys.every((k) => INTERVAL_KEYS.has(k))) {
+      const parts = keys
+        .filter((k) => Number(o[k]))
+        .map((k) => `${o[k]}${INTERVAL_SUFFIX[k]}`);
+      return { text: parts.length ? parts.join(" ") : "0s", muted: !parts.length };
+    }
     return { text: JSON.stringify(value), muted: false };
+  }
   const s = String(value);
   // compact ISO timestamps
   const m = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}/);

@@ -82,14 +82,14 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
           <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={() => setOpen(false)} />
           <div
             className="fixed z-50 inset-x-0 top-[6vh] mx-auto w-[880px] max-w-[94vw] panel p-5"
-            style={{ background: "var(--bg-panel)" }}
+            style={{ background: "var(--card)" }}
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[15px] font-semibold">Visualize result</h3>
               <Button variant="outline" size="sm" onClick={() => setOpen(false)}>✕</Button>
             </div>
             <div className="flex gap-5">
-              <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--bg)" }}>
+              <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--background)" }}>
                 <div className="text-[13px] font-medium mb-2">{spec.title}</div>
                 <ChartRenderer spec={spec} result={result} height={320} />
               </div>

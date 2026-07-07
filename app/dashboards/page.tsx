@@ -39,7 +39,7 @@ export default function DashboardsPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-10">
       <h1 className="text-xl font-semibold mb-1">Dashboards</h1>
-      <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>
+      <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
         Grids of saved charts. Each panel can pull from a different database — or several at once.
       </p>
 
@@ -56,13 +56,13 @@ export default function DashboardsPage() {
         </Button>
       </div>
 
-      {isLoading && <p style={{ color: "var(--text-dim)" }}>Loading…</p>}
+      {isLoading && <p style={{ color: "var(--muted-foreground)" }}>Loading…</p>}
       <div className="grid grid-cols-2 gap-3">
         {data?.map((d) => (
           <div key={d.id} className="panel px-5 py-4 flex items-center justify-between">
             <Link href={`/dashboards/${d.id}`} className="min-w-0">
               <div className="font-semibold text-[14px] truncate">{d.name}</div>
-              <div className="text-[12px] mt-0.5" style={{ color: "var(--text-dim)" }}>
+              <div className="text-[12px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>
                 {d.panels.length} panel{d.panels.length === 1 ? "" : "s"}
                 {d.refreshSeconds ? ` · refreshes every ${d.refreshSeconds}s` : ""}
               </div>
@@ -77,7 +77,7 @@ export default function DashboardsPage() {
         ))}
       </div>
       {data?.length === 0 && (
-        <div className="panel px-6 py-10 text-center text-[13px]" style={{ color: "var(--text-dim)" }}>
+        <div className="panel px-6 py-10 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           No dashboards yet. Create one here, or hit “Visualize” on any query result.
         </div>
       )}

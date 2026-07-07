@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parsePostgresUri } from "@/lib/parse-uri";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export interface ConnectionRow {
   id: string;
@@ -189,11 +190,11 @@ export function ConnectionForm({
 
   const statusPill = (label: string, result: string | null) =>
     result === null ? (
-      <span className="tag" style={{ color: "var(--green)" }}>
+      <span className="tag" style={{ color: "var(--success)" }}>
         {label} ok
       </span>
     ) : (
-      <span className="tag" style={{ color: "var(--red)" }} title={result}>
+      <span className="tag" style={{ color: "var(--destructive)" }} title={result}>
         {label} failed
       </span>
     );
@@ -205,10 +206,7 @@ export function ConnectionForm({
         style={{ background: "var(--overlay)" }}
         onClick={onClose}
       />
-      <div
-        className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-[640px] max-w-[94vw] panel p-6 max-h-[90vh] overflow-y-auto scrollbar-thin"
-        style={{ background: "var(--bg-panel)" }}
-      >
+      <Card className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-[640px] max-w-[94vw] p-6 max-h-[90vh] overflow-y-auto scrollbar-thin">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[16px] font-semibold">
             {mode === "create" ? "Add connection" : `Edit “${initial?.name}”`}
@@ -231,8 +229,8 @@ export function ConnectionForm({
               className="text-[12px] mt-1"
               style={{
                 color: uriMsg.startsWith("Parsed")
-                  ? "var(--green)"
-                  : "var(--amber)",
+                  ? "var(--success)"
+                  : "var(--warning)",
               }}
             >
               {uriMsg}
@@ -312,7 +310,7 @@ export function ConnectionForm({
 
         <label
           className="flex items-center gap-2 mt-4 text-[13px]"
-          style={{ color: "var(--text-dim)" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use
           SSL
@@ -323,14 +321,14 @@ export function ConnectionForm({
             {statusPill("read", testResult.read)}
             {form.writeUser && statusPill("write", testResult.write)}
             {testResult.read && (
-              <span className="text-[12px]" style={{ color: "var(--red)" }}>
+              <span className="text-[12px]" style={{ color: "var(--destructive)" }}>
                 {testResult.read}
               </span>
             )}
           </div>
         )}
         {error && (
-          <p className="mt-3 text-[13px]" style={{ color: "var(--red)" }}>
+          <p className="mt-3 text-[13px]" style={{ color: "var(--destructive)" }}>
             {error}
           </p>
         )}
@@ -363,7 +361,7 @@ export function ConnectionForm({
                 : "Save changes"}
           </Button>
         </div>
-      </div>
+      </Card>
     </>
   );
 }

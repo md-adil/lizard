@@ -16,6 +16,9 @@ import {
 } from "@/components/browse/useTableMeta";
 import type { VfkTransform } from "@/lib/types";
 import { RowEditor } from "@/components/browse/row-editor";
+import { RedactedValue } from "@/components/browse/redacted-value";
+import { RecordComments } from "@/components/browse/record-comments";
+import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
 import { humanize } from "@/lib/introspect/heuristics";
@@ -25,6 +28,7 @@ import {
   vfkDisplayColumn,
 } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Breadcrumb,
@@ -35,7 +39,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 
-function Card({
+function RelatedCard({
   title,
   subtitle,
   menu,
@@ -54,7 +58,7 @@ function Card({
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="panel p-4 min-w-0">
+    <Card className="p-4 min-w-0">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[13.5px] font-semibold truncate">{title}</span>
         {subtitle && (
@@ -89,8 +93,8 @@ function Card({
                 <div
                   className="absolute right-0 z-20 mt-1 w-44 rounded-md border py-1"
                   style={{
-                    background: "var(--bg-raised)",
-                    borderColor: "var(--border-strong)",
+                    background: "var(--muted)",
+                    borderColor: "var(--input)",
                   }}
                 >
                   {menu.map((m) =>
@@ -100,7 +104,9 @@ function Card({
                         href={m.href}
                         className="block px-3 py-1.5 text-[12.5px] hoverable"
                         style={{
-                          color: m.danger ? "var(--red)" : "var(--text)",
+                          color: m.danger
+                            ? "var(--destructive)"
+                            : "var(--foreground)",
                         }}
                         onClick={() => setOpen(false)}
                       >
@@ -112,7 +118,9 @@ function Card({
                         className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
                         key={m.label}
                         style={{
-                          color: m.danger ? "var(--red)" : "var(--text)",
+                          color: m.danger
+                            ? "var(--destructive)"
+                            : "var(--foreground)",
                         }}
                         onClick={() => {
                           setOpen(false);
@@ -135,7 +143,7 @@ function Card({
           showCloseButton
           className="top-[5vh] translate-y-0 flex flex-col resize overflow-auto gap-0 rounded-xl"
           style={{
-            background: "var(--bg-panel)",
+            background: "var(--card)",
             width: "min(90vw, 1100px)",
             height: "min(60vh, 640px)",
             minWidth: 360,
@@ -159,7 +167,7 @@ function Card({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Card>
   );
 }
 
@@ -186,16 +194,22 @@ function FieldList({
           <div key={cm.col.name} className="min-w-0">
             <div
               className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
             >
               {cm.label}
             </div>
             <div
               className="text-[13px] truncate"
-              style={{ color: f.muted ? "var(--text-faint)" : "var(--text)" }}
-              title={f.text}
+              style={{
+                color: f.muted
+                  ? "var(--muted-foreground-faint)"
+                  : "var(--foreground)",
+              }}
+              title={cm.redacted ? undefined : f.text}
             >
-              {label ? (
+              {cm.redacted ? (
+                <RedactedValue value={v} />
+              ) : label ? (
                 <>
                   {label}{" "}
                   <span className="tag code" style={{ fontSize: 10 }}>
@@ -267,7 +281,7 @@ function JsonCard({
 
   const cm = meta.columns.find((c) => c.col.name === column);
   return (
-    <Card
+    <RelatedCard
       title={cm?.label ?? humanize(column)}
       subtitle="json"
       menu={[
@@ -310,7 +324,10 @@ function JsonCard({
             onChange={(e) => setText(e.target.value)}
           />
           {err && (
-            <p className="text-[12px] mt-1" style={{ color: "var(--red)" }}>
+            <p
+              className="text-[12px] mt-1"
+              style={{ color: "var(--destructive)" }}
+            >
               {err}
             </p>
           )}
@@ -324,13 +341,16 @@ function JsonCard({
           </Button>
         </>
       ) : value == null ? (
-        <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
+        <p
+          className="text-[13px]"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
           ∅ null
         </p>
       ) : raw ? (
         <pre
           className="code text-[12px] whitespace-pre-wrap max-h-64 overflow-auto scrollbar-thin"
-          style={{ color: "var(--text)" }}
+          style={{ color: "var(--foreground)" }}
         >
           {pretty}
         </pre>
@@ -339,7 +359,7 @@ function JsonCard({
           <JsonView value={value} />
         </div>
       )}
-    </Card>
+    </RelatedCard>
   );
 }
 
@@ -401,7 +421,7 @@ function BelongsToCard({
 
   const recordHref = `/browse/${target.connection}/${target.schema}/${target.table}/record?pk=${pkParam}${keyTransformsParam}`;
   return (
-    <Card
+    <RelatedCard
       title={title}
       subtitle={`${target.connection}.${target.schema}.${target.table}`}
       menu={[
@@ -416,11 +436,14 @@ function BelongsToCard({
       ]}
     >
       {value == null ? (
-        <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
+        <p
+          className="text-[13px]"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
           ∅ not linked
         </p>
       ) : error ? (
-        <p className="text-[13px]" style={{ color: "var(--red)" }}>
+        <p className="text-[13px]" style={{ color: "var(--destructive)" }}>
           {(error as Error).message}
         </p>
       ) : !data || !targetMeta ? (
@@ -438,7 +461,7 @@ function BelongsToCard({
           onClose={() => setEditing(false)}
         />
       )}
-    </Card>
+    </RelatedCard>
   );
 }
 
@@ -494,7 +517,7 @@ function HasManyCard({
   if (!meta) return null;
   const cols = meta.columns.filter((c) => !c.hidden && c.col.name !== fkColumn);
   return (
-    <Card
+    <RelatedCard
       title={meta.label}
       subtitle={`${source.connection}.${source.schema}.${source.table} · via ${fkColumn}`}
       menu={[
@@ -505,7 +528,7 @@ function HasManyCard({
       ]}
     >
       {error ? (
-        <p className="text-[13px]" style={{ color: "var(--red)" }}>
+        <p className="text-[13px]" style={{ color: "var(--destructive)" }}>
           {(error as Error).message}
         </p>
       ) : !data ? (
@@ -514,7 +537,10 @@ function HasManyCard({
           style={{ background: "var(--border)" }}
         />
       ) : data.rows.length === 0 ? (
-        <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
+        <p
+          className="text-[13px]"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
           No related rows.
         </p>
       ) : (
@@ -549,7 +575,7 @@ function HasManyCard({
           {data.total != null && data.total > data.rows.length && (
             <p
               className="text-[12px] mt-1.5"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
             >
               showing {data.rows.length} of {data.total}
             </p>
@@ -563,7 +589,7 @@ function HasManyCard({
           onClose={() => setEditingRow(null)}
         />
       )}
-    </Card>
+    </RelatedCard>
   );
 }
 
@@ -578,6 +604,7 @@ function RecordView() {
   const qc = useQueryClient();
   const { data: catalog } = useCatalog();
   const [editing, setEditing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   const pk = useMemo(() => {
     try {
@@ -647,10 +674,28 @@ function RecordView() {
           table: string;
           fkColumn: string;
         }[],
+        manyToMany: [] as {
+          connection: string;
+          junctionSchema: string;
+          junctionTable: string;
+          selfFkColumn: string;
+          otherFkColumn: string;
+          otherSchema: string;
+          otherTable: string;
+        }[],
       };
     const belongsTo = meta.columns
       .filter((c) => c.ref)
       .map((c) => ({ title: c.label, column: c.col.name, target: c.ref! }));
+    const manyToMany: {
+      connection: string;
+      junctionSchema: string;
+      junctionTable: string;
+      selfFkColumn: string;
+      otherFkColumn: string;
+      otherSchema: string;
+      otherTable: string;
+    }[] = [];
     const hasMany: {
       connection: string;
       schema: string;
@@ -675,6 +720,28 @@ function RecordView() {
                 table: t.name,
                 fkColumn: fk.columns[0],
               });
+              // Phase 8.5 — a junction table: `t` has this FK back to us plus
+              // another single-column FK to a different table → M2M.
+              const otherFk = t.foreignKeys.find(
+                (f) =>
+                  f !== fk &&
+                  f.columns.length === 1 &&
+                  !(
+                    f.referencedSchema === params.schema &&
+                    f.referencedTable === params.table
+                  ),
+              );
+              if (otherFk) {
+                manyToMany.push({
+                  connection: conn.connectionName,
+                  junctionSchema: s.name,
+                  junctionTable: t.name,
+                  selfFkColumn: fk.columns[0],
+                  otherFkColumn: otherFk.columns[0],
+                  otherSchema: otherFk.referencedSchema,
+                  otherTable: otherFk.referencedTable,
+                });
+              }
             }
           }
         }
@@ -701,21 +768,24 @@ function RecordView() {
         fkColumn,
       });
     }
-    return { belongsTo, hasMany };
+    return { belongsTo, hasMany, manyToMany };
   }, [catalog, meta, params]);
 
   if (!catalog || !meta)
     return (
       <div
         className="px-8 py-10 text-[13px]"
-        style={{ color: "var(--text-dim)" }}
+        style={{ color: "var(--muted-foreground)" }}
       >
         Loading…
       </div>
     );
   if (error)
     return (
-      <div className="px-8 py-10 text-[13px]" style={{ color: "var(--red)" }}>
+      <div
+        className="px-8 py-10 text-[13px]"
+        style={{ color: "var(--destructive)" }}
+      >
         {(error as Error).message}
       </div>
     );
@@ -736,23 +806,35 @@ function RecordView() {
       <Breadcrumb className="mb-4">
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Connections</BreadcrumbLink>
+            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>
+            <BreadcrumbLink
+              render={<Link href={`/browse/${params.connection}`} />}
+            >
               {params.connection}
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
+            <BreadcrumbLink
+              render={
+                <Link href={`/browse/${params.connection}/${params.schema}`} />
+              }
+            >
               {params.schema}
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}`} />}>
+            <BreadcrumbLink
+              render={
+                <Link
+                  href={`/browse/${params.connection}/${params.schema}/${params.table}`}
+                />
+              }
+            >
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -816,10 +898,10 @@ function RecordView() {
       {!row ? (
         <div className="grid grid-cols-2 gap-4">
           {/* main details card */}
-          <div className="col-span-2 panel p-4">
+          <Card className="col-span-2 p-4">
             <div
               className="h-3.5 w-28 rounded animate-pulse mb-4"
-              style={{ background: "var(--border-strong)" }}
+              style={{ background: "var(--input)" }}
             />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               {[55, 40, 70, 35, 60, 45, 65, 50].map((w, i) => (
@@ -831,20 +913,20 @@ function RecordView() {
                   <div
                     className="h-3.5 rounded animate-pulse"
                     style={{
-                      background: "var(--border-strong)",
+                      background: "var(--input)",
                       width: `${w}%`,
                     }}
                   />
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
           {/* relation card stubs */}
           {[68, 52].map((w, i) => (
-            <div key={i} className="panel p-4">
+            <Card key={i} className="p-4">
               <div
                 className="h-3.5 rounded animate-pulse mb-3"
-                style={{ background: "var(--border-strong)", width: `${w}%` }}
+                style={{ background: "var(--input)", width: `${w}%` }}
               />
               <div className="flex flex-col gap-2">
                 {[80, 60, 70].map((fw, fi) => (
@@ -855,13 +937,13 @@ function RecordView() {
                   />
                 ))}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <Card
+            <RelatedCard
               title="Details"
               subtitle={`${params.connection}.${params.schema}.${params.table}`}
               menu={
@@ -872,11 +954,15 @@ function RecordView() {
                         label: "✎ Edit record",
                         onClick: () => setEditing(true),
                       },
+                      {
+                        label: "⧉ Duplicate",
+                        onClick: () => setDuplicating(true),
+                      },
                     ]
               }
             >
               <FieldList meta={meta} row={row} fkLabels={data!.fkLabels} />
-            </Card>
+            </RelatedCard>
           </div>
 
           {jsonColumns.map((c) => (
@@ -909,11 +995,40 @@ function RecordView() {
                 value={pkValue}
               />
             ))}
+
+          {pkValue != null &&
+            relations.manyToMany.map((m) => (
+              <LinkedRecordsCard
+                key={`${m.junctionSchema}.${m.junctionTable}.${m.selfFkColumn}.${m.otherFkColumn}`}
+                title={humanize(m.otherTable)}
+                target={m}
+                selfValue={pkValue}
+              />
+            ))}
+
+          {Object.keys(pk).length > 0 && (
+            <div className="col-span-2">
+              <RecordComments
+                connectionId={meta.connectionId}
+                schema={params.schema}
+                table={params.table}
+                pk={pk}
+              />
+            </div>
+          )}
         </div>
       )}
 
       {editing && row && (
         <RowEditor meta={meta} row={row} onClose={() => setEditing(false)} />
+      )}
+      {duplicating && row && (
+        <RowEditor
+          meta={meta}
+          row={null}
+          duplicateFrom={row}
+          onClose={() => setDuplicating(false)}
+        />
       )}
     </div>
   );
@@ -925,7 +1040,7 @@ export default function RecordPage() {
       fallback={
         <div
           className="px-8 py-10 text-[13px]"
-          style={{ color: "var(--text-dim)" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           Loading…
         </div>

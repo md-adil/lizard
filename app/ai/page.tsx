@@ -142,16 +142,16 @@ export default function AiConsole() {
     <div className="flex h-full">
       <div className="flex-1 flex flex-col max-w-4xl mx-auto px-8 py-8 w-full">
         <h1 className="text-xl font-semibold mb-1">Ask your databases</h1>
-        <p className="text-[13px] mb-4" style={{ color: "var(--text-dim)" }}>
+        <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
           Plain-language questions over one database or the whole fleet. The SQL and the databases touched
           are always shown; everything is read-only and guarded.
         </p>
 
         <div className="flex gap-1.5 mb-3 flex-wrap">
-          <span className="text-[12px] mt-1" style={{ color: "var(--text-faint)" }}>Scope:</span>
+          <span className="text-[12px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>Scope:</span>
           <button
             className="tag"
-            style={scope.length === 0 ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
+            style={scope.length === 0 ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
             onClick={() => setScope([])}
           >
             all connections
@@ -160,7 +160,7 @@ export default function AiConsole() {
             <button
               key={c}
               className="tag"
-              style={scope.includes(c) ? { color: "var(--accent)", borderColor: "var(--accent)" } : {}}
+              style={scope.includes(c) ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
               onClick={() => setScope((s) => (s.includes(c) ? s.filter((x) => x !== c) : [...s, c]))}
             >
               {c}
@@ -184,7 +184,7 @@ export default function AiConsole() {
 
         <div className="flex-1 space-y-6 overflow-y-auto scrollbar-thin pb-8">
           {turns.length === 0 && (
-            <div className="panel px-6 py-8 text-center text-[13px]" style={{ color: "var(--text-dim)" }}>
+            <div className="panel px-6 py-8 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
               Try: “how many customers per country?” · “revenue by month this year” ·
               “top customers by order count with their emails” (spans both services)
             </div>
@@ -192,25 +192,25 @@ export default function AiConsole() {
           {turns.map((t, i) => (
             <div key={i}>
               <div className="text-[14px] font-medium mb-2">
-                <span style={{ color: "var(--accent)" }}>›</span> {t.question}
+                <span style={{ color: "var(--primary)" }}>›</span> {t.question}
               </div>
               {t.running && (
-                <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
+                <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
                   Claude is writing SQL…
                 </p>
               )}
               {t.plan && (
                 <>
-                  <p className="text-[13px] mb-2" style={{ color: "var(--text-dim)" }}>
+                  <p className="text-[13px] mb-2" style={{ color: "var(--muted-foreground)" }}>
                     {t.plan.explanation}
                   </p>
                   <div className="panel px-4 py-3 mb-2">
                     <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                      <span className="tag" style={{ color: "var(--purple)" }}>
+                      <span className="tag" style={{ color: "var(--info)" }}>
                         {t.plan.target === "federated" ? "federated · duckdb" : "single · postgres"}
                       </span>
                       {t.plan.connections.map((c) => (
-                        <span key={c} className="tag" style={{ color: "var(--green)" }}>
+                        <span key={c} className="tag" style={{ color: "var(--success)" }}>
                           {c}
                         </span>
                       ))}
@@ -237,7 +237,7 @@ export default function AiConsole() {
                         </Button>
                       </>
                     ) : (
-                      <pre className="code whitespace-pre-wrap text-[12.5px]" style={{ color: "var(--text)" }}>
+                      <pre className="code whitespace-pre-wrap text-[12.5px]" style={{ color: "var(--foreground)" }}>
                         {t.plan.sql}
                       </pre>
                     )}
@@ -247,7 +247,7 @@ export default function AiConsole() {
               {t.error && (
                 <div
                   className="rounded-md border px-4 py-3 text-[13px] mb-2"
-                  style={{ color: "var(--red)", borderColor: "rgba(229,83,75,.4)", background: "rgba(229,83,75,.06)" }}
+                  style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)", background: "rgba(229,83,75,.06)" }}
                 >
                   <strong>{t.error.includes("Forbidden") || t.error.includes("Only SELECT") ? "Blocked by SQL Guard: " : ""}</strong>
                   {t.error}
@@ -274,12 +274,12 @@ export default function AiConsole() {
         </div>
       </div>
 
-      <aside className="w-64 shrink-0 border-l px-4 py-8 overflow-y-auto scrollbar-thin" style={{ background: "var(--bg-panel)" }}>
-        <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-faint)" }}>
+      <aside className="w-64 shrink-0 border-l px-4 py-8 overflow-y-auto scrollbar-thin" style={{ background: "var(--card)" }}>
+        <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted-foreground-faint)" }}>
           Saved queries
         </div>
         {saved?.length === 0 && (
-          <p className="text-[12.5px]" style={{ color: "var(--text-faint)" }}>
+          <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
             Ask something, then hit “Save query”.
           </p>
         )}
@@ -289,7 +289,7 @@ export default function AiConsole() {
               {sq.name}
             </Button>
             {sq.nlPrompt && (
-              <p className="text-[11.5px] mt-0.5 truncate" style={{ color: "var(--text-faint)" }} title={sq.nlPrompt}>
+              <p className="text-[11.5px] mt-0.5 truncate" style={{ color: "var(--muted-foreground-faint)" }} title={sq.nlPrompt}>
                 {sq.nlPrompt}
               </p>
             )}

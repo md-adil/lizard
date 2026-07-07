@@ -124,7 +124,7 @@ export function ReferencePickerModal({
       />
       <div
         className="fixed z-70 inset-x-0 top-[5vh] mx-auto w-260 max-w-[95vw] panel p-5 max-h-[88vh] flex flex-col"
-        style={{ background: "var(--bg-panel)" }}
+        style={{ background: "var(--card)" }}
       >
         <div className="flex items-center gap-2 mb-3">
           <h3 className="text-[15px] font-semibold">Pick {title}</h3>
@@ -169,14 +169,14 @@ export function ReferencePickerModal({
               maxHeight="calc(88vh - 220px)"
             />
           ) : (
-            <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
+            <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
               Loading…
             </p>
           )}
           {isLoading && (
             <p
               className="px-1 py-2 text-[12px]"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
             >
               Loading…
             </p>
@@ -185,7 +185,7 @@ export function ReferencePickerModal({
 
         <div
           className="flex items-center gap-3 mt-3 text-[13px]"
-          style={{ color: "var(--text-dim)" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           <Button variant="outline" size="sm"
            
@@ -206,7 +206,7 @@ export function ReferencePickerModal({
             Next →
           </Button>
           <span className="flex-1" />
-          <span style={{ color: "var(--text-faint)" }}>
+          <span style={{ color: "var(--muted-foreground-faint)" }}>
             Click a row to select it
           </span>
         </div>

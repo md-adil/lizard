@@ -25,7 +25,12 @@ const WIDGETS = [
   "select",
   "json",
   "reference",
-  "readonly",
+  "array",
+  "range",
+  "network",
+  "interval",
+  "uuid",
+  "bytea",
 ];
 
 export function TableOverridesEditor({
@@ -59,6 +64,7 @@ export function TableOverridesEditor({
       widget: findOv(cm.col.name)?.widget ?? "",
       hidden: cm.hidden,
       readonly: findOv(cm.col.name)?.readonly ?? false,
+      redacted: findOv(cm.col.name)?.redacted ?? cm.redacted,
       order: i,
     })),
   );
@@ -103,6 +109,7 @@ export function TableOverridesEditor({
             widget: c.widget || null,
             hidden: c.hidden,
             readonly: c.readonly,
+            redacted: c.redacted,
             sortOrder: c.order,
             help: null,
           }),
@@ -146,7 +153,7 @@ export function TableOverridesEditor({
       </div>
       <label
         className="flex items-center gap-2 text-[13px] mb-6"
-        style={{ color: "var(--text-dim)" }}
+        style={{ color: "var(--muted-foreground)" }}
       >
         <input
           type="checkbox"
@@ -158,7 +165,7 @@ export function TableOverridesEditor({
 
       <div
         className="text-[12px] font-semibold uppercase tracking-wider mb-2"
-        style={{ color: "var(--text-faint)" }}
+        style={{ color: "var(--muted-foreground-faint)" }}
       >
         Columns
       </div>
@@ -217,7 +224,7 @@ export function TableOverridesEditor({
             </div>
             <div
               className="flex gap-4 text-[12px]"
-              style={{ color: "var(--text-dim)" }}
+              style={{ color: "var(--muted-foreground)" }}
             >
               <label className="flex items-center gap-1">
                 <input
@@ -246,6 +253,20 @@ export function TableOverridesEditor({
                   }
                 />
                 readonly
+              </label>
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={c.redacted}
+                  onChange={(e) =>
+                    setCols((s) =>
+                      s.map((x, j) =>
+                        j === i ? { ...x, redacted: e.target.checked } : x,
+                      ),
+                    )
+                  }
+                />
+                redacted
               </label>
             </div>
           </Card>

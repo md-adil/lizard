@@ -171,6 +171,107 @@ export async function listRows(params: ListParams) {
   return { rows, hasMore, total, fkLabels };
 }
 
+const EXPORT_ROW_LIMIT = 100_000;
+
+// Phase 8.7 — full result set (honoring filters/search/sort) for CSV export.
+// Capped so an export can't scan an unbounded table; the cap is reported so
+// the caller can warn on truncation.
+export async function exportRows(
+  params: Omit<ListParams, "page" | "pageSize">,
+): Promise<{ columns: string[]; rows: Record<string, unknown>[]; truncated: boolean }> {
+  const { conn, table } = await resolveTable(
+    params.connection,
+    params.schema,
+    params.table,
+  );
+  const pool = getPool(conn, "read");
+
+  const { clause: filterClause, values: filterValues } = buildFilterClause(
+    table,
+    params.filters ?? [],
+    params.combinator ?? "and",
+  );
+  const allValues: unknown[] = [...filterValues];
+
+  let searchClause = "";
+  if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
+    const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const textCols = table.columns.filter((c) =>
+      TEXT_LIKE_TYPES.has(c.udtName),
+    );
+    if (textCols.length > 0) {
+      const idx = allValues.length + 1;
+      allValues.push(`%${term}%`);
+      searchClause = `(${textCols.map((c) => `${quoteIdent(c.name)} ILIKE $${idx}`).join(" OR ")})`;
+    }
+  }
+
+  const clauses = [filterClause, searchClause].filter(Boolean);
+  const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  let orderSql = "";
+  if (params.sort) {
+    assertColumn(table, params.sort);
+    orderSql = `ORDER BY ${quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"} NULLS LAST`;
+  } else if (table.primaryKey.length > 0) {
+    orderSql = `ORDER BY ${table.primaryKey.map(quoteIdent).join(", ")}`;
+  }
+
+  const fqtn = `${quoteIdent(table.schema)}.${quoteIdent(table.name)}`;
+  const res = await pool.query(
+    `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${EXPORT_ROW_LIMIT + 1}`,
+    allValues,
+  );
+  const truncated = res.rows.length > EXPORT_ROW_LIMIT;
+  const rows = truncated ? res.rows.slice(0, EXPORT_ROW_LIMIT) : res.rows;
+  const columns = res.fields.map((f) => f.name);
+  return { columns, rows, truncated };
+}
+
+// Phase 8.5 — M2M linked records. A junction table is just a regular table
+// with two FK columns, so add/remove go through the existing generic
+// createRow/deleteRow on that junction table; this is the one new piece:
+// resolving "which other-side rows does this row link to" through the join,
+// with a display label so the client doesn't need the other table's metadata.
+export async function listLinkedRows(
+  connection: string,
+  junctionSchema: string,
+  junctionTable: string,
+  selfFkColumn: string,
+  otherFkColumn: string,
+  otherSchema: string,
+  otherTableName: string,
+  selfValue: unknown,
+): Promise<Record<string, unknown>[]> {
+  const { conn, table: junction } = await resolveTable(
+    connection,
+    junctionSchema,
+    junctionTable,
+  );
+  assertColumn(junction, selfFkColumn);
+  assertColumn(junction, otherFkColumn);
+
+  const catalog = await getConnectionCatalog(conn);
+  const otherTable = catalog.schemas
+    .find((s) => s.name === otherSchema)
+    ?.tables.find((t) => t.name === otherTableName);
+  if (!otherTable) throw new CrudError("Unknown target table", 404);
+  const otherPk = otherTable.primaryKey[0];
+  if (!otherPk) throw new CrudError("Target table has no primary key", 400);
+  const display = displayColumnFor(conn, otherTable) ?? otherPk;
+
+  const pool = getPool(conn, "read");
+  const res = await pool.query(
+    `SELECT j.*, o.${quoteIdent(display)}::text AS __label, o.${quoteIdent(otherPk)}::text AS __other_id
+     FROM ${quoteIdent(junctionSchema)}.${quoteIdent(junctionTable)} j
+     JOIN ${quoteIdent(otherSchema)}.${quoteIdent(otherTableName)} o
+       ON o.${quoteIdent(otherPk)}::text = j.${quoteIdent(otherFkColumn)}::text
+     WHERE j.${quoteIdent(selfFkColumn)}::text = $1`,
+    [String(selfValue)],
+  );
+  return res.rows;
+}
+
 function transformSql(expr: string, t: VfkTransform): string {
   switch (t) {
     case "lower":
@@ -527,6 +628,67 @@ export async function createRow(
       rowCount: 1,
     });
     return res.rows[0];
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw friendlyDbError(e);
+  } finally {
+    client.release();
+  }
+}
+
+const IMPORT_ROW_LIMIT = 5000;
+
+// Phase 8.7 — CSV import. Each row inserts in its own SAVEPOINT so one bad
+// row (a failed constraint, a bad type) doesn't abort the whole batch —
+// import what's valid, report exactly which rows and why weren't.
+export async function bulkInsertRows(
+  connection: string,
+  schema: string,
+  tableName: string,
+  rows: Record<string, unknown>[],
+): Promise<{ inserted: number; errors: { row: number; message: string }[] }> {
+  if (rows.length === 0) return { inserted: 0, errors: [] };
+  if (rows.length > IMPORT_ROW_LIMIT) {
+    throw new CrudError(`Import is capped at ${IMPORT_ROW_LIMIT} rows per request`);
+  }
+  const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (table.kind === "view") throw new CrudError("Views are read-only", 405);
+
+  const pool = getPool(conn, "write");
+  const client = await pool.connect();
+  let inserted = 0;
+  const errors: { row: number; message: string }[] = [];
+  try {
+    await client.query("BEGIN");
+    for (let i = 0; i < rows.length; i++) {
+      const cols = writableColumns(table, rows[i]);
+      if (cols.length === 0) {
+        errors.push({ row: i, message: "No writable columns" });
+        continue;
+      }
+      const values = cols.map((c) => coerceValue(table, c, rows[i][c]));
+      const placeholders = cols.map((_, j) => `$${j + 1}`);
+      await client.query("SAVEPOINT import_row");
+      try {
+        await client.query(
+          `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(tableName)} (${cols.map(quoteIdent).join(", ")}) VALUES (${placeholders.join(", ")})`,
+          values,
+        );
+        await client.query("RELEASE SAVEPOINT import_row");
+        inserted++;
+      } catch (e) {
+        await client.query("ROLLBACK TO SAVEPOINT import_row");
+        errors.push({ row: i, message: friendlyDbError(e).message });
+      }
+    }
+    await client.query("COMMIT");
+    logAudit({
+      action: "import",
+      sql: `INSERT INTO ${schema}.${tableName} (bulk, ${inserted} rows)`,
+      connections: [conn.name],
+      rowCount: inserted,
+    });
+    return { inserted, errors };
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     throw friendlyDbError(e);

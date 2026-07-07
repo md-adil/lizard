@@ -63,7 +63,7 @@ export default function ProfilePage() {
   return (
     <div className="px-8 py-10 max-w-3xl">
       <h1 className="text-xl font-semibold mb-1">Profile</h1>
-      <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>
+      <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
         Manage your account details and password.
       </p>
 
@@ -71,7 +71,7 @@ export default function ProfilePage() {
       <div className="panel px-6 py-5 mb-4">
         <p
           className="text-[12px] font-semibold uppercase tracking-wide mb-3"
-          style={{ color: "var(--text-faint)" }}
+          style={{ color: "var(--muted-foreground-faint)" }}
         >
           Account
         </p>
@@ -92,7 +92,7 @@ export default function ProfilePage() {
         <div className="panel px-6 py-5">
           <p
             className="text-[12px] font-semibold uppercase tracking-wide mb-3"
-            style={{ color: "var(--text-faint)" }}
+            style={{ color: "var(--muted-foreground-faint)" }}
           >
             Display name
           </p>
@@ -113,7 +113,7 @@ export default function ProfilePage() {
               />
             </div>
             {nameMutation.error && (
-              <p className="text-[12px]" style={{ color: "var(--red)" }}>
+              <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
                 {(nameMutation.error as Error).message}
               </p>
             )}
@@ -122,7 +122,7 @@ export default function ProfilePage() {
                 {nameMutation.isPending ? "Saving…" : "Save name"}
               </Button>
               {nameSuccess && (
-                <span className="text-[12px]" style={{ color: "var(--green)" }}>
+                <span className="text-[12px]" style={{ color: "var(--success)" }}>
                   Saved ✓
                 </span>
               )}
@@ -133,7 +133,7 @@ export default function ProfilePage() {
         <div className="panel px-6 py-5">
           <p
             className="text-[12px] font-semibold uppercase tracking-wide mb-3"
-            style={{ color: "var(--text-faint)" }}
+            style={{ color: "var(--muted-foreground-faint)" }}
           >
             Change password
           </p>
@@ -176,7 +176,7 @@ export default function ProfilePage() {
               />
             </div>
             {passwordMutation.error && (
-              <p className="text-[12px]" style={{ color: "var(--red)" }}>
+              <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
                 {(passwordMutation.error as Error).message}
               </p>
             )}
@@ -193,7 +193,7 @@ export default function ProfilePage() {
                 {passwordMutation.isPending ? "Updating…" : "Update password"}
               </Button>
               {passwordSuccess && (
-                <span className="text-[12px]" style={{ color: "var(--green)" }}>
+                <span className="text-[12px]" style={{ color: "var(--success)" }}>
                   Password updated ✓
                 </span>
               )}
