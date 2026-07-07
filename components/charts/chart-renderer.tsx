@@ -171,10 +171,10 @@ export function ChartRenderer({ spec, result, height = 300 }: { spec: ChartSpec;
     const v = result.rows[result.rows.length - 1]?.[y ?? ""];
     return (
       <div className="flex flex-col items-start justify-center h-full px-2" style={{ minHeight: height / 2 }}>
-        <div className="text-4xl font-semibold tracking-tight" style={{ color: "var(--text)" }}>
+        <div className="text-4xl font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
           {formatNumber(v)}
         </div>
-        <div className="text-[12px] mt-1" style={{ color: "var(--text-dim)" }}>
+        <div className="text-[12px] mt-1" style={{ color: "var(--muted-foreground)" }}>
           {y}
         </div>
       </div>

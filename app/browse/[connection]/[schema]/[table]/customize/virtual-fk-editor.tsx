@@ -183,13 +183,20 @@ export function VirtualFkEditor({
       ))}
 
       {!adding ? (
-        <Button variant="outline" className="mt-1" onClick={() => setAdding(true)}>
+        <Button
+          variant="outline"
+          className="mt-1"
+          onClick={() => setAdding(true)}
+        >
           + Add relationship
         </Button>
       ) : (
         <Card className="p-4 mt-2 gap-3">
           <div>
-            <div className="text-[11px] mb-1.5" style={{ color: "var(--text-faint)" }}>
+            <div
+              className="text-[11px] mb-1.5"
+              style={{ color: "var(--muted-foreground-faint)" }}
+            >
               Target
             </div>
             <Tabs
@@ -198,12 +205,17 @@ export function VirtualFkEditor({
             >
               <TabsList variant="default">
                 <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
-                <TabsTrigger value="advanced">Advanced (cross-service)</TabsTrigger>
+                <TabsTrigger value="advanced">
+                  Advanced (cross-service)
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
 
-          <p className="text-[12.5px]" style={{ color: "var(--text-dim)" }}>
+          <p
+            className="text-[12.5px]"
+            style={{ color: "var(--muted-foreground)" }}
+          >
             Links{" "}
             <span className="code">
               {fromSchema}.{fromTable}
@@ -295,7 +307,7 @@ export function VirtualFkEditor({
                   </select>
                   <span
                     className="shrink-0"
-                    style={{ color: "var(--text-faint)" }}
+                    style={{ color: "var(--muted-foreground-faint)" }}
                   >
                     =
                   </span>
@@ -374,7 +386,7 @@ export function VirtualFkEditor({
                   </select>
                   <span
                     className="shrink-0"
-                    style={{ color: "var(--text-faint)" }}
+                    style={{ color: "var(--muted-foreground-faint)" }}
                   >
                     =
                   </span>
@@ -430,7 +442,7 @@ export function VirtualFkEditor({
           </div>
 
           {error && (
-            <p className="text-[12px]" style={{ color: "var(--red)" }}>
+            <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
               {error}
             </p>
           )}

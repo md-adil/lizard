@@ -37,13 +37,13 @@ function TableCard({
         <div className="truncate">
           {table.name}
           {table.kind === "view" && (
-            <span className="ml-1.5 text-[10px] font-normal" style={{ color: "var(--amber)" }}>
+            <span className="ml-1.5 text-[10px] font-normal" style={{ color: "var(--warning)" }}>
               view
             </span>
           )}
         </div>
         {table.rowEstimate > 0 && (
-          <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--text-faint)" }}>
+          <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--muted-foreground-faint)" }}>
             ~{table.rowEstimate.toLocaleString()} rows
           </div>
         )}
@@ -84,7 +84,7 @@ export default function SchemaPage() {
 
   if (isLoading) return <PagePad>Loading…</PagePad>;
   if (error)
-    return <PagePad style={{ color: "var(--red)" }}>Failed to load catalog.</PagePad>;
+    return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
   if (!conn || !schemaData)
     return <PagePad>Schema &quot;{schema}&quot; not found.</PagePad>;
 
@@ -99,7 +99,7 @@ export default function SchemaPage() {
       <Breadcrumb className="mb-5">
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Connections</BreadcrumbLink>
+            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -115,7 +115,7 @@ export default function SchemaPage() {
       </Breadcrumb>
 
       <h1 className="text-xl font-semibold mb-1">{schema}</h1>
-      <p className="text-[13px] mb-4" style={{ color: "var(--text-dim)" }}>
+      <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
         {conn.connectionName} · {schemaData.tables.length} table{schemaData.tables.length !== 1 ? "s" : ""}
       </p>
 
@@ -129,7 +129,7 @@ export default function SchemaPage() {
       />
 
       {sortedTables.length === 0 ? (
-        <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
+        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
           No tables match &quot;{search}&quot;.
         </p>
       ) : (
@@ -151,7 +151,7 @@ function PagePad({
   style?: React.CSSProperties;
 }) {
   return (
-    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--text-dim)", ...style }}>
+    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
       {children}
     </div>
   );

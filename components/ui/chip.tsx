@@ -32,7 +32,7 @@ function Chip({
       className={cn(
         badgeVariants({ variant }),
         "gap-1 pr-1 has-[button:last-child:not(:first-child)]:pr-1",
-        "data-[active]:border-accent/40 data-[active]:bg-accent/10 data-[active]:text-accent",
+        "data-active:border-primary/40 data-active:bg-primary/10 data-active:text-primary",
         className
       )}
     >

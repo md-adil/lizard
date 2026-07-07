@@ -116,7 +116,7 @@ export default function CustomizePage() {
           />
           <p
             className="text-[11px] mt-1"
-            style={{ color: "var(--text-faint)" }}
+            style={{ color: "var(--muted-foreground-faint)" }}
           >
             {pattern
               ? `matches ${matchedSchemas.length}: ${matchedSchemas.slice(0, 8).join(", ")}${matchedSchemas.length > 8 ? "…" : ""}`
@@ -136,7 +136,7 @@ export default function CustomizePage() {
           <SectionTitle>Virtual relationships</SectionTitle>
           <p
             className="text-[12.5px] mb-3"
-            style={{ color: "var(--text-dim)" }}
+            style={{ color: "var(--muted-foreground)" }}
           >
             Link this table to another — composite keys, constant filters,
             case-insensitive matches. Powers reference labels/pickers and
@@ -160,7 +160,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="text-[12px] font-semibold uppercase tracking-wider mb-2"
-      style={{ color: "var(--text-faint)" }}
+      style={{ color: "var(--muted-foreground-faint)" }}
     >
       {children}
     </div>
@@ -171,7 +171,7 @@ function Pad({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="px-8 py-10 text-[14px]"
-      style={{ color: "var(--text-dim)" }}
+      style={{ color: "var(--muted-foreground)" }}
     >
       {children}
     </div>

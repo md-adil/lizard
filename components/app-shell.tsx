@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div className="h-screen flex items-center justify-center text-[13px]" style={{ color: "var(--text-dim)" }}>
+      <div className="h-screen flex items-center justify-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
         {loading ? "Loading…" : "Redirecting to sign in…"}
       </div>
     );
@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <SidebarInset
         className="h-screen overflow-auto scrollbar-thin"
-        style={{ background: "var(--bg)" }}
+        style={{ scrollbarGutter: "stable" }}
       >
         {children}
       </SidebarInset>

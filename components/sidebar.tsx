@@ -57,11 +57,11 @@ interface CatalogResponse {
 }
 
 const NAV = [
-  { href: "/", label: "Connections", icon: "◆" },
+  { href: "/", label: "Home", icon: "⌂" },
   { href: "/ai", label: "Ask AI", icon: "✦" },
   { href: "/dashboards", label: "Dashboards", icon: "▦" },
   { href: "/audit", label: "Audit log", icon: "≡" },
-  { href: "/users", label: "Users", icon: "⊙", adminOnly: true },
+  { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 function loadedSchemasKey(conn: string) {
@@ -91,7 +91,7 @@ export function Sidebar() {
   const router = useRouter();
   const params = useParams<{ connection?: string; schema?: string }>();
   const qc = useQueryClient();
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const { data } = useQuery<CatalogResponse>({
     queryKey: ["catalog"],
     queryFn: async () => {
@@ -211,7 +211,7 @@ export function Sidebar() {
         {/* nav */}
         <SidebarGroup>
           <SidebarMenu>
-            {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+            {NAV.map((item) => {
               const active =
                 item.href === "/"
                   ? pathname === "/"
@@ -239,7 +239,7 @@ export function Sidebar() {
           {connections.length === 0 ? (
             <p
               className="text-[12px] py-1 px-2"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
             >
               No connections yet
             </p>
@@ -260,7 +260,7 @@ export function Sidebar() {
           {conn?.error && (
             <p
               className="text-[11.5px] mt-1 px-2"
-              style={{ color: "var(--red)" }}
+              style={{ color: "var(--destructive)" }}
               title={conn.error}
             >
               connection error
@@ -472,7 +472,7 @@ export function Sidebar() {
                       <Button
                         variant="ghost"
                         className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
-                        style={{ color: "var(--text-faint)" }}
+                        style={{ color: "var(--muted-foreground-faint)" }}
                         onClick={() => setShowHidden(true)}
                       >
                         <span>⊘</span>
@@ -492,9 +492,9 @@ export function Sidebar() {
                             className="block rounded px-2.5 py-1 text-[14px] truncate line-through"
                             style={{
                               background: active
-                                ? "var(--accent-soft)"
+                                ? "var(--primary-soft)"
                                 : "transparent",
-                              color: "var(--text-faint)",
+                              color: "var(--muted-foreground-faint)",
                               opacity: 0.6,
                             }}
                           >
@@ -509,7 +509,7 @@ export function Sidebar() {
             <Button
               variant="ghost"
               className="flex items-center gap-1 mx-2.5 mt-1 mb-2 text-[12px] hoverable px-1 rounded"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
               onClick={() => setShowHidden(false)}
             >
               <span>⊘</span> hide hidden
@@ -518,7 +518,7 @@ export function Sidebar() {
           {conn && !conn.error && tableQ && (
             <p
               className="px-2.5 pt-1 text-[11.5px]"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
             >
               filtering by "{tableSearch}"
             </p>
@@ -532,13 +532,13 @@ export function Sidebar() {
           <div className="min-w-0 flex-1">
             <p
               className="text-[13px] font-medium truncate"
-              style={{ color: "var(--text)" }}
+              style={{ color: "var(--foreground)" }}
             >
               {user?.name || user?.email}
             </p>
             <p
               className="text-[11px] truncate"
-              style={{ color: "var(--text-faint)" }}
+              style={{ color: "var(--muted-foreground-faint)" }}
             >
               {user?.role}
             </p>

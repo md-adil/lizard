@@ -270,12 +270,96 @@ Each phase ends in a runnable, demoable state. Acceptance criteria are concrete 
 - One-command self-host (`docker compose up` with a demo database).
 - **Done when:** someone can spin it up, connect their databases, and safely use every feature.
 
+### Status (as built)
+
+Phases 0–7 are implemented: multi-connection catalog introspection; browse (grid with
+server-side sort/filter/search, keyset-friendly pagination, column resize, per-user
+column visibility); CRUD with schema-derived widgets + reference pickers; the override
+layer (labels, widgets, hidden/readonly, display column, sort order) with **multi-tenant
+schema-pattern overrides** (`org_*`); **virtual FKs** (composite, value transforms,
+constant predicates, `$schema` templating for tenant-local joins, cross-connection);
+a dedicated per-table **customize page**; AI text-to-SQL + text-to-chart (single &
+federated via DuckDB); charts + dashboards; auth (viewer/editor/admin) + per-connection
+grants; audit log. UI is on shadcn (Base UI) with a next-themes light/dark system.
+
+### Phase 8 — Rich data console (no AI, no DBA tooling) 🎯
+
+**Scope guardrail (explicit):** this phase makes the *auto-generated data console* deeper
+— the Airtable/NocoDB experience, still zero-config and schema-derived. It is **not** a
+SQL/DBA client: no index/vacuum/activity/EXPLAIN tooling, no functions/triggers browser,
+no DDL against the target DB. And it is **not** AI — these are deterministic, schema-driven
+features. Everything still obeys §6 (reads via `lizard_read`, writes via `lizard_write`
+to exactly one connection, never DDL on the target; all new console state lives in the
+Lizard metadata store).
+
+**8.1 Rich type widgets** — extend the widget set beyond `text/number/toggle/date/
+datetime/select/json/reference/readonly`, derived purely from `udtName`:
+- **arrays** (`_int4`, `text[]`, …) → tag/chip editor; grid shows chips
+- **ranges** (`int4range`, `tstzrange`, `daterange`) → two-ended editor
+- **jsonb** → structured tree editor (already have a read-only `JsonView`; add editing) instead of a raw textarea
+- **bytea** → upload / download / image thumbnail
+- **network** (`inet`, `cidr`, `macaddr`) → validated inputs
+- **interval**, **uuid** (+ generate button), **money/numeric(p,s)** (precision-aware)
+- **enum / check-IN multi** (array-of-enum) → multi-select
+- Extension-gated widgets light up only when the extension is present (`pg_extension`):
+  **PostGIS** `geometry/geography` → map cell (Leaflet); **pgvector** `vector` → shown as a
+  compact dimension summary (similarity *search* stays out of scope here — it edges toward AI).
+
+**8.2 Editing productivity:**
+- **Inline cell editing** in the grid (not only the drawer)
+- **Bulk edit** (select rows → set one field) and **bulk delete** (row-selection checkboxes)
+- **Duplicate row**
+- **Inline check-constraint validation** — we already capture `checkConstraints`; validate
+  client-side *before* the round-trip, surface friendly errors
+
+**8.3 Saved views** (metadata store) — a named bundle of `{ filter, sort, visibleColumns,
+viewType, groupBy }` per table, shareable, with a default. Purely Lizard-side; no target writes.
+
+**8.4 View types** — alternate renderings of the same rows, auto-offered from the schema:
+- **Table** (today)
+- **Kanban** — group by any enum / check-IN / low-cardinality FK column; drag between
+  columns = an `UPDATE` of that one field via the existing single-connection write path
+- **Gallery / cards** — for tables with an image column or a display column
+- **Calendar** — for tables with a `date`/`timestamp` column
+- **Tree** — self-referencing FK (`parent_id`) → expandable hierarchy (recursive CTE)
+
+**8.5 Relationships:**
+- **M2M linked-records** — auto-detect a two-FK junction table and render it as a
+  multi-select on both parent records (add/remove = insert/delete junction rows, one connection)
+- Keep existing reverse-FK "has-many" cards on the record page
+
+**8.6 Richer filters** — add operators on top of the existing `FilterSet`/combinator:
+regex (`~*`), array contains/overlap (`@>`/`&&`), range overlap, `BETWEEN`, `IN (list)`,
+`IS DISTINCT FROM`, jsonb containment (`@>`) / path (`->>`).
+
+**8.7 Data movement:**
+- **CSV / Excel export** honoring the current filter/sort/selection
+- **CSV import** with column mapping, validated against types/constraints; `COPY`-backed for speed
+  (still through `lizard_write`, one connection, in a transaction)
+
+**8.8 Refresh (not LISTEN/NOTIFY):** real Postgres LISTEN/NOTIFY needs a trigger
+calling `pg_notify(...)` on the target table — i.e. Lizard would have to write DDL
+to someone's database, which directly contradicts §7 ("never write to the target
+database's schema"). Decided against it. Instead, a Grafana-style **auto-refresh
+interval** per view (off / 5s / 10s / 30s / 1m, **default off**) that just calls
+the existing refetch on a timer — zero target-DB changes, works across every view
+type (table/kanban/gallery/calendar), and is saved as part of a saved view.
+
+**8.9 Metadata-only extras (zero target-DB access):**
+- **Per-record comments / annotations** — Airtable-style, stored Lizard-side, works on any table
+- **Record history** — surfaced from the existing audit path (who changed which row, when)
+
+**Done when:** a user can pick a view type per table, edit inline and in bulk, use rich
+widgets for every common Postgres type, save named views, import/export CSV, watch a live
+grid, and comment on records — all with zero config and no DDL on their database.
+
 ### Later / stretch
 - Additional engines (MySQL, SQLite) behind the introspection abstraction.
 - Embeddings-based schema retrieval for very large schemas.
-- Saved AI "workflows," scheduled reports, export (CSV/Excel).
-- Realtime (Postgres LISTEN/NOTIFY) live grids.
+- Saved AI "workflows," scheduled reports.
 - Plugin system for custom widgets/panels.
+- (Deliberately *out*: DBA/SQL-client tooling — indexes/vacuum/activity/EXPLAIN,
+  function & trigger browsers, DDL on the target DB. Kept out to stay a data *console*.)
 
 ---
 

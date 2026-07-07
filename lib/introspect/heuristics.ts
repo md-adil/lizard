@@ -12,7 +12,12 @@ export type Widget =
   | "select"
   | "json"
   | "reference"
-  | "readonly";
+  | "array"
+  | "range"
+  | "network"
+  | "interval"
+  | "uuid"
+  | "bytea";
 
 const NUMERIC_UDTS = new Set([
   "int2",
@@ -24,8 +29,34 @@ const NUMERIC_UDTS = new Set([
   "money",
   "oid",
 ]);
+const RANGE_UDTS = new Set([
+  "int4range",
+  "int8range",
+  "numrange",
+  "tsrange",
+  "tstzrange",
+  "daterange",
+  "int4multirange",
+  "int8multirange",
+  "nummultirange",
+  "tsmultirange",
+  "tstzmultirange",
+  "datemultirange",
+]);
+const NETWORK_UDTS = new Set(["inet", "cidr", "macaddr", "macaddr8"]);
+
+// Postgres array columns report data_type = "ARRAY" and udt_name = "_<elem>"
+// (e.g. "_int4" for int[]). Element udt is the name minus the leading "_".
+export function isArrayColumn(col: ColumnInfo): boolean {
+  return col.dataType === "ARRAY" || col.udtName.startsWith("_");
+}
+export function arrayElementUdt(col: ColumnInfo): string {
+  return col.udtName.startsWith("_") ? col.udtName.slice(1) : col.udtName;
+}
 const READONLY_NAME_PATTERNS =
   /^(created_at|updated_at|inserted_at|modified_at)$/i;
+const REDACTED_NAME_PATTERNS =
+  /password|passwd|pwd|secret|token|api_key|apikey|access_key|private_key|credential/i;
 const DISPLAY_NAME_CANDIDATES = [
   "name",
   "title",
@@ -50,13 +81,23 @@ export function guessDisplayColumn(table: TableInfo): string | null {
   return table.primaryKey[0] ?? cols[0]?.name ?? null;
 }
 
-export function guessWidget(table: TableInfo, col: ColumnInfo): Widget {
-  if (col.isGenerated) return "readonly";
-  if (READONLY_NAME_PATTERNS.test(col.name)) return "readonly";
-  // serial/identity PKs are db-assigned
+// Whether a column should default to read-only absent an explicit override:
+// generated columns, "created_at"-style timestamps, and db-assigned serial PKs.
+export function guessReadonly(table: TableInfo, col: ColumnInfo): boolean {
+  if (col.isGenerated) return true;
+  if (READONLY_NAME_PATTERNS.test(col.name)) return true;
   if (table.primaryKey.includes(col.name) && col.default?.includes("nextval"))
-    return "readonly";
+    return true;
+  return false;
+}
 
+// Whether a column looks like it holds a secret (password/token/api key/...)
+// and should default to masked display absent an explicit override.
+export function guessRedacted(col: ColumnInfo): boolean {
+  return REDACTED_NAME_PATTERNS.test(col.name);
+}
+
+export function guessWidget(table: TableInfo, col: ColumnInfo): Widget {
   if (
     table.foreignKeys.some(
       (fk) => fk.columns.length === 1 && fk.columns[0] === col.name,
@@ -69,10 +110,17 @@ export function guessWidget(table: TableInfo, col: ColumnInfo): Widget {
   );
   if (check) return "select";
 
+  // arrays first — an array's udt_name ("_int4") would otherwise fall through
+  if (isArrayColumn(col)) return "array";
   if (col.udtName === "bool") return "toggle";
   if (col.udtName === "date") return "date";
   if (col.udtName.startsWith("timestamp")) return "datetime";
   if (["json", "jsonb"].includes(col.udtName)) return "json";
+  if (col.udtName === "uuid") return "uuid";
+  if (col.udtName === "bytea") return "bytea";
+  if (col.udtName === "interval") return "interval";
+  if (RANGE_UDTS.has(col.udtName)) return "range";
+  if (NETWORK_UDTS.has(col.udtName)) return "network";
   if (NUMERIC_UDTS.has(col.udtName)) return "number";
   if (col.udtName === "text" && (col.maxLength === null || col.maxLength > 255))
     return "textarea";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
 
 interface AuditRow {
   id: number;
@@ -24,10 +25,10 @@ export default function AuditPage() {
   return (
     <div className="max-w-6xl mx-auto px-8 py-10">
       <h1 className="text-xl font-semibold mb-1">Audit log</h1>
-      <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>
+      <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
         Every query and write Lizard has executed, newest first.
       </p>
-      <div className="panel overflow-x-auto scrollbar-thin">
+      <Card className="overflow-x-auto scrollbar-thin">
         <table className="grid">
           <thead>
             <tr>
@@ -43,7 +44,7 @@ export default function AuditPage() {
           <tbody>
             {data?.map((r) => (
               <tr key={r.id}>
-                <td style={{ color: "var(--text-dim)" }}>{r.created_at}</td>
+                <td style={{ color: "var(--muted-foreground)" }}>{r.created_at}</td>
                 <td>
                   <span className="tag">{r.action}</span>
                 </td>
@@ -52,8 +53,8 @@ export default function AuditPage() {
                   {r.sql}
                 </td>
                 <td>{r.row_count ?? ""}</td>
-                <td style={{ color: "var(--text-dim)" }}>{r.duration_ms ?? ""}</td>
-                <td style={{ color: "var(--red)" }} title={r.error ?? ""}>
+                <td style={{ color: "var(--muted-foreground)" }}>{r.duration_ms ?? ""}</td>
+                <td style={{ color: "var(--destructive)" }} title={r.error ?? ""}>
                   {r.error ? r.error.slice(0, 60) : ""}
                 </td>
               </tr>
@@ -61,11 +62,11 @@ export default function AuditPage() {
           </tbody>
         </table>
         {data?.length === 0 && (
-          <p className="px-5 py-8 text-center text-[13px]" style={{ color: "var(--text-dim)" }}>
+          <p className="px-5 py-8 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
             Nothing logged yet.
           </p>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

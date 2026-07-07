@@ -73,13 +73,13 @@ function PanelCard({
             <div
               className="absolute right-0 z-20 mt-1 w-44 rounded-md border p-2 space-y-1"
               style={{
-                background: "var(--bg-raised)",
-                borderColor: "var(--border-strong)",
+                background: "var(--muted)",
+                borderColor: "var(--input)",
               }}
             >
               <div
                 className="flex items-center gap-1 text-[12px]"
-                style={{ color: "var(--text-dim)" }}
+                style={{ color: "var(--muted-foreground)" }}
               >
                 w
                 <Button variant="outline" size="sm"
@@ -126,7 +126,7 @@ function PanelCard({
           />
         )}
         {error && (
-          <p className="text-[12.5px] px-1" style={{ color: "var(--red)" }}>
+          <p className="text-[12.5px] px-1" style={{ color: "var(--destructive)" }}>
             {(error as Error).message}
           </p>
         )}
@@ -256,8 +256,8 @@ function AddPanelModal({
         onClick={onClose}
       />
       <div
-        className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-235 max-w-[95vw] panel p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
-        style={{ background: "var(--bg-panel)" }}
+        className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-235 max-w-[95vw] bg-card border border-border rounded-xl p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
+        style={{ background: "var(--card)" }}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-1">
@@ -265,7 +265,7 @@ function AddPanelModal({
               className="tag"
               style={
                 tab === "ai"
-                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  ? { color: "var(--primary)", borderColor: "var(--primary)" }
                   : {}
               }
               onClick={() => setTab("ai")}
@@ -276,7 +276,7 @@ function AddPanelModal({
               className="tag"
               style={
                 tab === "sql"
-                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  ? { color: "var(--primary)", borderColor: "var(--primary)" }
                   : {}
               }
               onClick={() => setTab("sql")}
@@ -294,7 +294,7 @@ function AddPanelModal({
             <div className="flex gap-1.5 mb-2 flex-wrap">
               <button
                 className="tag"
-                style={scope.length === 0 ? { color: "var(--accent)" } : {}}
+                style={scope.length === 0 ? { color: "var(--primary)" } : {}}
                 onClick={() => setScope([])}
               >
                 all connections
@@ -305,7 +305,7 @@ function AddPanelModal({
                   className="tag"
                   style={
                     scope.includes(c)
-                      ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                      ? { color: "var(--primary)", borderColor: "var(--primary)" }
                       : {}
                   }
                   onClick={() =>
@@ -354,7 +354,7 @@ function AddPanelModal({
                   className="tag"
                   style={
                     sqlConns.includes(c)
-                      ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                      ? { color: "var(--primary)", borderColor: "var(--primary)" }
                       : {}
                   }
                   onClick={() =>
@@ -398,7 +398,7 @@ function AddPanelModal({
               <div
                 className="rounded-md border px-4 py-3 text-[13px] mb-3"
                 style={{
-                  color: "var(--red)",
+                  color: "var(--destructive)",
                   borderColor: "rgba(229,83,75,.4)",
                 }}
               >
@@ -406,7 +406,7 @@ function AddPanelModal({
                 {preview.spec.sql && (
                   <pre
                     className="code mt-2 whitespace-pre-wrap"
-                    style={{ color: "var(--text-dim)" }}
+                    style={{ color: "var(--muted-foreground)" }}
                   >
                     {preview.spec.sql}
                   </pre>
@@ -417,7 +417,7 @@ function AddPanelModal({
               <div className="flex gap-5">
                 <div
                   className="flex-1 min-w-0 panel p-3"
-                  style={{ background: "var(--bg)" }}
+                  style={{ background: "var(--background)" }}
                 >
                   <div className="text-[13px] font-medium mb-2">
                     {preview.spec.title}
@@ -430,13 +430,13 @@ function AddPanelModal({
                   <details className="mt-2">
                     <summary
                       className="text-[12px] cursor-pointer"
-                      style={{ color: "var(--text-faint)" }}
+                      style={{ color: "var(--muted-foreground-faint)" }}
                     >
                       SQL & data
                     </summary>
                     <pre
                       className="code text-[12px] whitespace-pre-wrap mt-1"
-                      style={{ color: "var(--text-dim)" }}
+                      style={{ color: "var(--muted-foreground)" }}
                     >
                       {preview.spec.sql}
                     </pre>
@@ -499,13 +499,13 @@ export default function DashboardPage() {
 
   if (error)
     return (
-      <div className="px-8 py-10" style={{ color: "var(--red)" }}>
+      <div className="px-8 py-10" style={{ color: "var(--destructive)" }}>
         {(error as Error).message}
       </div>
     );
   if (!dash)
     return (
-      <div className="px-8 py-10" style={{ color: "var(--text-dim)" }}>
+      <div className="px-8 py-10" style={{ color: "var(--muted-foreground)" }}>
         Loading…
       </div>
     );
@@ -545,7 +545,7 @@ export default function DashboardPage() {
         <span className="flex-1" />
         <div
           className="flex items-center gap-1 text-[12px]"
-          style={{ color: "var(--text-dim)" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           refresh:
           {REFRESH_OPTIONS.map((o) => (
@@ -554,7 +554,7 @@ export default function DashboardPage() {
               className="tag"
               style={
                 dash.refreshSeconds === o.value
-                  ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                  ? { color: "var(--primary)", borderColor: "var(--primary)" }
                   : {}
               }
               onClick={() => patch({ refreshSeconds: o.value })}
@@ -571,7 +571,7 @@ export default function DashboardPage() {
       {dash.panels.length === 0 ? (
         <div
           className="panel px-6 py-14 text-center text-[13px]"
-          style={{ color: "var(--text-dim)" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           Empty dashboard. Add a panel by describing a chart, pasting SQL, or
           hitting “Visualize” anywhere in Lizard.

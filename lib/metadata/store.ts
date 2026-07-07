@@ -10,6 +10,8 @@ import type {
   VirtualFk,
   TableOverride,
   ColumnOverride,
+  RecordComment,
+  SavedView,
   SavedQuery,
   Dashboard,
   Panel,
@@ -72,6 +74,7 @@ function getDb(): DatabaseSync {
       widget TEXT,
       hidden INTEGER NOT NULL DEFAULT 0,
       readonly INTEGER NOT NULL DEFAULT 0,
+      redacted INTEGER NOT NULL DEFAULT 0,
       sort_order INTEGER,
       help TEXT,
       PRIMARY KEY (connection_id, schema_name, table_name, column_name)
@@ -89,6 +92,35 @@ function getDb(): DatabaseSync {
       hidden INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, connection_id, schema_name, table_name, column_name)
     );
+    -- Phase 8.9: per-record comments/annotations. Pure Lizard-side state,
+    -- keyed by a canonical PK string; works on any target table, no DDL there.
+    CREATE TABLE IF NOT EXISTS record_comments (
+      id TEXT PRIMARY KEY,
+      author_id TEXT NOT NULL,
+      author_name TEXT,
+      connection_id TEXT NOT NULL,
+      schema_name TEXT NOT NULL,
+      table_name TEXT NOT NULL,
+      pk_key TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_record_comments_target
+      ON record_comments (connection_id, schema_name, table_name, pk_key);
+    -- Phase 8.3: saved views (named filter/sort/columns/view-type per table).
+    CREATE TABLE IF NOT EXISTS saved_views (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      shared INTEGER NOT NULL DEFAULT 1,
+      connection_id TEXT NOT NULL,
+      schema_name TEXT NOT NULL,
+      table_name TEXT NOT NULL,
+      name TEXT NOT NULL,
+      config TEXT NOT NULL,   -- JSON: { filterSet, sort, sortDir, search, columnVisibility, viewType, groupBy }
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_saved_views_target
+      ON saved_views (connection_id, schema_name, table_name);
     CREATE TABLE IF NOT EXISTS saved_queries (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -148,6 +180,13 @@ function getDb(): DatabaseSync {
       PRIMARY KEY (user_id, connection_id)
     );
   `);
+  // Additive migration for columns added after the table already existed on
+  // disk — CREATE TABLE IF NOT EXISTS above is a no-op once the file exists.
+  try {
+    db.exec(`ALTER TABLE column_overrides ADD COLUMN redacted INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    // column already present
+  }
   return db;
 }
 
@@ -335,6 +374,7 @@ export function listColumnOverrides(): ColumnOverride[] {
     widget: (r.widget as string) || null,
     hidden: !!r.hidden,
     readonly: !!r.readonly,
+    redacted: !!r.redacted,
     sortOrder: r.sort_order as number | null,
     help: (r.help as string) || null,
   }));
@@ -349,11 +389,11 @@ export function getColumnOverrides(connectionId: string, schema: string, table: 
 export function setColumnOverride(o: ColumnOverride): void {
   getDb()
     .prepare(
-      `INSERT INTO column_overrides (connection_id, schema_name, table_name, column_name, label, widget, hidden, readonly, sort_order, help)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO column_overrides (connection_id, schema_name, table_name, column_name, label, widget, hidden, readonly, redacted, sort_order, help)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name, column_name)
        DO UPDATE SET label=excluded.label, widget=excluded.widget, hidden=excluded.hidden,
-                     readonly=excluded.readonly, sort_order=excluded.sort_order, help=excluded.help`
+                     readonly=excluded.readonly, redacted=excluded.redacted, sort_order=excluded.sort_order, help=excluded.help`
     )
     .run(
       o.connectionId,
@@ -364,6 +404,7 @@ export function setColumnOverride(o: ColumnOverride): void {
       o.widget,
       o.hidden ? 1 : 0,
       o.readonly ? 1 : 0,
+      o.redacted ? 1 : 0,
       o.sortOrder,
       o.help
     );
@@ -405,6 +446,150 @@ export function setUserColumnPref(
        DO UPDATE SET hidden=excluded.hidden`,
     )
     .run(userId, connectionId, schema, table, column, hidden ? 1 : 0);
+}
+
+// ---------- record comments (Phase 8.9) ----------
+
+// Canonical, order-independent string for a PK object so the same row always
+// maps to the same key regardless of how the caller built the object.
+export function canonicalPkKey(pk: Record<string, unknown>): string {
+  const keys = Object.keys(pk).sort();
+  return JSON.stringify(keys.map((k) => [k, pk[k] == null ? null : String(pk[k])]));
+}
+
+function rowToComment(r: Record<string, unknown>): RecordComment {
+  return {
+    id: r.id as string,
+    authorId: r.author_id as string,
+    authorName: (r.author_name as string) || null,
+    connectionId: r.connection_id as string,
+    schema: r.schema_name as string,
+    table: r.table_name as string,
+    pkKey: r.pk_key as string,
+    body: r.body as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function listRecordComments(
+  connectionId: string,
+  schema: string,
+  table: string,
+  pkKey: string,
+): RecordComment[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM record_comments
+       WHERE connection_id=? AND schema_name=? AND table_name=? AND pk_key=?
+       ORDER BY created_at`,
+    )
+    .all(connectionId, schema, table, pkKey) as Record<string, unknown>[];
+  return rows.map(rowToComment);
+}
+
+export function addRecordComment(
+  c: Omit<RecordComment, "id" | "createdAt">,
+): RecordComment {
+  const id = randomUUID();
+  getDb()
+    .prepare(
+      `INSERT INTO record_comments (id, author_id, author_name, connection_id, schema_name, table_name, pk_key, body)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      c.authorId,
+      c.authorName,
+      c.connectionId,
+      c.schema,
+      c.table,
+      c.pkKey,
+      c.body,
+    );
+  return getDb()
+    .prepare("SELECT * FROM record_comments WHERE id=?")
+    .get(id) as unknown as RecordComment;
+}
+
+// Returns the comment's author_id so the route can enforce author-or-admin.
+export function getRecordCommentAuthor(id: string): string | null {
+  const r = getDb()
+    .prepare("SELECT author_id FROM record_comments WHERE id=?")
+    .get(id) as { author_id?: string } | undefined;
+  return r?.author_id ?? null;
+}
+
+export function deleteRecordComment(id: string): void {
+  getDb().prepare("DELETE FROM record_comments WHERE id=?").run(id);
+}
+
+// ---------- saved views (Phase 8.3) ----------
+
+function rowToSavedView(r: Record<string, unknown>): SavedView {
+  return {
+    id: r.id as string,
+    ownerId: r.owner_id as string,
+    shared: !!r.shared,
+    connectionId: r.connection_id as string,
+    schema: r.schema_name as string,
+    table: r.table_name as string,
+    name: r.name as string,
+    config: JSON.parse((r.config as string) || "{}"),
+    createdAt: r.created_at as string,
+  };
+}
+
+// Views visible to a user: shared ones + their own private ones.
+export function listSavedViews(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+): SavedView[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM saved_views
+       WHERE connection_id=? AND schema_name=? AND table_name=?
+         AND (shared=1 OR owner_id=?)
+       ORDER BY name`,
+    )
+    .all(connectionId, schema, table, userId) as Record<string, unknown>[];
+  return rows.map(rowToSavedView);
+}
+
+export function addSavedView(
+  v: Omit<SavedView, "id" | "createdAt">,
+): SavedView {
+  const id = randomUUID();
+  getDb()
+    .prepare(
+      `INSERT INTO saved_views (id, owner_id, shared, connection_id, schema_name, table_name, name, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      v.ownerId,
+      v.shared ? 1 : 0,
+      v.connectionId,
+      v.schema,
+      v.table,
+      v.name,
+      JSON.stringify(v.config),
+    );
+  return getDb()
+    .prepare("SELECT * FROM saved_views WHERE id=?")
+    .get(id) as unknown as SavedView;
+}
+
+export function getSavedViewOwner(id: string): string | null {
+  const r = getDb()
+    .prepare("SELECT owner_id FROM saved_views WHERE id=?")
+    .get(id) as { owner_id?: string } | undefined;
+  return r?.owner_id ?? null;
+}
+
+export function deleteSavedView(id: string): void {
+  getDb().prepare("DELETE FROM saved_views WHERE id=?").run(id);
 }
 
 // ---------- saved queries ----------

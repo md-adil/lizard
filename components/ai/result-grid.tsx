@@ -6,7 +6,7 @@ export function ResultGrid({ result, maxRows = 100 }: { result: QueryResult; max
   const rows = result.rows.slice(0, maxRows);
   return (
     <div>
-      <div className="panel overflow-x-auto scrollbar-thin" style={{ maxHeight: 420, overflowY: "auto" }}>
+      <div className="bg-card border border-border rounded-xl overflow-x-auto scrollbar-thin" style={{ maxHeight: 420, overflowY: "auto" }}>
         <table className="grid">
           <thead>
             <tr>
@@ -25,7 +25,7 @@ export function ResultGrid({ result, maxRows = 100 }: { result: QueryResult; max
                   return (
                     <td key={c.name} title={String(v ?? "")}>
                       {v === null || v === undefined ? (
-                        <span style={{ color: "var(--text-faint)" }}>∅</span>
+                        <span style={{ color: "var(--muted-foreground-faint)" }}>∅</span>
                       ) : typeof v === "object" ? (
                         JSON.stringify(v)
                       ) : (
@@ -39,12 +39,12 @@ export function ResultGrid({ result, maxRows = 100 }: { result: QueryResult; max
           </tbody>
         </table>
         {rows.length === 0 && (
-          <p className="px-4 py-6 text-center text-[13px]" style={{ color: "var(--text-dim)" }}>
+          <p className="px-4 py-6 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
             No rows returned.
           </p>
         )}
       </div>
-      <div className="flex gap-3 mt-1.5 text-[12px]" style={{ color: "var(--text-faint)" }}>
+      <div className="flex gap-3 mt-1.5 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
         <span>{result.rowCount.toLocaleString()} rows{result.truncated && " (truncated at cap)"}</span>
         <span>{result.durationMs} ms</span>
         {result.rowCount > maxRows && <span>showing first {maxRows}</span>}

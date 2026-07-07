@@ -15,32 +15,32 @@ function looksLikeUrl(s: string): boolean {
 
 function Primitive({ value }: { value: unknown }) {
   if (value === null || value === undefined) {
-    return <span style={{ color: "var(--text-faint)" }}>∅</span>;
+    return <span style={{ color: "var(--muted-foreground-faint)" }}>∅</span>;
   }
   if (typeof value === "boolean") {
     return (
-      <span className="tag" style={{ color: value ? "var(--green)" : "var(--text-dim)", fontSize: 11 }}>
+      <span className="tag" style={{ color: value ? "var(--success)" : "var(--muted-foreground)", fontSize: 11 }}>
         {value ? "✓ true" : "✗ false"}
       </span>
     );
   }
   if (typeof value === "number") {
-    return <span style={{ color: "var(--purple)" }}>{Intl.NumberFormat("en").format(value)}</span>;
+    return <span style={{ color: "var(--info)" }}>{Intl.NumberFormat("en").format(value)}</span>;
   }
   const s = String(value);
   if (looksLikeUrl(s)) {
     return (
-      <a href={s} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }} className="underline break-all">
+      <a href={s} target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }} className="underline break-all">
         {s}
       </a>
     );
   }
-  return <span style={{ color: "var(--text)" }} className="break-words">{s}</span>;
+  return <span style={{ color: "var(--foreground)" }} className="break-words">{s}</span>;
 }
 
 function KeyLabel({ name }: { name: string }) {
   return (
-    <span className="text-[11px] font-medium uppercase tracking-wide shrink-0" style={{ color: "var(--text-faint)" }}>
+    <span className="text-[11px] font-medium uppercase tracking-wide shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
       {humanize(name)}
     </span>
   );
@@ -52,7 +52,7 @@ export function JsonView({ value, depth = 0 }: { value: unknown; depth?: number 
 
   // arrays
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span style={{ color: "var(--text-faint)" }}>—</span>;
+    if (value.length === 0) return <span style={{ color: "var(--muted-foreground-faint)" }}>—</span>;
     const allPrimitive = value.every((v) => v === null || typeof v !== "object");
     if (allPrimitive) {
       return (
@@ -72,9 +72,9 @@ export function JsonView({ value, depth = 0 }: { value: unknown; depth?: number 
           <div
             key={i}
             className="rounded-md border px-2.5 py-2"
-            style={{ borderColor: "var(--border)", background: depth % 2 === 0 ? "var(--bg-raised)" : "transparent" }}
+            style={{ borderColor: "var(--border)", background: depth % 2 === 0 ? "var(--muted)" : "transparent" }}
           >
-            <div className="text-[10.5px] mb-1" style={{ color: "var(--text-faint)" }}>
+            <div className="text-[10.5px] mb-1" style={{ color: "var(--muted-foreground-faint)" }}>
               #{i + 1}
             </div>
             <JsonView value={v} depth={depth + 1} />
@@ -87,14 +87,14 @@ export function JsonView({ value, depth = 0 }: { value: unknown; depth?: number 
   // objects
   if (isPlainObject(value)) {
     const entries = Object.entries(value);
-    if (entries.length === 0) return <span style={{ color: "var(--text-faint)" }}>{"{}"}</span>;
+    if (entries.length === 0) return <span style={{ color: "var(--muted-foreground-faint)" }}>{"{}"}</span>;
     return (
       <div className="space-y-2">
         {entries.map(([k, v]) => {
           const nested = isPlainObject(v) || (Array.isArray(v) && v.some((x) => typeof x === "object" && x !== null));
           if (nested) {
             return (
-              <div key={k} className="pl-3 border-l" style={{ borderColor: "var(--border-strong)" }}>
+              <div key={k} className="pl-3 border-l" style={{ borderColor: "var(--input)" }}>
                 <div className="mb-1">
                   <KeyLabel name={k} />
                 </div>

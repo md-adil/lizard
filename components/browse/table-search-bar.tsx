@@ -63,7 +63,7 @@ export function TableSearchBar({
          
           style={
             activeCount
-              ? { color: "var(--accent)", borderColor: "var(--accent)" }
+              ? { color: "var(--primary)", borderColor: "var(--primary)" }
               : {}
           }
           onClick={() => setFilterOpen((o) => !o)}
@@ -72,12 +72,12 @@ export function TableSearchBar({
           {activeCount > 0 && (
             <span
               className="ml-1 tag"
-              style={{ fontSize: 10, color: "var(--accent)" }}
+              style={{ fontSize: 10, color: "var(--primary)" }}
             >
               {activeCount}
             </span>
           )}
-          <span style={{ color: "var(--text-faint)", fontSize: 10 }}>
+          <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>
             {filterOpen ? "▲" : "▼"}
           </span>
         </Button>
@@ -86,7 +86,7 @@ export function TableSearchBar({
         <div
           className="flex flex-1"
           style={{
-            border: "1px solid var(--border-strong)",
+            border: "1px solid var(--input)",
             borderRadius: 7,
             overflow: "hidden",
             opacity: tooLarge || textColCount === 0 ? 0.5 : 1,
@@ -116,7 +116,7 @@ export function TableSearchBar({
             {searchInput && (
               <Button variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2"
                
-                style={{ color: "var(--text-faint)", fontSize: 12 }}
+                style={{ color: "var(--muted-foreground-faint)", fontSize: 12 }}
                 title="Clear search"
                 onClick={clear}
               >
@@ -130,7 +130,7 @@ export function TableSearchBar({
             style={{
               borderRadius: 0,
               border: "none",
-              borderLeft: "1px solid var(--accent)",
+              borderLeft: "1px solid var(--primary)",
               padding: "6px 12px",
             }}
             disabled={tooLarge || textColCount === 0 || isLoading}

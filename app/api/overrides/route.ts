@@ -28,6 +28,7 @@ const columnOverrideSchema = z.object({
   widget: z.string().nullable().default(null),
   hidden: z.boolean().default(false),
   readonly: z.boolean().default(false),
+  redacted: z.boolean().default(false),
   sortOrder: z.number().nullable().default(null),
   help: z.string().nullable().default(null),
 });
