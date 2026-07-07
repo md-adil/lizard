@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import {
-  listRecordComments,
-  addRecordComment,
-  canonicalPkKey,
-} from "@/lib/metadata/store";
+import { listRecordComments, addRecordComment, canonicalPkKey } from "@/lib/metadata/store";
 import { requireUser } from "@/lib/auth/session";
 
 // Per-record comments (Phase 8.9). Lizard-side only; the target DB is never
@@ -52,11 +48,7 @@ export async function POST(req: Request) {
     return ok(created, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return fail(
-        new Error(
-          e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-        ),
-      );
+      return fail(new Error(e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
     }
     return fail(e);
   }

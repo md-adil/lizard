@@ -23,9 +23,9 @@ export const aiQueryPlanSchema = z
 // target implies dialect (single→postgres pool, federated→duckdb). If the
 // model slips on the pairing, normalize instead of failing the whole request —
 // the guard + router still enforce the invariant at execution time.
-function normalizeTargetDialect<T extends { target: "single" | "federated"; connections: string[]; dialect: "postgres" | "duckdb" }>(
-  plan: T
-): T {
+function normalizeTargetDialect<
+  T extends { target: "single" | "federated"; connections: string[]; dialect: "postgres" | "duckdb" },
+>(plan: T): T {
   const target = plan.connections.length > 1 ? "federated" : plan.target;
   return {
     ...plan,

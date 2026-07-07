@@ -3,12 +3,7 @@
 // AuthError (caught by lib/api `fail`) so routes stay one-liners.
 import { cookies } from "next/headers";
 import type { User, Access } from "@/lib/auth/store";
-import {
-  getSessionUser,
-  canRead,
-  canWrite,
-  getUserById,
-} from "@/lib/auth/store";
+import { getSessionUser, canRead, canWrite, getUserById } from "@/lib/auth/store";
 import { getConnection } from "@/lib/metadata/store";
 
 export const SESSION_COOKIE = "lizard_session";

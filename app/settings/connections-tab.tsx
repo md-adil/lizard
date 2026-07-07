@@ -45,19 +45,15 @@ export function ConnectionsTab() {
         </Button>
       </div>
       <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
-        Register each microservice&apos;s Postgres database. Paste a connection
-        URI or fill the fields, test it, then Lizard introspects every schema
-        and makes the whole fleet browsable, editable, and queryable.
+        Register each microservice&apos;s Postgres database. Paste a connection URI or fill the fields, test it, then
+        Lizard introspects every schema and makes the whole fleet browsable, editable, and queryable.
       </p>
 
       {isLoading && <p style={{ color: "var(--muted-foreground)" }}>Loading…</p>}
 
       <div className="space-y-3">
         {connections?.map((c) => (
-          <Card
-            key={c.id}
-            className="px-5 py-4 flex items-center justify-between"
-          >
+          <Card key={c.id} className="px-5 py-4 flex items-center justify-between">
             <Link href={`/browse/${c.name}`} className="flex-1 min-w-0 mr-4">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-[14px]">{c.name}</span>
@@ -66,11 +62,7 @@ export function ConnectionsTab() {
                     read ok
                   </span>
                 ) : (
-                  <span
-                    className="tag"
-                    style={{ color: "var(--destructive)" }}
-                    title={c.status.read}
-                  >
+                  <span className="tag" style={{ color: "var(--destructive)" }} title={c.status.read}>
                     read failed
                   </span>
                 )}
@@ -80,11 +72,7 @@ export function ConnectionsTab() {
                       write ok
                     </span>
                   ) : (
-                    <span
-                      className="tag"
-                      style={{ color: "var(--destructive)" }}
-                      title={c.status.write ?? ""}
-                    >
+                    <span className="tag" style={{ color: "var(--destructive)" }} title={c.status.write ?? ""}>
                       write failed
                     </span>
                   )
@@ -92,10 +80,7 @@ export function ConnectionsTab() {
                   <span className="tag">read-only</span>
                 )}
               </div>
-              <div
-                className="text-[12.5px] mt-1 code"
-                style={{ color: "var(--muted-foreground)" }}
-              >
+              <div className="text-[12.5px] mt-1 code" style={{ color: "var(--muted-foreground)" }}>
                 {c.host}:{c.port}/{c.database}
               </div>
             </Link>
@@ -114,11 +99,7 @@ export function ConnectionsTab() {
                 variant="destructive"
                 size="sm"
                 onClick={() => {
-                  if (
-                    confirm(
-                      `Remove connection "${c.name}"? (The database itself is untouched.)`,
-                    )
-                  ) {
+                  if (confirm(`Remove connection "${c.name}"? (The database itself is untouched.)`)) {
                     deleteMutation.mutate(c.id);
                   }
                 }}
@@ -132,8 +113,7 @@ export function ConnectionsTab() {
           <Card className="px-6 py-10 text-center">
             <p className="text-[14px] mb-1">No connections yet</p>
             <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-              Add your first Postgres database to get a browsable console in
-              seconds.
+              Add your first Postgres database to get a browsable console in seconds.
             </p>
           </Card>
         )}

@@ -34,22 +34,11 @@ export async function POST(req: Request) {
   try {
     const user = await requireUser();
     const body = bodySchema.parse(await req.json());
-    setUserColumnPref(
-      user.id,
-      body.connectionId,
-      body.schema,
-      body.table,
-      body.column,
-      body.hidden,
-    );
+    setUserColumnPref(user.id, body.connectionId, body.schema, body.table, body.column, body.hidden);
     return ok({ saved: true });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return fail(
-        new Error(
-          e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-        ),
-      );
+      return fail(new Error(e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
     }
     return fail(e);
   }

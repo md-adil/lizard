@@ -7,19 +7,8 @@ import { useState } from "react";
 import Papa from "papaparse";
 import type { TableMeta } from "./useTableMeta";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 const SKIP = "__skip__";
 
@@ -61,9 +50,7 @@ export function ImportCsvDialog({
         // auto-match by exact or case-insensitive column name
         const auto: Record<string, string> = {};
         for (const h of head) {
-          const hit = columns.find(
-            (c) => c.col.name.toLowerCase() === h.trim().toLowerCase(),
-          );
+          const hit = columns.find((c) => c.col.name.toLowerCase() === h.trim().toLowerCase());
           auto[h] = hit ? hit.col.name : SKIP;
         }
         setMapping(auto);
@@ -85,14 +72,11 @@ export function ImportCsvDialog({
     setImporting(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/import`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows: mapped }),
-        },
-      );
+      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: mapped }),
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Import failed");
       setResult(body);
@@ -104,16 +88,11 @@ export function ImportCsvDialog({
     }
   }
 
-  const mappedCount = headers
-    ? Object.values(mapping).filter((v) => v !== SKIP).length
-    : 0;
+  const mappedCount = headers ? Object.values(mapping).filter((v) => v !== SKIP).length : 0;
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
-        className="flex flex-col gap-3"
-        style={{ width: 640, maxWidth: "95vw", maxHeight: "85vh" }}
-      >
+      <DialogContent className="flex flex-col gap-3" style={{ width: 640, maxWidth: "95vw", maxHeight: "85vh" }}>
         <DialogTitle>Import CSV — {meta.label}</DialogTitle>
 
         {!headers ? (
@@ -127,30 +106,20 @@ export function ImportCsvDialog({
           />
         ) : (
           <div className="flex-1 min-h-0 overflow-auto scrollbar-thin space-y-3">
-            <p
-              className="text-[12.5px]"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              {rows.length} row{rows.length === 1 ? "" : "s"} found · map each
-              CSV column to a table column ({mappedCount} mapped)
+            <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+              {rows.length} row{rows.length === 1 ? "" : "s"} found · map each CSV column to a table column (
+              {mappedCount} mapped)
             </p>
             <div className="space-y-1.5">
               {headers.map((h) => (
                 <div key={h} className="flex items-center gap-2">
-                  <span
-                    className="w-40 shrink-0 truncate code text-[12.5px]"
-                    title={h}
-                  >
+                  <span className="w-40 shrink-0 truncate code text-[12.5px]" title={h}>
                     {h}
                   </span>
-                  <span style={{ color: "var(--muted-foreground-faint)" }}>
-                    →
-                  </span>
+                  <span style={{ color: "var(--muted-foreground-faint)" }}>→</span>
                   <Select
                     value={mapping[h] ?? SKIP}
-                    onValueChange={(v) =>
-                      setMapping((m) => ({ ...m, [h]: v as string }))
-                    }
+                    onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v as string }))}
                   >
                     <SelectTrigger className="flex-1">
                       <SelectValue />
@@ -178,11 +147,7 @@ export function ImportCsvDialog({
                 </div>
                 <div className="text-[12px] space-y-1">
                   {rows.slice(0, 3).map((r, i) => (
-                    <div
-                      key={i}
-                      className="code truncate"
-                      style={{ color: "var(--muted-foreground-faint)" }}
-                    >
+                    <div key={i} className="code truncate" style={{ color: "var(--muted-foreground-faint)" }}>
                       {r.join(" · ")}
                     </div>
                   ))}
@@ -221,10 +186,7 @@ export function ImportCsvDialog({
 
         <DialogFooter>
           {headers && !result && (
-            <Button
-              disabled={importing || mappedCount === 0}
-              onClick={doImport}
-            >
+            <Button disabled={importing || mappedCount === 0} onClick={doImport}>
               {importing ? "Importing…" : `Import ${rows.length} rows`}
             </Button>
           )}

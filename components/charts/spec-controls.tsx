@@ -46,7 +46,9 @@ export function SpecControls({
           >
             <option value="">—</option>
             {cols.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
         </div>
@@ -88,7 +90,9 @@ export function SpecControls({
             {cols
               .filter((c) => !spec.yFields.includes(c) && c !== spec.xField)
               .map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
           </select>
         </div>

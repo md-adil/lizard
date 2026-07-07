@@ -13,7 +13,7 @@ const FEDERATED_TIMEOUT_MS = 20_000;
 export async function runFederated(
   connections: ConnectionConfig[],
   wrappedSql: string,
-  originalSql: string
+  originalSql: string,
 ): Promise<QueryResult> {
   const started = Date.now();
   const instance = await DuckDBInstance.create(":memory:");
@@ -23,7 +23,7 @@ export async function runFederated(
     for (const conn of connections) {
       // alias = connection name (validated as an identifier at registration)
       await db.run(
-        `ATTACH '${connectionUri(conn, "read").replace(/'/g, "''")}' AS ${conn.name} (TYPE postgres, READ_ONLY)`
+        `ATTACH '${connectionUri(conn, "read").replace(/'/g, "''")}' AS ${conn.name} (TYPE postgres, READ_ONLY)`,
       );
     }
     // lock the sandbox: no filesystem, no further configuration changes

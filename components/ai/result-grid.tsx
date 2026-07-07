@@ -6,7 +6,10 @@ export function ResultGrid({ result, maxRows = 100 }: { result: QueryResult; max
   const rows = result.rows.slice(0, maxRows);
   return (
     <div>
-      <div className="bg-card border border-border rounded-xl overflow-x-auto scrollbar-thin" style={{ maxHeight: 420, overflowY: "auto" }}>
+      <div
+        className="bg-card border border-border rounded-xl overflow-x-auto scrollbar-thin"
+        style={{ maxHeight: 420, overflowY: "auto" }}
+      >
         <table className="grid">
           <thead>
             <tr>
@@ -45,7 +48,9 @@ export function ResultGrid({ result, maxRows = 100 }: { result: QueryResult; max
         )}
       </div>
       <div className="flex gap-3 mt-1.5 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
-        <span>{result.rowCount.toLocaleString()} rows{result.truncated && " (truncated at cap)"}</span>
+        <span>
+          {result.rowCount.toLocaleString()} rows{result.truncated && " (truncated at cap)"}
+        </span>
         <span>{result.durationMs} ms</span>
         {result.rowCount > maxRows && <span>showing first {maxRows}</span>}
       </div>

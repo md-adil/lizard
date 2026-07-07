@@ -34,7 +34,10 @@ function tableBlock(t: TableInfo): string {
   // composite FKs (not representable on a single column line)
   const compositeFks = t.foreignKeys
     .filter((f) => f.columns.length > 1)
-    .map((f) => `  FK (${f.columns.join(", ")}) → ${f.referencedSchema}.${f.referencedTable} (${f.referencedColumns.join(", ")})`);
+    .map(
+      (f) =>
+        `  FK (${f.columns.join(", ")}) → ${f.referencedSchema}.${f.referencedTable} (${f.referencedColumns.join(", ")})`,
+    );
   return [header, ...cols, ...compositeFks].join("\n");
 }
 
@@ -66,9 +69,7 @@ export function serializeCatalog(catalog: Catalog, options: SerializeOptions = {
     : catalog.connections;
 
   const scopedNames = new Set(scope.map((c) => c.connectionName));
-  const fks = catalog.virtualFks.filter(
-    (fk) => scopedNames.has(fk.fromConnection) && scopedNames.has(fk.toConnection)
-  );
+  const fks = catalog.virtualFks.filter((fk) => scopedNames.has(fk.fromConnection) && scopedNames.has(fk.toConnection));
 
   let body = scope.map(connectionBlock).join("\n\n");
 
@@ -99,7 +100,7 @@ export function serializeCatalog(catalog: Catalog, options: SerializeOptions = {
                 lines.push(
                   `${t.schema}.${t.name} (~${t.rowEstimate} rows): columns elided — ${t.columns
                     .map((c) => c.name)
-                    .join(", ")}`
+                    .join(", ")}`,
                 );
               } else {
                 lines.push(tableBlock(t));

@@ -2,6 +2,7 @@
 
 // Client-side view of one table's metadata: catalog info merged with
 // overrides + virtual FKs. Heuristics are pure functions shared with the server.
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   ConnectionCatalog,
@@ -22,16 +23,8 @@ import {
   humanize,
   type Widget,
 } from "@/lib/introspect/heuristics";
-import {
-  vfkMatchesSource,
-  resolveToSchema,
-  vfkDisplayColumn,
-  vfkTargetColumn,
-} from "@/lib/introspect/virtual-fk";
-import {
-  resolveTableOverride,
-  resolveColumnOverrides,
-} from "@/lib/introspect/overrides";
+import { vfkMatchesSource, resolveToSchema, vfkDisplayColumn, vfkTargetColumn } from "@/lib/introspect/virtual-fk";
+import { resolveTableOverride, resolveColumnOverrides } from "@/lib/introspect/overrides";
 
 export interface CatalogResponse {
   connections: ConnectionCatalog[];
@@ -94,34 +87,18 @@ export function buildTableMeta(
   tableName: string,
 ): TableMeta | null {
   const conn = catalog.connections.find((c) => c.connectionName === connection);
-  const table = conn?.schemas
-    .find((s) => s.name === schema)
-    ?.tables.find((t) => t.name === tableName);
+  const table = conn?.schemas.find((s) => s.name === schema)?.tables.find((t) => t.name === tableName);
   if (!conn || !table) return null;
 
-  const tOverride = resolveTableOverride(
-    catalog.tableOverrides,
-    conn.connectionId,
-    schema,
-    tableName,
-  );
-  const cOverrides = resolveColumnOverrides(
-    catalog.columnOverrides,
-    conn.connectionId,
-    schema,
-    tableName,
-  );
-  const vfks = catalog.virtualFks.filter((v) =>
-    vfkMatchesSource(v, connection, schema, tableName),
-  );
+  const tOverride = resolveTableOverride(catalog.tableOverrides, conn.connectionId, schema, tableName);
+  const cOverrides = resolveColumnOverrides(catalog.columnOverrides, conn.connectionId, schema, tableName);
+  const vfks = catalog.virtualFks.filter((v) => vfkMatchesSource(v, connection, schema, tableName));
 
   const columns: ColumnMeta[] = table.columns.map((col) => {
     const o = cOverrides.find((x) => x.column === col.name);
     const baseWidget = guessWidget(table, col);
     const widget = (o?.widget as Widget) || baseWidget;
-    const realFk = table.foreignKeys.find(
-      (fk) => fk.columns.length === 1 && fk.columns[0] === col.name,
-    );
+    const realFk = table.foreignKeys.find((fk) => fk.columns.length === 1 && fk.columns[0] === col.name);
     const vfk = vfks.find((v) => vfkDisplayColumn(v) === col.name);
     const ref = realFk
       ? {
@@ -176,15 +153,21 @@ export function buildTableMeta(
   };
 }
 
-const INTERVAL_KEYS = new Set([
-  "years",
-  "months",
-  "days",
-  "hours",
-  "minutes",
-  "seconds",
-  "milliseconds",
-]);
+// Fetches the catalog and builds one table's TableMeta from route params —
+// the common case across browse/customize/record pages and reference
+// pickers. Components that already have `catalog` from a parent (e.g. to
+// build meta for several tables at once) should keep calling buildTableMeta
+// directly instead.
+export function useTableMeta(connection: string | undefined, schema: string | undefined, table: string | undefined) {
+  const { data: catalog, isLoading, error } = useCatalog();
+  const meta = useMemo(
+    () => (catalog && connection && schema && table ? buildTableMeta(catalog, connection, schema, table) : null),
+    [catalog, connection, schema, table],
+  );
+  return { meta, catalog, isLoading, error };
+}
+
+const INTERVAL_KEYS = new Set(["years", "months", "days", "hours", "minutes", "seconds", "milliseconds"]);
 const INTERVAL_SUFFIX: Record<string, string> = {
   years: "y",
   months: "mo",
@@ -200,16 +183,11 @@ const INTERVAL_SUFFIX: Record<string, string> = {
 // of {hours,minutes,...}. Render each readably instead of dumping raw JSON.
 export function formatCell(value: unknown): { text: string; muted: boolean } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
-  if (typeof value === "boolean")
-    return { text: value ? "✓" : "✗", muted: !value };
+  if (typeof value === "boolean") return { text: value ? "✓" : "✗", muted: !value };
   if (Array.isArray(value)) {
     if (value.length === 0) return { text: "[]", muted: true };
     const parts = value.map((v) =>
-      v === null || v === undefined
-        ? "∅"
-        : typeof v === "object"
-          ? JSON.stringify(v)
-          : String(v),
+      v === null || v === undefined ? "∅" : typeof v === "object" ? JSON.stringify(v) : String(v),
     );
     const text = parts.join(", ");
     return {
@@ -226,9 +204,7 @@ export function formatCell(value: unknown): { text: string; muted: boolean } {
     // interval → { hours, minutes, ... }
     const keys = Object.keys(o);
     if (keys.length > 0 && keys.every((k) => INTERVAL_KEYS.has(k))) {
-      const parts = keys
-        .filter((k) => Number(o[k]))
-        .map((k) => `${o[k]}${INTERVAL_SUFFIX[k]}`);
+      const parts = keys.filter((k) => Number(o[k])).map((k) => `${o[k]}${INTERVAL_SUFFIX[k]}`);
       return { text: parts.length ? parts.join(" ") : "0s", muted: !parts.length };
     }
     return { text: JSON.stringify(value), muted: false };

@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { X } from "lucide-react"
-import type { VariantProps } from "class-variance-authority"
+import * as React from "react";
+import { X } from "lucide-react";
+import type { VariantProps } from "class-variance-authority";
 
-import { cn } from "@/lib/utils"
-import { badgeVariants } from "./badge"
+import { cn } from "@/lib/utils";
+import { badgeVariants } from "./badge";
 
 // A clickable/removable pill built on Badge's visual language. Badge itself
 // is a single non-interactive element; Chip composes a label click-region and
@@ -21,9 +21,9 @@ function Chip({
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof badgeVariants> & {
-    active?: boolean
-    onRemove?: () => void
-    removeLabel?: string
+    active?: boolean;
+    onRemove?: () => void;
+    removeLabel?: string;
   }) {
   return (
     <span
@@ -33,17 +33,10 @@ function Chip({
         badgeVariants({ variant }),
         "gap-1 pr-1 has-[button:last-child:not(:first-child)]:pr-1",
         "data-active:border-primary/40 data-active:bg-primary/10 data-active:text-primary",
-        className
+        className,
       )}
     >
-      <button
-        type="button"
-        className={cn(
-          "max-w-32 truncate outline-none",
-          onRemove ? "" : "pr-1"
-        )}
-        {...props}
-      >
+      <button type="button" className={cn("max-w-32 truncate outline-none", onRemove ? "" : "pr-1")} {...props}>
         {children}
       </button>
       {onRemove && (
@@ -53,15 +46,15 @@ function Chip({
           title={removeLabel}
           aria-label={removeLabel}
           onClick={(e) => {
-            e.stopPropagation()
-            onRemove()
+            e.stopPropagation();
+            onRemove();
           }}
         >
           <X className="size-3" />
         </button>
       )}
     </span>
-  )
+  );
 }
 
-export { Chip }
+export { Chip };

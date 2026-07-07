@@ -8,12 +8,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCatalog, buildTableMeta } from "@/components/browse/useTableMeta";
-import {
-  SAME_SCHEMA,
-  matchesGlob,
-  isPattern,
-} from "@/lib/introspect/virtual-fk";
+import { useTableMeta } from "@/components/browse/useTableMeta";
+import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TableOverridesEditor } from "./table-overrides-editor";
@@ -34,27 +30,13 @@ export default function CustomizePage() {
     table: string;
   }>();
   const qc = useQueryClient();
-  const { data: catalog, isLoading } = useCatalog();
-  const meta = useMemo(
-    () =>
-      catalog
-        ? buildTableMeta(
-            catalog,
-            params.connection,
-            params.schema,
-            params.table,
-          )
-        : null,
-    [catalog, params],
-  );
+  const { meta, catalog, isLoading } = useTableMeta(params.connection, params.schema, params.table);
 
   // page-level source scope — governs both the overrides and the
   // relationship editor's source side. `null` means "not yet touched by the
   // user" so it falls back to whatever pattern already governs this table
   // (detected below) instead of always defaulting to the exact schema.
-  const [explicitScope, setExplicitScope] = useState<
-    "schema" | "pattern" | null
-  >(null);
+  const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
 
   const backHref = `/browse/${params.connection}/${params.schema}/${params.table}`;
@@ -75,9 +57,7 @@ export default function CustomizePage() {
   // — resolveTableOverride/vfkMatchesSource hand back the stored schema string
   // as-is, so we just check whether that string is a pattern.
   const detectedPattern =
-    (meta.tableOverride && isPattern(meta.tableOverride.schema)
-      ? meta.tableOverride.schema
-      : null) ??
+    (meta.tableOverride && isPattern(meta.tableOverride.schema) ? meta.tableOverride.schema : null) ??
     meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ??
     null;
 
@@ -109,31 +89,17 @@ export default function CustomizePage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={<Link href={`/browse/${params.connection}`} />}
-            >
-              {params.connection}
-            </BreadcrumbLink>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link href={`/browse/${params.connection}/${params.schema}`} />
-              }
-            >
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
               {params.schema}
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link
-                  href={`/browse/${params.connection}/${params.schema}/${meta.table.name}`}
-                />
-              }
-            >
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${meta.table.name}`} />}>
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -143,11 +109,7 @@ export default function CustomizePage() {
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-      <Tabs
-        value={scope}
-        onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")}
-        className="mb-4"
-      >
+      <Tabs value={scope} onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")} className="mb-4">
         <TabsList variant="line">
           <TabsTrigger value="schema">This schema ({meta.schema})</TabsTrigger>
           <TabsTrigger value="pattern">Schema pattern</TabsTrigger>
@@ -161,10 +123,7 @@ export default function CustomizePage() {
             value={pattern}
             onChange={(e) => setExplicitPattern(e.target.value)}
           />
-          <p
-            className="text-[11px] mt-1"
-            style={{ color: "var(--muted-foreground-faint)" }}
-          >
+          <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
             {pattern
               ? `matches ${matchedSchemas.length}: ${matchedSchemas.slice(0, 8).join(", ")}${matchedSchemas.length > 8 ? "…" : ""}`
               : "everything on this page is saved once and applied to every matching schema. Exact per-schema overrides still win."}
@@ -173,21 +132,12 @@ export default function CustomizePage() {
       )}
 
       <div className="grid lg:grid-cols-2 gap-8 items-start">
-        <TableOverridesEditor
-          meta={meta}
-          catalog={catalog}
-          saveSchema={saveSchema}
-          onSaved={invalidate}
-        />
+        <TableOverridesEditor meta={meta} catalog={catalog} saveSchema={saveSchema} onSaved={invalidate} />
         <div>
           <SectionTitle>Virtual relationships</SectionTitle>
-          <p
-            className="text-[12.5px] mb-3"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            Link this table to another — composite keys, constant filters,
-            case-insensitive matches. Powers reference labels/pickers and tells
-            the AI how to join.
+          <p className="text-[12.5px] mb-3" style={{ color: "var(--muted-foreground)" }}>
+            Link this table to another — composite keys, constant filters, case-insensitive matches. Powers reference
+            labels/pickers and tells the AI how to join.
           </p>
           <VirtualFkEditor
             meta={meta}
@@ -216,10 +166,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Pad({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="px-8 py-10 text-[14px]"
-      style={{ color: "var(--muted-foreground)" }}
-    >
+    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)" }}>
       {children}
     </div>
   );

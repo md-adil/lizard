@@ -33,14 +33,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 type Row = Record<string, unknown>;
 
@@ -77,8 +70,7 @@ const SK_WIDTHS = [72, 55, 88, 64, 91, 48, 76, 60, 83, 44];
 
 // initial width heuristic: short types narrow, references/text wider
 function defaultWidth(cm: ColumnMeta): number {
-  if (["bool", "int2", "int4", "int8", "date"].includes(cm.col.udtName))
-    return 120;
+  if (["bool", "int2", "int4", "int8", "date"].includes(cm.col.udtName)) return 120;
   if (cm.widget === "reference") return 230;
   if (cm.widget === "datetime") return 180;
   if (cm.widget === "textarea" || cm.widget === "json") return 300;
@@ -125,10 +117,7 @@ export function DataGrid({
               header: ({ table }) => (
                 <Checkbox
                   checked={table.getIsAllRowsSelected()}
-                  indeterminate={
-                    table.getIsSomeRowsSelected() &&
-                    !table.getIsAllRowsSelected()
-                  }
+                  indeterminate={table.getIsSomeRowsSelected() && !table.getIsAllRowsSelected()}
                   onCheckedChange={(v) => table.toggleAllRowsSelected(!!v)}
                   aria-label="Select all rows"
                 />
@@ -155,26 +144,17 @@ export function DataGrid({
             if (cm.redacted) {
               return <RedactedValue value={v} />;
             }
-            const label =
-              cm.ref && v != null
-                ? fkLabels[cm.col.name]?.[String(v)]
-                : undefined;
+            const label = cm.ref && v != null ? fkLabels[cm.col.name]?.[String(v)] : undefined;
             if (label) {
               return (
                 <>
                   {label}{" "}
-                  <span className="rounded border px-1 font-mono text-[10px] text-muted-foreground">
-                    {String(v)}
-                  </span>
+                  <span className="rounded border px-1 font-mono text-[10px] text-muted-foreground">{String(v)}</span>
                 </>
               );
             }
             const f = formatCell(v);
-            return (
-              <span className={f.muted ? "text-muted-foreground" : undefined}>
-                {f.text}
-              </span>
-            );
+            return <span className={f.muted ? "text-muted-foreground" : undefined}>{f.text}</span>;
           },
         }),
       ),
@@ -210,11 +190,7 @@ export function DataGrid({
     <div>
       <div className="flex justify-end mb-2">
         <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="outline" size="sm" className="gap-1.5 bg-card" />
-            }
-          >
+          <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1.5 bg-card" />}>
             <Columns3 className="size-3.5" />
             Columns
           </DropdownMenuTrigger>
@@ -231,9 +207,7 @@ export function DataGrid({
                     <DropdownMenuCheckboxItem
                       key={column.id}
                       checked={column.getIsVisible()}
-                      onCheckedChange={(checked) =>
-                        column.toggleVisibility(checked)
-                      }
+                      onCheckedChange={(checked) => column.toggleVisibility(checked)}
                       closeOnClick={false}
                     >
                       {cm?.label ?? column.id}
@@ -246,13 +220,8 @@ export function DataGrid({
       </div>
 
       <div className="relative">
-        {showRefetchOverlay && (
-          <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary" />
-        )}
-        <div
-          className="overflow-auto rounded-md border"
-          style={{ maxHeight }}
-        >
+        {showRefetchOverlay && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary" />}
+        <div className="overflow-auto rounded-md border" style={{ maxHeight }}>
           <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
@@ -268,16 +237,11 @@ export function DataGrid({
                           className="sticky top-0 z-1 bg-card"
                           style={{ width: w, minWidth: w, maxWidth: w }}
                         >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
+                          {flexRender(header.column.columnDef.header, header.getContext())}
                         </TableHead>
                       );
                     }
-                    const cm = columns.find(
-                      (c) => c.col.name === header.column.id,
-                    )!;
+                    const cm = columns.find((c) => c.col.name === header.column.id)!;
                     const active = sort === header.column.id;
                     return (
                       <TableHead
@@ -290,16 +254,8 @@ export function DataGrid({
                           className="block cursor-pointer truncate pr-3"
                           onClick={() => onToggleSort(header.column.id)}
                         >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                          {active && (
-                            <span className="text-primary">
-                              {" "}
-                              {sortDir === "asc" ? "▲" : "▼"}
-                            </span>
-                          )}
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {active && <span className="text-primary"> {sortDir === "asc" ? "▲" : "▼"}</span>}
                         </span>
                         <span
                           onMouseDown={header.getResizeHandler()}
@@ -307,9 +263,7 @@ export function DataGrid({
                           onDoubleClick={() => header.column.resetSize()}
                           onClick={(e) => e.stopPropagation()}
                           className={`absolute top-0 right-0 z-2 h-full w-1 cursor-col-resize touch-none select-none ${
-                            header.column.getIsResizing()
-                              ? "bg-primary"
-                              : "bg-transparent hover:bg-primary/60"
+                            header.column.getIsResizing() ? "bg-primary" : "bg-transparent hover:bg-primary/60"
                           }`}
                         />
                       </TableHead>
@@ -325,10 +279,7 @@ export function DataGrid({
                       {leafColumns.map((col, ci) => {
                         const w = col.getSize();
                         return (
-                          <TableCell
-                            key={col.id}
-                            style={{ width: w, minWidth: w, maxWidth: w }}
-                          >
+                          <TableCell key={col.id} style={{ width: w, minWidth: w, maxWidth: w }}>
                             <div
                               className="h-3 animate-pulse rounded bg-muted"
                               style={{
@@ -354,21 +305,10 @@ export function DataGrid({
                             key={cell.id}
                             className="truncate"
                             style={{ width: w, minWidth: w, maxWidth: w }}
-                            title={
-                              typeof v === "object" && v !== null
-                                ? JSON.stringify(v)
-                                : String(v ?? "")
-                            }
-                            onClick={
-                              cell.column.id === "__select"
-                                ? (e) => e.stopPropagation()
-                                : undefined
-                            }
+                            title={typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "")}
+                            onClick={cell.column.id === "__select" ? (e) => e.stopPropagation() : undefined}
                           >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </TableCell>
                         );
                       })}

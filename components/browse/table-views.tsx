@@ -31,27 +31,21 @@ function imageUrl(row: Row, meta: TableMeta): string | null {
   for (const cm of meta.columns) {
     if (cm.hidden) continue;
     const v = row[cm.col.name];
-    if (typeof v === "string" && /^https?:\/\//.test(v) && IMAGE_RE.test(v))
-      return v;
+    if (typeof v === "string" && /^https?:\/\//.test(v) && IMAGE_RE.test(v)) return v;
   }
   return null;
 }
 
 // A few key/value lines for a card face (skips the display column + hidden).
 function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
-  const cols = meta.columns
-    .filter((c) => !c.hidden && c.col.name !== meta.displayColumn)
-    .slice(0, 4);
+  const cols = meta.columns.filter((c) => !c.hidden && c.col.name !== meta.displayColumn).slice(0, 4);
   return (
     <div className="space-y-0.5 mt-1">
       {cols.map((cm) => {
         const f = formatCell(row[cm.col.name]);
         return (
           <div key={cm.col.name} className="flex gap-2 text-[12px] min-w-0">
-            <span
-              className="shrink-0"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
               {cm.label}
             </span>
             <span
@@ -69,15 +63,7 @@ function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
 
 // ---------------- Gallery ----------------
 
-export function GalleryView({
-  meta,
-  rows,
-  onOpen,
-}: {
-  meta: TableMeta;
-  rows: Row[];
-  onOpen: (row: Row) => void;
-}) {
+export function GalleryView({ meta, rows, onOpen }: { meta: TableMeta; rows: Row[]; onOpen: (row: Row) => void }) {
   if (rows.length === 0) return null;
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
@@ -92,17 +78,10 @@ export function GalleryView({
           >
             {img && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={img}
-                alt=""
-                className="w-full h-32 object-cover"
-                style={{ background: "var(--muted)" }}
-              />
+              <img src={img} alt="" className="w-full h-32 object-cover" style={{ background: "var(--muted)" }} />
             )}
             <div className="p-3">
-              <div className="font-medium truncate">
-                {displayValue(meta, row)}
-              </div>
+              <div className="font-medium truncate">{displayValue(meta, row)}</div>
               <CardFields meta={meta} row={row} />
             </div>
           </Card>
@@ -165,14 +144,11 @@ export function KanbanView({
     if (!canWrite) return;
     const value = toKey === NULL_KEY ? null : toKey;
     if (groupOf(row) === toKey) return;
-    await fetch(
-      `/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pk: rowPk(meta, row), data: { [groupBy]: value } }),
-      },
-    );
+    await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pk: rowPk(meta, row), data: { [groupBy]: value } }),
+    });
     onChanged();
   }
 
@@ -209,9 +185,7 @@ export function KanbanView({
                     onClick={() => onOpen(row)}
                     className="p-3 cursor-pointer hover:ring-2 hover:ring-[var(--primary)]"
                   >
-                    <div className="font-medium truncate text-[13px]">
-                      {displayValue(meta, row)}
-                    </div>
+                    <div className="font-medium truncate text-[13px]">{displayValue(meta, row)}</div>
                     <CardFields meta={meta} row={row} />
                   </Card>
                 );
@@ -335,9 +309,7 @@ export function CalendarView({
                     </button>
                   ))}
                   {(byDay.get(day)?.length ?? 0) > 4 && (
-                    <div style={{ color: "var(--muted-foreground-faint)" }}>
-                      +{byDay.get(day)!.length - 4} more
-                    </div>
+                    <div style={{ color: "var(--muted-foreground-faint)" }}>+{byDay.get(day)!.length - 4} more</div>
                   )}
                 </div>
               </>
@@ -382,19 +354,10 @@ export function TreeView({
   return (
     <div className="panel p-2 text-[13px]">
       {roots.map((row) => (
-        <TreeNode
-          key={idOf(row)}
-          meta={meta}
-          row={row}
-          childrenOf={childrenOf}
-          idOf={idOf}
-          depth={0}
-          onOpen={onOpen}
-        />
+        <TreeNode key={idOf(row)} meta={meta} row={row} childrenOf={childrenOf} idOf={idOf} depth={0} onOpen={onOpen} />
       ))}
       <p className="px-2 pt-1 text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>
-        Tree is built from the loaded page; deeper descendants may be on other
-        pages.
+        Tree is built from the loaded page; deeper descendants may be on other pages.
       </p>
     </div>
   );
@@ -419,10 +382,7 @@ function TreeNode({
   const kids = childrenOf.get(idOf(row)) ?? [];
   return (
     <div>
-      <div
-        className="flex items-center gap-1 rounded px-1 py-1 hoverable"
-        style={{ paddingLeft: 4 + depth * 16 }}
-      >
+      <div className="flex items-center gap-1 rounded px-1 py-1 hoverable" style={{ paddingLeft: 4 + depth * 16 }}>
         <button
           className="w-4 text-center shrink-0"
           style={{ color: "var(--muted-foreground-faint)", visibility: kids.length ? "visible" : "hidden" }}
@@ -430,17 +390,11 @@ function TreeNode({
         >
           {open ? "▾" : "▸"}
         </button>
-        <button
-          className="flex-1 min-w-0 truncate text-left"
-          onClick={() => onOpen(row)}
-        >
+        <button className="flex-1 min-w-0 truncate text-left" onClick={() => onOpen(row)}>
           {displayValue(meta, row)}
         </button>
         {kids.length > 0 && (
-          <span
-            className="tag shrink-0"
-            style={{ fontSize: 10 }}
-          >
+          <span className="tag shrink-0" style={{ fontSize: 10 }}>
             {kids.length}
           </span>
         )}

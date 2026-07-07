@@ -86,7 +86,9 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[15px] font-semibold">Visualize result</h3>
-              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>✕</Button>
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+                ✕
+              </Button>
             </div>
             <div className="flex gap-5">
               <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--background)" }}>
@@ -100,7 +102,9 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
                   <select className="input mb-2" value={dashboardId} onChange={(e) => setDashboardId(e.target.value)}>
                     <option value="">＋ New dashboard…</option>
                     {dashboards?.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
                     ))}
                   </select>
                   {!dashboardId && (

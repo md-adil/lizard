@@ -133,12 +133,10 @@ describe("CRUD", () => {
   });
 
   it("surfaces constraint violations as friendly errors", async () => {
-    await expect(
-      createRow("users_service", "public", "customers", { name: "No Email" })
-    ).rejects.toThrow(/required/i);
-    await expect(
-      createRow("users_service", "crm", "leads", { status: "bogus" })
-    ).rejects.toThrow(/check constraint|invalid/i);
+    await expect(createRow("users_service", "public", "customers", { name: "No Email" })).rejects.toThrow(/required/i);
+    await expect(createRow("users_service", "crm", "leads", { status: "bogus" })).rejects.toThrow(
+      /check constraint|invalid/i,
+    );
   });
 });
 
@@ -161,7 +159,7 @@ describe("guarded query execution", () => {
         connections: ["users_service"],
         sql: "DELETE FROM customers",
         dialect: "postgres",
-      })
+      }),
     ).rejects.toThrow(/Forbidden|Only SELECT/);
   });
 
@@ -182,7 +180,7 @@ describe("guarded query execution", () => {
 
   it("rejects unknown connections", async () => {
     await expect(
-      runGuardedQuery({ target: "single", connections: ["nope"], sql: "SELECT 1", dialect: "postgres" })
+      runGuardedQuery({ target: "single", connections: ["nope"], sql: "SELECT 1", dialect: "postgres" }),
     ).rejects.toThrow(/Unknown connection/);
   });
 });

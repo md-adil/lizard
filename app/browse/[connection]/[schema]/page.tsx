@@ -21,15 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-function TableCard({
-  connection,
-  schema,
-  table,
-}: {
-  connection: string;
-  schema: string;
-  table: TableInfo;
-}) {
+function TableCard({ connection, schema, table }: { connection: string; schema: string; table: TableInfo }) {
   const href = `/browse/${connection}/${schema}/${table.name}`;
   return (
     <div className="panel relative group flex text-[13px] font-medium overflow-hidden">
@@ -50,13 +42,9 @@ function TableCard({
       </Link>
       <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" />}>
-            ⋯
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" />}>⋯</DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem render={<Link href={href} />}>
-              Open table
-            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href={href} />}>Open table</DropdownMenuItem>
             <DropdownMenuItem render={<a href={href} target="_blank" rel="noreferrer" />}>
               Open in new tab
             </DropdownMenuItem>
@@ -72,21 +60,13 @@ export default function SchemaPage() {
   const { data: catalog, isLoading, error } = useCatalog();
   const [search, setSearch] = useState("");
 
-  const conn = useMemo(
-    () => catalog?.connections.find((c) => c.connectionName === connection),
-    [catalog, connection],
-  );
+  const conn = useMemo(() => catalog?.connections.find((c) => c.connectionName === connection), [catalog, connection]);
 
-  const schemaData = useMemo(
-    () => conn?.schemas.find((s) => s.name === schema),
-    [conn, schema],
-  );
+  const schemaData = useMemo(() => conn?.schemas.find((s) => s.name === schema), [conn, schema]);
 
   if (isLoading) return <PagePad>Loading…</PagePad>;
-  if (error)
-    return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
-  if (!conn || !schemaData)
-    return <PagePad>Schema &quot;{schema}&quot; not found.</PagePad>;
+  if (error) return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
+  if (!conn || !schemaData) return <PagePad>Schema &quot;{schema}&quot; not found.</PagePad>;
 
   const q = search.trim().toLowerCase();
   const sortedTables = schemaData.tables
@@ -103,9 +83,7 @@ export default function SchemaPage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${connection}`} />}>
-              {conn.connectionName}
-            </BreadcrumbLink>
+            <BreadcrumbLink render={<Link href={`/browse/${connection}`} />}>{conn.connectionName}</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -143,13 +121,7 @@ export default function SchemaPage() {
   );
 }
 
-function PagePad({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-}) {
+function PagePad({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
       {children}

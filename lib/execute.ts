@@ -79,7 +79,7 @@ export async function runGuardedQuery(req: QueryRequest, actor = "admin"): Promi
 async function runSingle(
   conn: NonNullable<ReturnType<typeof getConnection>>,
   wrappedSql: string,
-  originalSql: string
+  originalSql: string,
 ): Promise<QueryResult> {
   const started = Date.now();
   const pool = getPool(conn, "read");

@@ -82,7 +82,7 @@ async function schemaForScope(connections?: string[]): Promise<string> {
 export async function generateQueryPlan(
   question: string,
   connections?: string[],
-  history: HistoryTurn[] = []
+  history: HistoryTurn[] = [],
 ): Promise<AiQueryPlan> {
   const client = getAnthropicClient();
   const schemaText = await schemaForScope(connections);
@@ -93,7 +93,7 @@ export async function generateQueryPlan(
     messages.push({
       role: "assistant",
       content: `Previously generated plan — target: ${turn.plan.target}, connections: ${turn.plan.connections.join(
-        ", "
+        ", ",
       )}, dialect: ${turn.plan.dialect}\nSQL:\n${turn.plan.sql}`,
     });
   }

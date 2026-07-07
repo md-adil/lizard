@@ -49,12 +49,8 @@ export default function HomePage() {
           {user?.name ? `, ${user.name.split(" ")[0]}` : ""}
         </h1>
       </div>
-      <p
-        className="text-[14.5px] mb-8"
-        style={{ color: "var(--muted-foreground)" }}
-      >
-        Your Postgres fleet, browsable, editable, and queryable — without
-        writing a line of SQL.
+      <p className="text-[14.5px] mb-8" style={{ color: "var(--muted-foreground)" }}>
+        Your Postgres fleet, browsable, editable, and queryable — without writing a line of SQL.
       </p>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
@@ -64,10 +60,7 @@ export default function HomePage() {
               <div className="px-4 py-4">
                 <span className="text-xl leading-none">{q.icon}</span>
                 <div className="text-[13px] font-medium mt-2">{q.label}</div>
-                <div
-                  className="text-[11.5px] mt-0.5"
-                  style={{ color: "var(--muted-foreground-faint)" }}
-                >
+                <div className="text-[11.5px] mt-0.5" style={{ color: "var(--muted-foreground-faint)" }}>
                   {q.desc}
                 </div>
               </div>
@@ -83,29 +76,18 @@ export default function HomePage() {
         >
           Your databases
         </h2>
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/settings" />}
-        >
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/settings" />}>
           Manage connections
         </Button>
       </div>
 
-      {isLoading && (
-        <p style={{ color: "var(--muted-foreground)" }}>Loading…</p>
-      )}
+      {isLoading && <p style={{ color: "var(--muted-foreground)" }}>Loading…</p>}
 
       {!isLoading && connections.length === 0 && (
         <Card className="px-6 py-10 text-center">
           <p className="text-[14px] mb-1">No connections yet</p>
-          <p
-            className="text-[13px] mb-4"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            Add your first Postgres database in Settings to get a browsable
-            console in seconds.
+          <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
+            Add your first Postgres database in Settings to get a browsable console in seconds.
           </p>
           <Button nativeButton={false} render={<Link href="/settings" />}>
             + Add connection
@@ -117,37 +99,22 @@ export default function HomePage() {
         {connections.map((c) => {
           const tableCount = c.schemas.reduce((n, s) => n + s.tables.length, 0);
           return (
-            <Link
-              key={c.connectionId}
-              href={`/browse/${c.connectionName}`}
-              className="block"
-            >
+            <Link key={c.connectionId} href={`/browse/${c.connectionName}`} className="block">
               <Card className="p-0 hover:bg-accent/40 transition-colors">
                 <div className="px-5 py-4">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-[14px]">
-                      {c.connectionName}
-                    </span>
+                    <span className="font-semibold text-[14px]">{c.connectionName}</span>
                     {c.error && (
-                      <span
-                        className="tag"
-                        style={{ color: "var(--destructive)" }}
-                      >
+                      <span className="tag" style={{ color: "var(--destructive)" }}>
                         error
                       </span>
                     )}
                   </div>
-                  <div
-                    className="text-[12.5px] mt-1 code"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
+                  <div className="text-[12.5px] mt-1 code" style={{ color: "var(--muted-foreground)" }}>
                     {c.database}
                   </div>
                   {!c.error && (
-                    <div
-                      className="text-[11.5px] mt-2"
-                      style={{ color: "var(--muted-foreground-faint)" }}
-                    >
+                    <div className="text-[11.5px] mt-2" style={{ color: "var(--muted-foreground-faint)" }}>
                       {c.schemas.length} schema
                       {c.schemas.length !== 1 ? "s" : ""} · {tableCount} table
                       {tableCount !== 1 ? "s" : ""}

@@ -13,7 +13,15 @@ const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 // surface (#11151f dark, #ffffff light). Fixed assignment order, never cycled.
 const CHART_THEMES: Record<
   ThemeName,
-  { palette: string[]; textDim: string; gridLine: string; tooltipBg: string; tooltipBorder: string; tooltipText: string; surface: string }
+  {
+    palette: string[];
+    textDim: string;
+    gridLine: string;
+    tooltipBg: string;
+    tooltipBorder: string;
+    tooltipText: string;
+    surface: string;
+  }
 > = {
   dark: {
     palette: ["#3987e5", "#199e70", "#c98500", "#9085e9", "#e66767", "#d55181"],
@@ -40,7 +48,10 @@ type ChartTheme = (typeof CHART_THEMES)[ThemeName];
 export function formatNumber(v: unknown): string {
   const n = Number(v);
   if (v === null || v === undefined || isNaN(n)) return String(v ?? "∅");
-  return Intl.NumberFormat("en", { notation: Math.abs(n) >= 10000 ? "compact" : "standard", maximumFractionDigits: 2 }).format(n);
+  return Intl.NumberFormat("en", {
+    notation: Math.abs(n) >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
 function baseOption(t: ChartTheme) {
@@ -84,7 +95,9 @@ function buildSeriesData(spec: ChartSpec, result: QueryResult) {
     const groups = [...new Set(rows.map((r) => String(r[spec.seriesField!])))].slice(0, 6);
     for (const g of groups) {
       const byX = new Map(
-        rows.filter((r) => String(r[spec.seriesField!]) === g).map((r) => [String(r[xField!]).slice(0, temporal ? 10 : 60), Number(r[y])])
+        rows
+          .filter((r) => String(r[spec.seriesField!]) === g)
+          .map((r) => [String(r[xField!]).slice(0, temporal ? 10 : 60), Number(r[y])]),
       );
       series.push({ name: g, data: xValues.map((x) => byX.get(x) ?? null) });
     }
@@ -97,7 +110,15 @@ function buildSeriesData(spec: ChartSpec, result: QueryResult) {
   return { xValues, series };
 }
 
-export function ChartRenderer({ spec, result, height = 300 }: { spec: ChartSpec; result: QueryResult; height?: number }) {
+export function ChartRenderer({
+  spec,
+  result,
+  height = 300,
+}: {
+  spec: ChartSpec;
+  result: QueryResult;
+  height?: number;
+}) {
   const themeName = useTheme();
   const t = CHART_THEMES[themeName];
 

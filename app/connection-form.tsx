@@ -77,12 +77,11 @@ export function ConnectionForm({
     write: string | null;
   } | null>(null);
 
-  const set =
-    (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((f) => ({
-        ...f,
-        [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value,
-      }));
+  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({
+      ...f,
+      [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value,
+    }));
 
   const applyUri = (raw: string) => {
     setUri(raw);
@@ -96,9 +95,7 @@ export function ConnectionForm({
       setUriMsg("Not a valid postgres:// URI");
       return;
     }
-    setUriMsg(
-      "Parsed ✓ — read & write credentials filled (adjust write role if it differs)",
-    );
+    setUriMsg("Parsed ✓ — read & write credentials filled (adjust write role if it differs)");
     setForm((f) => ({
       ...f,
       name: f.name || p.name,
@@ -201,11 +198,7 @@ export function ConnectionForm({
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-40"
-        style={{ background: "var(--overlay)" }}
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={onClose} />
       <Card className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-[640px] max-w-[94vw] p-6 max-h-[90vh] overflow-y-auto scrollbar-thin">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[16px] font-semibold">
@@ -228,9 +221,7 @@ export function ConnectionForm({
             <p
               className="text-[12px] mt-1"
               style={{
-                color: uriMsg.startsWith("Parsed")
-                  ? "var(--success)"
-                  : "var(--warning)",
+                color: uriMsg.startsWith("Parsed") ? "var(--success)" : "var(--warning)",
               }}
             >
               {uriMsg}
@@ -240,23 +231,12 @@ export function ConnectionForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="label">
-              Name (identifier, e.g. users_service)
-            </label>
-            <input
-              className="input"
-              value={form.name}
-              onChange={set("name")}
-              placeholder="users_service"
-            />
+            <label className="label">Name (identifier, e.g. users_service)</label>
+            <input className="input" value={form.name} onChange={set("name")} placeholder="users_service" />
           </div>
           <div>
             <label className="label">Database</label>
-            <input
-              className="input"
-              value={form.database}
-              onChange={set("database")}
-            />
+            <input className="input" value={form.database} onChange={set("database")} />
           </div>
           <div>
             <label className="label">Host</label>
@@ -268,12 +248,7 @@ export function ConnectionForm({
           </div>
           <div>
             <label className="label">Read user (SELECT-only role)</label>
-            <input
-              className="input"
-              value={form.readUser}
-              onChange={set("readUser")}
-              placeholder="lizard_read"
-            />
+            <input className="input" value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
           </div>
           <div>
             <label className="label">Read password</label>
@@ -286,15 +261,8 @@ export function ConnectionForm({
             />
           </div>
           <div>
-            <label className="label">
-              Write user (optional — enables CRUD)
-            </label>
-            <input
-              className="input"
-              value={form.writeUser}
-              onChange={set("writeUser")}
-              placeholder="lizard_write"
-            />
+            <label className="label">Write user (optional — enables CRUD)</label>
+            <input className="input" value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
           </div>
           <div>
             <label className="label">Write password</label>
@@ -308,12 +276,8 @@ export function ConnectionForm({
           </div>
         </div>
 
-        <label
-          className="flex items-center gap-2 mt-4 text-[13px]"
-          style={{ color: "var(--muted-foreground)" }}
-        >
-          <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use
-          SSL
+        <label className="flex items-center gap-2 mt-4 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+          <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
         </label>
 
         {testResult && (
@@ -336,12 +300,7 @@ export function ConnectionForm({
         <div className="mt-5 flex items-center gap-2">
           <Button
             variant="outline"
-            disabled={
-              testMutation.isPending ||
-              !form.host ||
-              !form.database ||
-              !form.readUser
-            }
+            disabled={testMutation.isPending || !form.host || !form.database || !form.readUser}
             onClick={() => testMutation.mutate()}
           >
             {testMutation.isPending ? "Testing…" : "Test connection"}
@@ -350,15 +309,8 @@ export function ConnectionForm({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            disabled={saveMutation.isPending}
-            onClick={() => saveMutation.mutate()}
-          >
-            {saveMutation.isPending
-              ? "Saving…"
-              : mode === "create"
-                ? "Save connection"
-                : "Save changes"}
+          <Button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            {saveMutation.isPending ? "Saving…" : mode === "create" ? "Save connection" : "Save changes"}
           </Button>
         </div>
       </Card>

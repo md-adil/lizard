@@ -12,6 +12,7 @@ import { findUpdatedAtColumn } from "@/lib/introspect/heuristics";
 import { getPool } from "@/lib/db/pools";
 import {
   getConnection,
+  getColumnOverrides,
   listTableOverrides,
   listVirtualFks,
   logAudit,
@@ -587,18 +588,34 @@ function coerceValue(
   table: TableInfo,
   column: string,
   value: unknown,
+  jsonOverrideColumns: Set<string>,
 ): unknown {
   if (value === "" || value === undefined) return null;
   const col = table.columns.find((c) => c.name === column);
   if (
     col &&
-    ["json", "jsonb"].includes(col.udtName) &&
+    (["json", "jsonb"].includes(col.udtName) || jsonOverrideColumns.has(column)) &&
     typeof value === "object" &&
     value !== null
   ) {
     return JSON.stringify(value);
   }
   return value;
+}
+
+// Columns whose widget override forces "json" — e.g. a text column storing
+// serialized JSON. These need the same stringify-before-write treatment as a
+// real json/jsonb column even though their introspected udtName is "text".
+function jsonOverrideColumns(
+  connectionId: string,
+  schema: string,
+  tableName: string,
+): Set<string> {
+  return new Set(
+    getColumnOverrides(connectionId, schema, tableName)
+      .filter((o) => o.widget === "json")
+      .map((o) => o.column),
+  );
 }
 
 export async function createRow(
@@ -611,7 +628,8 @@ export async function createRow(
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const cols = writableColumns(table, data);
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
-  const values = cols.map((c) => coerceValue(table, c, data[c]));
+  const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
+  const values = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
   const placeholders = cols.map((_, i) => `$${i + 1}`);
   const sql = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(tableName)} (${cols.map(quoteIdent).join(", ")})
                VALUES (${placeholders.join(", ")}) RETURNING *`;
@@ -654,6 +672,7 @@ export async function bulkInsertRows(
   const { conn, table } = await resolveTable(connection, schema, tableName);
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
 
+  const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
   const pool = getPool(conn, "write");
   const client = await pool.connect();
   let inserted = 0;
@@ -666,7 +685,7 @@ export async function bulkInsertRows(
         errors.push({ row: i, message: "No writable columns" });
         continue;
       }
-      const values = cols.map((c) => coerceValue(table, c, rows[i][c]));
+      const values = cols.map((c) => coerceValue(table, c, rows[i][c], jsonCols));
       const placeholders = cols.map((_, j) => `$${j + 1}`);
       await client.query("SAVEPOINT import_row");
       try {
@@ -711,7 +730,8 @@ export async function updateRow(
     (c) => !table.primaryKey.includes(c),
   );
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
-  const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c]));
+  const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
+  const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
   const sets = cols.map((c, i) => `${quoteIdent(c)} = $${i + 1}`);
   let where = pkWhere(table, pk, values);
   // optimistic concurrency when the table has a recognisable timestamp column

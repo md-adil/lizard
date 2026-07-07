@@ -1,11 +1,6 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import {
-  listTableOverrides,
-  listColumnOverrides,
-  setTableOverride,
-  setColumnOverride,
-} from "@/lib/metadata/store";
+import { listTableOverrides, listColumnOverrides, setTableOverride, setColumnOverride } from "@/lib/metadata/store";
 import { requireUser, requireEditor } from "@/lib/auth/session";
 
 const tableOverrideSchema = z.object({

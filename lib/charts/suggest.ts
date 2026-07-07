@@ -38,9 +38,7 @@ export function classifyColumns(result: QueryResult): Record<string, ColumnRole>
       continue;
     }
     if (
-      values.every(
-        (v) => typeof v === "string" && (/^\d{4}-\d{2}-\d{2}/.test(v) || !isNaN(Date.parse(v)))
-      ) &&
+      values.every((v) => typeof v === "string" && (/^\d{4}-\d{2}-\d{2}/.test(v) || !isNaN(Date.parse(v)))) &&
       values.some((v) => /^\d{4}-\d{2}-\d{2}/.test(String(v)))
     ) {
       roles[col.name] = "temporal";

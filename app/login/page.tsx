@@ -49,9 +49,7 @@ export default function LoginPage() {
           <span className="text-lg font-semibold tracking-tight">Lizard</span>
         </div>
         <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
-          {needsSetup
-            ? "Create the first admin account to get started."
-            : "Sign in to your data console."}
+          {needsSetup ? "Create the first admin account to get started." : "Sign in to your data console."}
         </p>
 
         <div className="space-y-3">
@@ -85,11 +83,14 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <p className="mt-3 text-[13px]" style={{ color: "var(--destructive)" }}>{error}</p>
+          <p className="mt-3 text-[13px]" style={{ color: "var(--destructive)" }}>
+            {error}
+          </p>
         )}
 
-        <Button className="w-full justify-center mt-5"
-         
+        <Button
+          className="w-full justify-center mt-5"
+
           disabled={busy || !email || !password}
           onClick={submit}
         >

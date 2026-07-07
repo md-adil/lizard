@@ -67,8 +67,10 @@ export default function DashboardsPage() {
                 {d.refreshSeconds ? ` · refreshes every ${d.refreshSeconds}s` : ""}
               </div>
             </Link>
-            <Button variant="destructive" size="sm"
-             
+            <Button
+              variant="destructive"
+              size="sm"
+
               onClick={() => confirm(`Delete dashboard "${d.name}"?`) && remove.mutate(d.id)}
             >
               ✕

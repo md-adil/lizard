@@ -21,22 +21,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div className="h-screen flex items-center justify-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+      <div
+        className="h-screen flex items-center justify-center text-[13px]"
+        style={{ color: "var(--muted-foreground)" }}
+      >
         {loading ? "Loading…" : "Redirecting to sign in…"}
       </div>
     );
   }
 
   return (
-    <SidebarProvider
-      className="h-svh overflow-hidden"
-      style={{ "--sidebar-width": "17rem" } as React.CSSProperties}
-    >
+    <SidebarProvider className="h-svh overflow-hidden" style={{ "--sidebar-width": "17rem" } as React.CSSProperties}>
       <Sidebar />
-      <SidebarInset
-        className="h-screen overflow-auto scrollbar-thin"
-        style={{ scrollbarGutter: "stable" }}
-      >
+      <SidebarInset className="h-screen overflow-auto scrollbar-thin" style={{ scrollbarGutter: "stable" }}>
         {children}
       </SidebarInset>
     </SidebarProvider>

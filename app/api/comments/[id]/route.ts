@@ -1,8 +1,5 @@
 import { ok, fail } from "@/lib/api";
-import {
-  getRecordCommentAuthor,
-  deleteRecordComment,
-} from "@/lib/metadata/store";
+import { getRecordCommentAuthor, deleteRecordComment } from "@/lib/metadata/store";
 import { requireUser, AuthError } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };

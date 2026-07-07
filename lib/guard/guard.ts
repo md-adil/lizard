@@ -162,7 +162,10 @@ function stripStrings(sql: string): string {
 }
 
 function lexicalChecks(sql: string, dialect: SqlDialect): string {
-  const trimmed = sql.trim().replace(/;+\s*$/g, "").trim();
+  const trimmed = sql
+    .trim()
+    .replace(/;+\s*$/g, "")
+    .trim();
   if (!trimmed) throw new GuardError("Empty SQL");
 
   const noStrings = stripStrings(trimmed);

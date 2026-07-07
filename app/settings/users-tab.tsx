@@ -42,12 +42,7 @@ async function apiJson(url: string, init?: RequestInit) {
 // ---------- sub-components ----------
 
 function RoleBadge({ role }: { role: Role }) {
-  const color =
-    role === "admin"
-      ? "var(--primary)"
-      : role === "editor"
-        ? "var(--success)"
-        : "var(--muted-foreground)";
+  const color = role === "admin" ? "var(--primary)" : role === "editor" ? "var(--success)" : "var(--muted-foreground)";
   return (
     <span
       className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
@@ -84,19 +79,14 @@ function GrantsEditor({
         const g = grants.find((g) => g.connectionId === c.id);
         return (
           <div key={c.id} className="flex items-center gap-2 text-[13px]">
-            <span
-              className="flex-1 truncate"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <span className="flex-1 truncate" style={{ color: "var(--muted-foreground)" }}>
               {c.name}
             </span>
             <select
               className="input"
               style={{ padding: "2px 6px", fontSize: 12, width: "auto" }}
               value={g?.access ?? ""}
-              onChange={(e) =>
-                setGrant(c.id, (e.target.value as Access) || null)
-              }
+              onChange={(e) => setGrant(c.id, (e.target.value as Access) || null)}
             >
               <option value="">no access</option>
               <option value="read">read</option>
@@ -126,9 +116,7 @@ function UserCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const patch = useMutation({
-    mutationFn: (
-      fields: Partial<{ role: Role; disabled: boolean; password: string }>,
-    ) =>
+    mutationFn: (fields: Partial<{ role: Role; disabled: boolean; password: string }>) =>
       apiJson(`/api/users/${user.id}`, {
         method: "PATCH",
         body: JSON.stringify(fields),
@@ -148,17 +136,11 @@ function UserCard({
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="font-medium text-[14px]"
-              style={{ color: "var(--foreground)" }}
-            >
+            <span className="font-medium text-[14px]" style={{ color: "var(--foreground)" }}>
               {user.name || user.email}
             </span>
             {user.name && (
-              <span
-                className="text-[12px]"
-                style={{ color: "var(--muted-foreground-faint)" }}
-              >
+              <span className="text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
                 {user.email}
               </span>
             )}
@@ -175,18 +157,12 @@ function UserCard({
               </span>
             )}
             {isSelf && (
-              <span
-                className="text-[11px]"
-                style={{ color: "var(--muted-foreground-faint)" }}
-              >
+              <span className="text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>
                 (you)
               </span>
             )}
           </div>
-          <p
-            className="text-[11.5px] mt-0.5"
-            style={{ color: "var(--muted-foreground-faint)" }}
-          >
+          <p className="text-[11.5px] mt-0.5" style={{ color: "var(--muted-foreground-faint)" }}>
             {user.grants.length === 0
               ? user.role === "admin"
                 ? "All connections (admin)"
@@ -211,7 +187,9 @@ function UserCard({
 
           {/* toggle disabled */}
           {!isSelf && (
-            <Button variant="outline" size="sm"
+            <Button
+              variant="outline"
+              size="sm"
 
               title={user.disabled ? "Enable user" : "Disable user"}
               disabled={patch.isPending}
@@ -225,14 +203,18 @@ function UserCard({
           {!isSelf &&
             (confirmDelete ? (
               <>
-                <Button variant="outline" size="sm"
+                <Button
+                  variant="outline"
+                  size="sm"
 
                   style={{ color: "var(--destructive)" }}
                   onClick={() => del.mutate()}
                 >
                   confirm
                 </Button>
-                <Button variant="outline" size="sm"
+                <Button
+                  variant="outline"
+                  size="sm"
 
                   onClick={() => setConfirmDelete(false)}
                 >
@@ -240,7 +222,9 @@ function UserCard({
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm"
+              <Button
+                variant="outline"
+                size="sm"
 
                 style={{ color: "var(--destructive)" }}
                 onClick={() => setConfirmDelete(true)}
@@ -254,7 +238,10 @@ function UserCard({
       {/* grants toggle (not for admins — they get all) */}
       {user.role !== "admin" && connections.length > 0 && (
         <div>
-          <Button variant="outline" size="sm" className="text-[12px]"
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-[12px]"
 
             onClick={() => setEditingGrants((v) => !v)}
           >
@@ -321,11 +308,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
   };
 
   if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)}>
-        + New user
-      </Button>
-    );
+    return <Button onClick={() => setOpen(true)}>+ New user</Button>;
   }
 
   return (
@@ -336,38 +319,19 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Email *</label>
-          <input
-            className="input"
-            type="email"
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          <input className="input" type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
           <label className="label">Name (optional)</label>
-          <input
-            className="input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
           <label className="label">Password * (min 8 chars)</label>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <div>
           <label className="label">Role</label>
-          <select
-            className="input"
-            value={role}
-            onChange={(e) => setRole(e.target.value as Role)}
-          >
+          <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
             <option value="admin">admin</option>
             <option value="editor">editor</option>
             <option value="viewer">viewer</option>
@@ -380,11 +344,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         </p>
       )}
       <div className="flex gap-2">
-        <Button
-
-          disabled={busy || !email || password.length < 8}
-          onClick={submit}
-        >
+        <Button disabled={busy || !email || password.length < 8} onClick={submit}>
           {busy ? "Creating…" : "Create"}
         </Button>
         <Button variant="outline" onClick={reset}>
@@ -419,19 +379,13 @@ export function UsersTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Users</h2>
-          <p
-            className="text-[13px] mt-0.5"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            Manage who can access Lizard and which databases they may read or
-            write.
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+            Manage who can access Lizard and which databases they may read or write.
           </p>
         </div>
       </div>
 
-      <CreateUserForm
-        onCreated={() => qc.invalidateQueries({ queryKey: ["users"] })}
-      />
+      <CreateUserForm onCreated={() => qc.invalidateQueries({ queryKey: ["users"] })} />
 
       {usersLoading ? (
         <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
@@ -440,12 +394,7 @@ export function UsersTab() {
       ) : (
         <div className="space-y-3">
           {(users ?? []).map((u) => (
-            <UserCard
-              key={u.id}
-              user={u}
-              currentUserId={self!.id}
-              connections={connections}
-            />
+            <UserCard key={u.id} user={u} currentUserId={self!.id} connections={connections} />
           ))}
         </div>
       )}

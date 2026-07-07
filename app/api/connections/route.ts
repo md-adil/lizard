@@ -16,7 +16,7 @@ export async function GET() {
       conns.map(async (c) => {
         const status = await testConnection(c).catch(() => ({ read: "unreachable", write: null }));
         return { ...redact(c), status };
-      })
+      }),
     );
     return ok(withStatus);
   } catch (e) {

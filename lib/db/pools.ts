@@ -25,9 +25,7 @@ function poolKey(conn: ConnectionConfig, role: Role): string {
 
 export function getPool(conn: ConnectionConfig, role: Role): Pool {
   if (role === "write" && (!conn.writeUser || !conn.writePassword)) {
-    throw new Error(
-      `Connection "${conn.name}" is read-only (no write credentials registered)`,
-    );
+    throw new Error(`Connection "${conn.name}" is read-only (no write credentials registered)`);
   }
   const key = poolKey(conn, role);
   let pool = pools.get(key);
@@ -57,10 +55,7 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
   return pool;
 }
 
-export function getPoolByName(
-  connectionName: string,
-  role: Role,
-): { conn: ConnectionConfig; pool: Pool } {
+export function getPoolByName(connectionName: string, role: Role): { conn: ConnectionConfig; pool: Pool } {
   const conn = getConnection(connectionName);
   if (!conn) throw new Error(`Unknown connection: ${connectionName}`);
   return { conn, pool: getPool(conn, role) };
@@ -69,8 +64,7 @@ export function getPoolByName(
 export function connectionUri(conn: ConnectionConfig, role: Role): string {
   const user = role === "read" ? conn.readUser : conn.writeUser;
   const pass = role === "read" ? conn.readPassword : conn.writePassword;
-  if (!user)
-    throw new Error(`Connection "${conn.name}" has no ${role} credentials`);
+  if (!user) throw new Error(`Connection "${conn.name}" has no ${role} credentials`);
   const ssl = conn.ssl ? "?sslmode=require" : "";
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass ?? "")}@${conn.host}:${conn.port}/${encodeURIComponent(conn.database)}${ssl}`;
 }
@@ -107,9 +101,7 @@ export async function probeCredentials(cfg: {
   }
 }
 
-export async function testConnection(
-  conn: ConnectionConfig,
-): Promise<{ read: string | null; write: string | null }> {
+export async function testConnection(conn: ConnectionConfig): Promise<{ read: string | null; write: string | null }> {
   const result: { read: string | null; write: string | null } = {
     read: null,
     write: null,

@@ -63,9 +63,8 @@ export function getUserById(id: string): User | null {
 }
 
 export function getUserByEmail(email: string): (User & { passwordHash: string }) | null {
-  const r = getMetaDb()
-    .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.toLowerCase()) as Record<string, unknown> | undefined;
+  const r = getMetaDb().prepare("SELECT * FROM users WHERE email = ?").get(email.toLowerCase()) as
+    Record<string, unknown> | undefined;
   return r ? { ...rowToUser(r), passwordHash: r.password_hash as string } : null;
 }
 
@@ -77,14 +76,19 @@ export function createUser(input: { email: string; password: string; name?: stri
   return getUserById(id)!;
 }
 
-export function updateUser(id: string, fields: { name?: string | null; role?: Role; disabled?: boolean; password?: string }): User | null {
+export function updateUser(
+  id: string,
+  fields: { name?: string | null; role?: Role; disabled?: boolean; password?: string },
+): User | null {
   const u = getUserById(id);
   if (!u) return null;
   const db = getMetaDb();
   if (fields.name !== undefined) db.prepare("UPDATE users SET name = ? WHERE id = ?").run(fields.name, id);
   if (fields.role !== undefined) db.prepare("UPDATE users SET role = ? WHERE id = ?").run(fields.role, id);
-  if (fields.disabled !== undefined) db.prepare("UPDATE users SET disabled = ? WHERE id = ?").run(fields.disabled ? 1 : 0, id);
-  if (fields.password) db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(fields.password), id);
+  if (fields.disabled !== undefined)
+    db.prepare("UPDATE users SET disabled = ? WHERE id = ?").run(fields.disabled ? 1 : 0, id);
+  if (fields.password)
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(fields.password), id);
   return getUserById(id);
 }
 
@@ -100,15 +104,16 @@ export function deleteUser(id: string): void {
 export function createSession(userId: string): { token: string; expiresAt: string } {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 86400_000).toISOString();
-  getMetaDb().prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").run(token, userId, expiresAt);
+  getMetaDb()
+    .prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
+    .run(token, userId, expiresAt);
   return { token, expiresAt };
 }
 
 export function getSessionUser(token: string | undefined): User | null {
   if (!token) return null;
-  const row = getMetaDb()
-    .prepare("SELECT user_id, expires_at FROM sessions WHERE token = ?")
-    .get(token) as { user_id: string; expires_at: string } | undefined;
+  const row = getMetaDb().prepare("SELECT user_id, expires_at FROM sessions WHERE token = ?").get(token) as
+    { user_id: string; expires_at: string } | undefined;
   if (!row) return null;
   if (new Date(row.expires_at).getTime() < Date.now()) {
     deleteSession(token);
@@ -140,7 +145,7 @@ export function setGrant(userId: string, connectionId: string, access: Access | 
   }
   db.prepare(
     `INSERT INTO connection_grants (user_id, connection_id, access) VALUES (?, ?, ?)
-     ON CONFLICT (user_id, connection_id) DO UPDATE SET access = excluded.access`
+     ON CONFLICT (user_id, connection_id) DO UPDATE SET access = excluded.access`,
   ).run(userId, connectionId, access);
 }
 

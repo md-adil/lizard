@@ -10,10 +10,7 @@ import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type {
-  TableMeta,
-  CatalogResponse,
-} from "@/components/browse/useTableMeta";
+import type { TableMeta, CatalogResponse } from "@/components/browse/useTableMeta";
 
 const TRANSFORMS: { value: VfkTransform; label: string }[] = [
   { value: "none", label: "exact" },
@@ -46,18 +43,14 @@ export function VirtualFkEditor({
   const [toConnection, setToConnection] = useState(meta.connection);
   const [toSchema, setToSchema] = useState(defaultToSchema);
   const [toTable, setToTable] = useState("");
-  const [pairs, setPairs] = useState<VfkPair[]>([
-    { from: "", to: "", transform: "none" },
-  ]);
+  const [pairs, setPairs] = useState<VfkPair[]>([{ from: "", to: "", transform: "none" }]);
   const [constants, setConstants] = useState<VfkConstant[]>([]);
   const [label, setLabel] = useState("");
   const [joinHint, setJoinHint] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const toConn = catalog.connections.find(
-    (c) => c.connectionName === toConnection,
-  );
+  const toConn = catalog.connections.find((c) => c.connectionName === toConnection);
   // $schema has no single concrete schema — introspect the current schema's
   // shape in the target connection, or any schema holding the chosen table.
   const repSchemaName = toSchema === SAME_SCHEMA ? meta.schema : toSchema;
@@ -85,9 +78,7 @@ export function VirtualFkEditor({
     setPairs((s) => s.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
   }
   function setConst(i: number, patch: Partial<VfkConstant>) {
-    setConstants((s) =>
-      s.map((c, idx) => (idx === i ? { ...c, ...patch } : c)),
-    );
+    setConstants((s) => s.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
   }
 
   function reset() {
@@ -110,14 +101,9 @@ export function VirtualFkEditor({
     const pk = target.primaryKey[0] ?? target.columns[0]?.name ?? "";
     const guessFrom =
       meta.table.columns.find((c) => c.name === `${t}_id`)?.name ??
-      meta.table.columns.find((c) => c.name === `${t.replace(/s$/, "")}_id`)
-        ?.name ??
+      meta.table.columns.find((c) => c.name === `${t.replace(/s$/, "")}_id`)?.name ??
       "";
-    setPairs((s) =>
-      s.length === 1 && !s[0].from && !s[0].to
-        ? [{ from: guessFrom, to: pk, transform: "none" }]
-        : s,
-    );
+    setPairs((s) => (s.length === 1 && !s[0].from && !s[0].to ? [{ from: guessFrom, to: pk, transform: "none" }] : s));
   }
 
   async function submit() {
@@ -160,62 +146,38 @@ export function VirtualFkEditor({
   return (
     <div>
       {meta.virtualFks.map((v) => (
-        <Card
-          key={v.id}
-          size="sm"
-          className="px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2"
-        >
+        <Card key={v.id} size="sm" className="px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2">
           <div className="min-w-0">
             {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
             <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
               {v.fromSchema}.{v.fromTable} → {vfkSummary(v)}
             </span>
           </div>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="shrink-0"
-            onClick={() => remove(v.id)}
-          >
+          <Button variant="outline" size="icon-sm" className="shrink-0" onClick={() => remove(v.id)}>
             ✕
           </Button>
         </Card>
       ))}
 
       {!adding ? (
-        <Button
-          variant="outline"
-          className="mt-1"
-          onClick={() => setAdding(true)}
-        >
+        <Button variant="outline" className="mt-1" onClick={() => setAdding(true)}>
           + Add relationship
         </Button>
       ) : (
         <Card className="p-4 mt-2 gap-3">
           <div>
-            <div
-              className="text-[11px] mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <div className="text-[11px] mb-1.5" style={{ color: "var(--muted-foreground-faint)" }}>
               Target
             </div>
-            <Tabs
-              value={mode}
-              onValueChange={(v) => switchMode(v as "simple" | "advanced")}
-            >
+            <Tabs value={mode} onValueChange={(v) => switchMode(v as "simple" | "advanced")}>
               <TabsList variant="default">
                 <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
-                <TabsTrigger value="advanced">
-                  Advanced (cross-service)
-                </TabsTrigger>
+                <TabsTrigger value="advanced">Advanced (cross-service)</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
 
-          <p
-            className="text-[12.5px]"
-            style={{ color: "var(--muted-foreground)" }}
-          >
+          <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
             Links{" "}
             <span className="code">
               {fromSchema}.{fromTable}
@@ -223,9 +185,7 @@ export function VirtualFkEditor({
             to a target table. Source scope follows this page.
           </p>
 
-          <div
-            className={`grid gap-3 ${showTargetScope ? "grid-cols-3" : "grid-cols-1"}`}
-          >
+          <div className={`grid gap-3 ${showTargetScope ? "grid-cols-3" : "grid-cols-1"}`}>
             {showTargetScope && (
               <>
                 <div>
@@ -269,9 +229,7 @@ export function VirtualFkEditor({
               </>
             )}
             <div>
-              <label className="label">
-                {showTargetScope ? "Target table" : "References table"}
-              </label>
+              <label className="label">{showTargetScope ? "Target table" : "References table"}</label>
               <select
                 className="input"
                 value={toTable}
@@ -293,11 +251,7 @@ export function VirtualFkEditor({
             <div className="space-y-2">
               {pairs.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select
-                    className="input"
-                    value={p.from}
-                    onChange={(e) => setPair(i, { from: e.target.value })}
-                  >
+                  <select className="input" value={p.from} onChange={(e) => setPair(i, { from: e.target.value })}>
                     <option value="">— this column —</option>
                     {meta.table.columns.map((c) => (
                       <option key={c.name} value={c.name}>
@@ -305,10 +259,7 @@ export function VirtualFkEditor({
                       </option>
                     ))}
                   </select>
-                  <span
-                    className="shrink-0"
-                    style={{ color: "var(--muted-foreground-faint)" }}
-                  >
+                  <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
                     =
                   </span>
                   <select
@@ -327,9 +278,7 @@ export function VirtualFkEditor({
                   <select
                     className="input"
                     value={p.transform ?? "none"}
-                    onChange={(e) =>
-                      setPair(i, { transform: e.target.value as VfkTransform })
-                    }
+                    onChange={(e) => setPair(i, { transform: e.target.value as VfkTransform })}
                     title="Value transform applied to both sides"
                   >
                     {TRANSFORMS.map((t) => (
@@ -343,9 +292,7 @@ export function VirtualFkEditor({
                     size="icon-sm"
                     className="shrink-0"
                     disabled={pairs.length === 1}
-                    onClick={() =>
-                      setPairs((s) => s.filter((_, idx) => idx !== i))
-                    }
+                    onClick={() => setPairs((s) => s.filter((_, idx) => idx !== i))}
                   >
                     ✕
                   </Button>
@@ -354,12 +301,7 @@ export function VirtualFkEditor({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setPairs((s) => [
-                    ...s,
-                    { from: "", to: "", transform: "none" },
-                  ])
-                }
+                onClick={() => setPairs((s) => [...s, { from: "", to: "", transform: "none" }])}
               >
                 + Add column (composite key)
               </Button>
@@ -384,10 +326,7 @@ export function VirtualFkEditor({
                       </option>
                     ))}
                   </select>
-                  <span
-                    className="shrink-0"
-                    style={{ color: "var(--muted-foreground-faint)" }}
-                  >
+                  <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
                     =
                   </span>
                   <input
@@ -400,9 +339,7 @@ export function VirtualFkEditor({
                     variant="outline"
                     size="icon-sm"
                     className="shrink-0"
-                    onClick={() =>
-                      setConstants((s) => s.filter((_, idx) => idx !== i))
-                    }
+                    onClick={() => setConstants((s) => s.filter((_, idx) => idx !== i))}
                   >
                     ✕
                   </Button>
@@ -411,9 +348,7 @@ export function VirtualFkEditor({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setConstants((s) => [...s, { toColumn: "", value: "" }])
-                }
+                onClick={() => setConstants((s) => [...s, { toColumn: "", value: "" }])}
               >
                 + Add constant filter
               </Button>

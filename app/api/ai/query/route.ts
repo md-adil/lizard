@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     await requireAllReadable(plan.connections);
     const result = await runGuardedQuery(
       { target: plan.target, connections: plan.connections, sql: plan.sql, dialect: plan.dialect },
-      user.email
+      user.email,
     );
     return ok({ plan, result });
   } catch (e) {

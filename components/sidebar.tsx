@@ -76,9 +76,7 @@ function ThemeToggle() {
       variant="outline"
       size="sm"
       style={{ padding: "2px 8px" }}
-      title={
-        theme === "light" ? "Switch to dark theme" : "Switch to light theme"
-      }
+      title={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
       onClick={() => setTheme(theme === "light" ? "dark" : "light")}
     >
       {theme === "light" ? "🌙" : "☀️"}
@@ -113,9 +111,7 @@ export function Sidebar() {
   // never unmounts across navigation, so no localStorage needed) — switching
   // databases restores that database's own filter instead of leaking the
   // previous one or losing it.
-  const [activeSchemaByConn, setActiveSchemaByConn] = useState<
-    Record<string, string | null>
-  >({});
+  const [activeSchemaByConn, setActiveSchemaByConn] = useState<Record<string, string | null>>({});
 
   // follow the URL when browsing; otherwise keep/first connection
   useEffect(() => {
@@ -129,32 +125,22 @@ export function Sidebar() {
   }, [params.connection, connections]);
 
   const conn = connections.find((c) => c.connectionName === selected);
-  const allSchemas = useMemo(
-    () => conn?.schemas.map((s) => s.name) ?? [],
-    [conn],
-  );
+  const allSchemas = useMemo(() => conn?.schemas.map((s) => s.name) ?? [], [conn]);
 
   // restore loaded schemas per connection (default: first schema, or the one in the URL)
   useEffect(() => {
     if (!selected || allSchemas.length === 0) return;
     let stored: string[] = [];
     try {
-      stored = JSON.parse(
-        localStorage.getItem(loadedSchemasKey(selected)) ?? "[]",
-      );
+      stored = JSON.parse(localStorage.getItem(loadedSchemasKey(selected)) ?? "[]");
     } catch {
       /* ignore */
     }
     let next = stored.filter((s) => allSchemas.includes(s));
-    if (
-      params.schema &&
-      allSchemas.includes(params.schema) &&
-      !next.includes(params.schema)
-    ) {
+    if (params.schema && allSchemas.includes(params.schema) && !next.includes(params.schema)) {
       next = [...next, params.schema];
     }
-    if (next.length === 0)
-      next = [allSchemas.includes("public") ? "public" : allSchemas[0]];
+    if (next.length === 0) next = [allSchemas.includes("public") ? "public" : allSchemas[0]];
     setLoaded(next);
     setAddingSchema(false);
     setSchemaSearch("");
@@ -164,12 +150,8 @@ export function Sidebar() {
   // fall back to null if the remembered filter no longer matches a loaded
   // schema (e.g. it was just removed, or the schema list changed underneath).
   const activeSchemaRaw = activeSchemaByConn[selected] ?? null;
-  const activeSchema =
-    activeSchemaRaw && loaded.includes(activeSchemaRaw)
-      ? activeSchemaRaw
-      : null;
-  const setActiveSchema = (next: string | null) =>
-    setActiveSchemaByConn((m) => ({ ...m, [selected]: next }));
+  const activeSchema = activeSchemaRaw && loaded.includes(activeSchemaRaw) ? activeSchemaRaw : null;
+  const setActiveSchema = (next: string | null) => setActiveSchemaByConn((m) => ({ ...m, [selected]: next }));
 
   const persist = (next: string[], removedSchema?: string) => {
     setLoaded(next);
@@ -185,12 +167,7 @@ export function Sidebar() {
 
   // override lookup: connectionId.schema.table → { hidden, label }
   const overrideFor = (schema: string, table: string) =>
-    overrides.find(
-      (o) =>
-        o.connectionId === conn?.connectionId &&
-        o.schema === schema &&
-        o.table === table,
-    );
+    overrides.find((o) => o.connectionId === conn?.connectionId && o.schema === schema && o.table === table);
 
   const tableQ = tableSearch.trim().toLowerCase();
 
@@ -212,16 +189,10 @@ export function Sidebar() {
         <SidebarGroup>
           <SidebarMenu>
             {NAV.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               return (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={active}
-                    render={<Link href={item.href} />}
-                  >
+                  <SidebarMenuButton isActive={active} render={<Link href={item.href} />}>
                     <span className="w-4 text-center">{item.icon}</span>
                     {item.label}
                   </SidebarMenuButton>
@@ -237,18 +208,11 @@ export function Sidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Database</SidebarGroupLabel>
           {connections.length === 0 ? (
-            <p
-              className="text-[12px] py-1 px-2"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <p className="text-[12px] py-1 px-2" style={{ color: "var(--muted-foreground-faint)" }}>
               No connections yet
             </p>
           ) : (
-            <select
-              className="input"
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-            >
+            <select className="input" value={selected} onChange={(e) => setSelected(e.target.value)}>
               {connections.map((c) => (
                 <option key={c.connectionName} value={c.connectionName}>
                   {c.connectionName}
@@ -258,11 +222,7 @@ export function Sidebar() {
             </select>
           )}
           {conn?.error && (
-            <p
-              className="text-[11.5px] mt-1 px-2"
-              style={{ color: "var(--destructive)" }}
-              title={conn.error}
-            >
+            <p className="text-[11.5px] mt-1 px-2" style={{ color: "var(--destructive)" }} title={conn.error}>
               connection error
             </p>
           )}
@@ -292,11 +252,7 @@ export function Sidebar() {
                   <Chip
                     key={s}
                     active={isActive}
-                    title={
-                      isActive
-                        ? `Showing only ${s} — click to show all`
-                        : `Filter to ${s}`
-                    }
+                    title={isActive ? `Showing only ${s} — click to show all` : `Filter to ${s}`}
                     onClick={() => setActiveSchema(isActive ? null : s)}
                     onRemove={
                       loaded.length > 1
@@ -327,9 +283,7 @@ export function Sidebar() {
                 <div className="space-y-0.5 max-h-56 overflow-y-auto scrollbar-thin">
                   {(() => {
                     const q = schemaSearch.trim().toLowerCase();
-                    const matches = q
-                      ? remaining.filter((s) => s.toLowerCase().includes(q))
-                      : remaining;
+                    const matches = q ? remaining.filter((s) => s.toLowerCase().includes(q)) : remaining;
                     return (
                       <>
                         {matches.slice(0, 50).map((s) => (
@@ -348,18 +302,12 @@ export function Sidebar() {
                           </Button>
                         ))}
                         {matches.length > 50 && (
-                          <p
-                            className="px-2 py-1 text-[11.5px]"
-                            style={{ color: "var(--text-faint)" }}
-                          >
+                          <p className="px-2 py-1 text-[11.5px]" style={{ color: "var(--text-faint)" }}>
                             …{matches.length - 50} more — keep typing to narrow
                           </p>
                         )}
                         {matches.length === 0 && (
-                          <p
-                            className="px-2 py-1 text-[11.5px]"
-                            style={{ color: "var(--text-faint)" }}
-                          >
+                          <p className="px-2 py-1 text-[11.5px]" style={{ color: "var(--text-faint)" }}>
                             No schemas match
                           </p>
                         )}
@@ -404,62 +352,37 @@ export function Sidebar() {
                 const visibleTables = allTables
                   .filter((t) => !t.hidden)
                   .filter(
-                    (t) =>
-                      !tableQ ||
-                      t.label.toLowerCase().includes(tableQ) ||
-                      t.name.toLowerCase().includes(tableQ),
+                    (t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ),
                   );
                 const hiddenTables = allTables
                   .filter((t) => t.hidden)
                   .filter(
-                    (t) =>
-                      !tableQ ||
-                      t.label.toLowerCase().includes(tableQ) ||
-                      t.name.toLowerCase().includes(tableQ),
+                    (t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ),
                   );
-                if (visibleTables.length === 0 && hiddenTables.length === 0)
-                  return null;
+                if (visibleTables.length === 0 && hiddenTables.length === 0) return null;
                 const showDivider = loaded.length > 1 && !activeSchema;
                 return (
                   <div key={schemaName} className="mb-1">
-                    {showDivider && (
-                      <SidebarGroupLabel className="mt-2">
-                        {schemaName}
-                      </SidebarGroupLabel>
-                    )}
+                    {showDivider && <SidebarGroupLabel className="mt-2">{schemaName}</SidebarGroupLabel>}
                     <SidebarMenu>
                       {visibleTables.map((t) => {
                         const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
-                        const active =
-                          pathname === href || pathname.startsWith(href + "/");
+                        const active = pathname === href || pathname.startsWith(href + "/");
                         return (
                           <SidebarMenuItem key={t.name}>
                             <SidebarMenuButton
                               isActive={active}
-                              render={
-                                <Link
-                                  href={href}
-                                  title={
-                                    t.label !== t.name ? t.name : undefined
-                                  }
-                                />
-                              }
+                              render={<Link href={href} title={t.label !== t.name ? t.name : undefined} />}
                             >
                               {t.label}
                             </SidebarMenuButton>
                             <DropdownMenu>
-                              <DropdownMenuTrigger
-                                render={<SidebarMenuAction showOnHover />}
-                              >
+                              <DropdownMenuTrigger render={<SidebarMenuAction showOnHover />}>
                                 <MoreHorizontal />
-                                <span className="sr-only">
-                                  {t.label} actions
-                                </span>
+                                <span className="sr-only">{t.label} actions</span>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" side="right">
-                                <DropdownMenuItem
-                                  render={<Link href={`${href}/customize`} />}
-                                >
+                                <DropdownMenuItem render={<Link href={`${href}/customize`} />}>
                                   ⚙ Customize
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -482,8 +405,7 @@ export function Sidebar() {
                     {showHidden &&
                       hiddenTables.map((t) => {
                         const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
-                        const active =
-                          pathname === href || pathname.startsWith(href + "/");
+                        const active = pathname === href || pathname.startsWith(href + "/");
                         return (
                           <Link
                             key={t.name}
@@ -491,9 +413,7 @@ export function Sidebar() {
                             title={`${t.label !== t.name ? t.name + " · " : ""}hidden — open to customize`}
                             className="block rounded px-2.5 py-1 text-[14px] truncate line-through"
                             style={{
-                              background: active
-                                ? "var(--primary-soft)"
-                                : "transparent",
+                              background: active ? "var(--primary-soft)" : "transparent",
                               color: "var(--muted-foreground-faint)",
                               opacity: 0.6,
                             }}
@@ -516,10 +436,7 @@ export function Sidebar() {
             </Button>
           )}
           {conn && !conn.error && tableQ && (
-            <p
-              className="px-2.5 pt-1 text-[11.5px]"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <p className="px-2.5 pt-1 text-[11.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
               filtering by "{tableSearch}"
             </p>
           )}
@@ -530,16 +447,10 @@ export function Sidebar() {
       <SidebarFooter className="border-t">
         <div className="flex items-center gap-2 px-1 py-1">
           <div className="min-w-0 flex-1">
-            <p
-              className="text-[13px] font-medium truncate"
-              style={{ color: "var(--foreground)" }}
-            >
+            <p className="text-[13px] font-medium truncate" style={{ color: "var(--foreground)" }}>
               {user?.name || user?.email}
             </p>
-            <p
-              className="text-[11px] truncate"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <p className="text-[11px] truncate" style={{ color: "var(--muted-foreground-faint)" }}>
               {user?.role}
             </p>
           </div>

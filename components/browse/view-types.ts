@@ -15,27 +15,18 @@ export const VIEW_LABELS: Record<ViewType, string> = {
 
 // Columns worth grouping a kanban by: enum / check-IN / boolean / single FK.
 export function kanbanGroupColumns(meta: TableMeta): ColumnMeta[] {
-  return meta.columns.filter(
-    (c) => !c.hidden && (!!c.options || c.col.udtName === "bool" || !!c.ref),
-  );
+  return meta.columns.filter((c) => !c.hidden && (!!c.options || c.col.udtName === "bool" || !!c.ref));
 }
 
 // Date/timestamp columns a calendar can place rows on.
 export function dateColumns(meta: TableMeta): ColumnMeta[] {
-  return meta.columns.filter(
-    (c) =>
-      !c.hidden &&
-      (c.col.udtName === "date" || c.col.udtName.startsWith("timestamp")),
-  );
+  return meta.columns.filter((c) => !c.hidden && (c.col.udtName === "date" || c.col.udtName.startsWith("timestamp")));
 }
 
 // The single-column FK that points back at this same table, if any (→ tree).
 export function selfRefColumn(meta: TableMeta): string | null {
   const fk = meta.table.foreignKeys.find(
-    (f) =>
-      f.columns.length === 1 &&
-      f.referencedTable === meta.table.name &&
-      f.referencedSchema === meta.schema,
+    (f) => f.columns.length === 1 && f.referencedTable === meta.table.name && f.referencedSchema === meta.schema,
   );
   return fk?.columns[0] ?? null;
 }

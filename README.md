@@ -22,12 +22,12 @@ npm run dev                 # → http://localhost:3111
 
 Then add the two demo connections in the UI (or against your own databases):
 
-| Field | users demo | orders demo |
-|---|---|---|
-| Name | `users_service` | `orders_service` |
-| Host / Port | `localhost` / `54321` | `localhost` / `54322` |
-| Database | `users_service` | `orders_service` |
-| Read user / password | `lizard_read` / `lizard_read` | `lizard_read` / `lizard_read` |
+| Field                 | users demo                      | orders demo                     |
+| --------------------- | ------------------------------- | ------------------------------- |
+| Name                  | `users_service`                 | `orders_service`                |
+| Host / Port           | `localhost` / `54321`           | `localhost` / `54322`           |
+| Database              | `users_service`                 | `orders_service`                |
+| Read user / password  | `lizard_read` / `lizard_read`   | `lizard_read` / `lizard_read`   |
 | Write user / password | `lizard_write` / `lizard_write` | `lizard_write` / `lizard_write` |
 
 The connection **name** doubles as the database alias in cross-database SQL (`users_service.public.customers`), so it must be a lowercase identifier.
@@ -54,7 +54,7 @@ Lizard **never issues DDL against your databases** and never stores anything in 
 
 ## Security model
 
-The AI can *generate* SQL but can never act outside the sandbox:
+The AI can _generate_ SQL but can never act outside the sandbox:
 
 1. **Read-only role**: AI/chart/browse queries run on the `lizard_read` role. Writes (CRUD forms only) use `lizard_write` with parameterized queries — model SQL never reaches a write-capable connection.
 2. **SQL Guard**: every AI/chart/federated query is parsed and validated — single `SELECT` only; multi-statements, DML/DDL, comments, `pg_sleep`, file/dblink/backend-control functions, sequence manipulation, row locking, `COPY`, and (on the federation path) `ATTACH`/`INSTALL`/file readers are all rejected. A hard `LIMIT` wrapper caps every result.
@@ -70,10 +70,10 @@ Since microservice databases have no real foreign keys between them, you can dec
 
 ## Configuration
 
-| Env var | Purpose |
-|---|---|
-| `ANTHROPIC_API_KEY` | enables AI querying and prompt-driven charts |
-| `LIZARD_AI_MODEL` | model for text-to-SQL (default `claude-sonnet-5`) |
+| Env var                | Purpose                                                   |
+| ---------------------- | --------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`    | enables AI querying and prompt-driven charts              |
+| `LIZARD_AI_MODEL`      | model for text-to-SQL (default `claude-sonnet-5`)         |
 | `LIZARD_METADATA_PATH` | metadata SQLite location (default `./data/lizard.sqlite`) |
 
 ## Development

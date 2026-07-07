@@ -35,12 +35,19 @@ function Primitive({ value }: { value: unknown }) {
       </a>
     );
   }
-  return <span style={{ color: "var(--foreground)" }} className="break-words">{s}</span>;
+  return (
+    <span style={{ color: "var(--foreground)" }} className="break-words">
+      {s}
+    </span>
+  );
 }
 
 function KeyLabel({ name }: { name: string }) {
   return (
-    <span className="text-[11px] font-medium uppercase tracking-wide shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
+    <span
+      className="text-[11px] font-medium uppercase tracking-wide shrink-0"
+      style={{ color: "var(--muted-foreground-faint)" }}
+    >
       {humanize(name)}
     </span>
   );

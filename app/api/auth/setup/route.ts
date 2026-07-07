@@ -22,7 +22,10 @@ export async function POST(req: Request) {
     const body = schema.parse(await req.json());
     const user = createUser({ email: body.email, password: body.password, name: body.name ?? null, role: "admin" });
     const { token } = createSession(user.id);
-    const res = NextResponse.json({ user: { id: user.id, email: user.email, role: user.role, name: user.name } }, { status: 201 });
+    const res = NextResponse.json(
+      { user: { id: user.id, email: user.email, role: user.role, name: user.name } },
+      { status: 201 },
+    );
     setSessionCookie(res, token);
     return res;
   } catch (e) {

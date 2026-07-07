@@ -9,10 +9,7 @@ import { useMutation } from "@tanstack/react-query";
 import { resolveColumnOverrides } from "@/lib/introspect/overrides";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type {
-  TableMeta,
-  CatalogResponse,
-} from "@/components/browse/useTableMeta";
+import type { TableMeta, CatalogResponse } from "@/components/browse/useTableMeta";
 
 const WIDGETS = [
   "",
@@ -44,18 +41,11 @@ export function TableOverridesEditor({
   saveSchema: string;
   onSaved: () => void;
 }) {
-  const colOv = resolveColumnOverrides(
-    catalog.columnOverrides,
-    meta.connectionId,
-    meta.schema,
-    meta.table.name,
-  );
+  const colOv = resolveColumnOverrides(catalog.columnOverrides, meta.connectionId, meta.schema, meta.table.name);
   const findOv = (name: string) => colOv.find((o) => o.column === name);
 
   const [tableLabel, setTableLabel] = useState(meta.tableOverride?.label ?? "");
-  const [displayCol, setDisplayCol] = useState(
-    meta.tableOverride?.displayColumn ?? "",
-  );
+  const [displayCol, setDisplayCol] = useState(meta.tableOverride?.displayColumn ?? "");
   const [hidden, setHidden] = useState(meta.tableOverride?.hidden ?? false);
   const [cols, setCols] = useState(
     meta.columns.map((cm, i) => ({
@@ -137,11 +127,7 @@ export function TableOverridesEditor({
         </div>
         <div>
           <label className="label">Display column (used for FK labels)</label>
-          <select
-            className="input"
-            value={displayCol}
-            onChange={(e) => setDisplayCol(e.target.value)}
-          >
+          <select className="input" value={displayCol} onChange={(e) => setDisplayCol(e.target.value)}>
             <option value="">auto ({meta.displayColumn})</option>
             {meta.table.columns.map((c) => (
               <option key={c.name} value={c.name}>
@@ -151,15 +137,8 @@ export function TableOverridesEditor({
           </select>
         </div>
       </div>
-      <label
-        className="flex items-center gap-2 text-[13px] mb-6"
-        style={{ color: "var(--muted-foreground)" }}
-      >
-        <input
-          type="checkbox"
-          checked={hidden}
-          onChange={(e) => setHidden(e.target.checked)}
-        />
+      <label className="flex items-center gap-2 text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
+        <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
         Hide this table from the sidebar
       </label>
 
@@ -181,25 +160,13 @@ export function TableOverridesEditor({
                 style={{ padding: "3px 8px", fontSize: 12 }}
                 placeholder="Label"
                 value={c.label}
-                onChange={(e) =>
-                  setCols((s) =>
-                    s.map((x, j) =>
-                      j === i ? { ...x, label: e.target.value } : x,
-                    ),
-                  )
-                }
+                onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
               />
               <select
                 className="input flex-1"
                 style={{ padding: "3px 6px", fontSize: 12 }}
                 value={c.widget}
-                onChange={(e) =>
-                  setCols((s) =>
-                    s.map((x, j) =>
-                      j === i ? { ...x, widget: e.target.value } : x,
-                    ),
-                  )
-                }
+                onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, widget: e.target.value } : x)))}
               >
                 {WIDGETS.map((w) => (
                   <option key={w} value={w}>
@@ -207,36 +174,19 @@ export function TableOverridesEditor({
                   </option>
                 ))}
               </select>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => move(i, -1)}
-              >
+              <Button variant="outline" size="icon-sm" onClick={() => move(i, -1)}>
                 ↑
               </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={() => move(i, 1)}
-              >
+              <Button variant="outline" size="icon-sm" onClick={() => move(i, 1)}>
                 ↓
               </Button>
             </div>
-            <div
-              className="flex gap-4 text-[12px]"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <div className="flex gap-4 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
               <label className="flex items-center gap-1">
                 <input
                   type="checkbox"
                   checked={c.hidden}
-                  onChange={(e) =>
-                    setCols((s) =>
-                      s.map((x, j) =>
-                        j === i ? { ...x, hidden: e.target.checked } : x,
-                      ),
-                    )
-                  }
+                  onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, hidden: e.target.checked } : x)))}
                 />
                 hidden
               </label>
@@ -245,11 +195,7 @@ export function TableOverridesEditor({
                   type="checkbox"
                   checked={c.readonly}
                   onChange={(e) =>
-                    setCols((s) =>
-                      s.map((x, j) =>
-                        j === i ? { ...x, readonly: e.target.checked } : x,
-                      ),
-                    )
+                    setCols((s) => s.map((x, j) => (j === i ? { ...x, readonly: e.target.checked } : x)))
                   }
                 />
                 readonly
@@ -259,11 +205,7 @@ export function TableOverridesEditor({
                   type="checkbox"
                   checked={c.redacted}
                   onChange={(e) =>
-                    setCols((s) =>
-                      s.map((x, j) =>
-                        j === i ? { ...x, redacted: e.target.checked } : x,
-                      ),
-                    )
+                    setCols((s) => s.map((x, j) => (j === i ? { ...x, redacted: e.target.checked } : x)))
                   }
                 />
                 redacted

@@ -9,11 +9,7 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VisibilityState, Updater } from "@tanstack/react-table";
 
-export function useColumnVisibility(
-  connectionId: string | undefined,
-  schema: string,
-  table: string,
-) {
+export function useColumnVisibility(connectionId: string | undefined, schema: string, table: string) {
   const qc = useQueryClient();
   const enabled = !!connectionId && !!schema && !!table;
   const key = ["column-prefs", connectionId, schema, table];
@@ -44,8 +40,7 @@ export function useColumnVisibility(
 
   function setColumnVisibility(updater: Updater<VisibilityState>) {
     if (!enabled) return;
-    const next =
-      typeof updater === "function" ? updater(columnVisibility) : updater;
+    const next = typeof updater === "function" ? updater(columnVisibility) : updater;
     for (const [col, visible] of Object.entries(next)) {
       if (columnVisibility[col] === visible) continue;
       const hidden = !visible;

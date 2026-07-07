@@ -3,9 +3,9 @@
 // Full-browser reference picker: opens the referenced table (possibly in
 // another connection/schema — supports cross-database virtual FKs) as a
 // filterable, sortable, paginated grid. Clicking a row selects it.
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { useCatalog, buildTableMeta } from "./useTableMeta";
+import { useTableMeta } from "./useTableMeta";
 import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
@@ -29,19 +29,7 @@ export function ReferencePickerModal({
   onPick: (value: string, label: string | null) => void;
   onClose: () => void;
 }) {
-  const { data: catalog } = useCatalog();
-  const meta = useMemo(
-    () =>
-      catalog
-        ? buildTableMeta(
-            catalog,
-            target.connection,
-            target.schema,
-            target.table,
-          )
-        : null,
-    [catalog, target],
-  );
+  const { meta } = useTableMeta(target.connection, target.schema, target.table);
 
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
@@ -54,17 +42,7 @@ export function ReferencePickerModal({
   const pageSize = 25;
 
   const { data, isLoading, isFetching } = useQuery<ListResponse>({
-    queryKey: [
-      "refpick",
-      target.connection,
-      target.schema,
-      target.table,
-      page,
-      sort,
-      sortDir,
-      filterSet,
-      search,
-    ],
+    queryKey: ["refpick", target.connection, target.schema, target.table, page, sort, sortDir, filterSet, search],
     queryFn: async () => {
       const qs = new URLSearchParams({
         page: String(page),
@@ -78,9 +56,7 @@ export function ReferencePickerModal({
           : {}),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(
-        `/api/data/${target.connection}/${target.schema}/${target.table}?${qs}`,
-      );
+      const res = await fetch(`/api/data/${target.connection}/${target.schema}/${target.table}?${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;
@@ -106,9 +82,7 @@ export function ReferencePickerModal({
   const select = (row: Record<string, unknown>) => {
     const value = row[target.column];
     if (value == null) return;
-    const label = meta?.displayColumn
-      ? ((row[meta.displayColumn] as string) ?? null)
-      : null;
+    const label = meta?.displayColumn ? ((row[meta.displayColumn] as string) ?? null) : null;
     onPick(String(value), label != null ? String(label) : null);
     onClose();
   };
@@ -117,11 +91,7 @@ export function ReferencePickerModal({
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-60"
-        style={{ background: "var(--overlay)" }}
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-60" style={{ background: "var(--overlay)" }} onClick={onClose} />
       <div
         className="fixed z-70 inset-x-0 top-[5vh] mx-auto w-260 max-w-[95vw] panel p-5 max-h-[88vh] flex flex-col"
         style={{ background: "var(--card)" }}
@@ -174,21 +144,17 @@ export function ReferencePickerModal({
             </p>
           )}
           {isLoading && (
-            <p
-              className="px-1 py-2 text-[12px]"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <p className="px-1 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
               Loading…
             </p>
           )}
         </div>
 
-        <div
-          className="flex items-center gap-3 mt-3 text-[13px]"
-          style={{ color: "var(--muted-foreground)" }}
-        >
-          <Button variant="outline" size="sm"
-           
+        <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+          <Button
+            variant="outline"
+            size="sm"
+
             disabled={page === 0}
             onClick={() => setPage((p) => p - 1)}
           >
@@ -198,17 +164,17 @@ export function ReferencePickerModal({
             Page {page + 1}
             {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
           </span>
-          <Button variant="outline" size="sm"
-           
+          <Button
+            variant="outline"
+            size="sm"
+
             disabled={!data?.hasMore}
             onClick={() => setPage((p) => p + 1)}
           >
             Next →
           </Button>
           <span className="flex-1" />
-          <span style={{ color: "var(--muted-foreground-faint)" }}>
-            Click a row to select it
-          </span>
+          <span style={{ color: "var(--muted-foreground-faint)" }}>Click a row to select it</span>
         </div>
       </div>
     </>

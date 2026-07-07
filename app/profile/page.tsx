@@ -38,8 +38,7 @@ export default function ProfilePage() {
 
   const passwordMutation = useMutation({
     mutationFn: async () => {
-      if (newPassword !== confirmPassword)
-        throw new Error("Passwords do not match");
+      if (newPassword !== confirmPassword) throw new Error("Passwords do not match");
       const res = await fetch("/api/auth/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -105,12 +104,7 @@ export default function ProfilePage() {
           >
             <div>
               <label className="label">Name</label>
-              <input
-                className="input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-              />
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
             </div>
             {nameMutation.error && (
               <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
@@ -183,12 +177,7 @@ export default function ProfilePage() {
             <div className="flex items-center gap-3">
               <Button
                 type="submit"
-                disabled={
-                  passwordMutation.isPending ||
-                  !currentPassword ||
-                  !newPassword ||
-                  !confirmPassword
-                }
+                disabled={passwordMutation.isPending || !currentPassword || !newPassword || !confirmPassword}
               >
                 {passwordMutation.isPending ? "Updating…" : "Update password"}
               </Button>

@@ -66,9 +66,7 @@ export function RecordComments({
 
   return (
     <div className="panel p-4 min-w-0">
-      <div className="text-[13.5px] font-semibold mb-3">
-        Comments{comments?.length ? ` (${comments.length})` : ""}
-      </div>
+      <div className="text-[13.5px] font-semibold mb-3">Comments{comments?.length ? ` (${comments.length})` : ""}</div>
 
       <div className="space-y-3 mb-3">
         {comments?.length === 0 && (
@@ -82,9 +80,7 @@ export function RecordComments({
             <div key={c.id} className="text-[13px]">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="font-medium">{c.authorName ?? "—"}</span>
-                <span style={{ color: "var(--muted-foreground-faint)", fontSize: 11 }}>
-                  {c.createdAt}
-                </span>
+                <span style={{ color: "var(--muted-foreground-faint)", fontSize: 11 }}>{c.createdAt}</span>
                 {canDelete && (
                   <Button
                     variant="ghost"
@@ -98,26 +94,15 @@ export function RecordComments({
                   </Button>
                 )}
               </div>
-              <div className="whitespace-pre-wrap wrap-break-word">
-                {c.body}
-              </div>
+              <div className="whitespace-pre-wrap wrap-break-word">{c.body}</div>
             </div>
           );
         })}
       </div>
 
-      <Textarea
-        rows={2}
-        placeholder="Add a comment…"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
+      <Textarea rows={2} placeholder="Add a comment…" value={body} onChange={(e) => setBody(e.target.value)} />
       <div className="mt-2 flex justify-end">
-        <Button
-          size="sm"
-          disabled={!body.trim() || add.isPending}
-          onClick={() => add.mutate()}
-        >
+        <Button size="sm" disabled={!body.trim() || add.isPending} onClick={() => add.mutate()}>
           {add.isPending ? "Posting…" : "Comment"}
         </Button>
       </div>

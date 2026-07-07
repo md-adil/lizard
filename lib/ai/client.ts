@@ -16,7 +16,7 @@ let client: Anthropic | null = null;
 export function getAnthropicClient(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new AiConfigError(
-      "Set ANTHROPIC_API_KEY in the environment to enable AI queries (get a key at console.anthropic.com), then restart Lizard."
+      "Set ANTHROPIC_API_KEY in the environment to enable AI queries (get a key at console.anthropic.com), then restart Lizard.",
     );
   }
   if (!client) client = new Anthropic(); // reads ANTHROPIC_API_KEY from env

@@ -84,10 +84,7 @@ export function SavedViewsBar({
         <DropdownMenuGroup>
           <DropdownMenuLabel>Saved views</DropdownMenuLabel>
           {views?.length === 0 && (
-            <div
-              className="px-2 py-1.5 text-[12px]"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <div className="px-2 py-1.5 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
               None yet
             </div>
           )}
@@ -115,9 +112,7 @@ export function SavedViewsBar({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={saveCurrent}>
-            ＋ Save current view…
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={saveCurrent}>＋ Save current view…</DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

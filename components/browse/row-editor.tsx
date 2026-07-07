@@ -7,12 +7,7 @@ import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 interface Props {
   meta: TableMeta;
@@ -25,15 +20,12 @@ interface Props {
 
 function toInputValue(cm: ColumnMeta, v: unknown): string {
   if (v === null || v === undefined) return "";
-  if (cm.widget === "json")
-    return typeof v === "string" ? v : JSON.stringify(v, null, 2);
+  if (cm.widget === "json") return typeof v === "string" ? v : JSON.stringify(v, null, 2);
   // array editor state is held as a JSON string of the element list
-  if (cm.widget === "array")
-    return JSON.stringify(Array.isArray(v) ? v : []);
+  if (cm.widget === "array") return JSON.stringify(Array.isArray(v) ? v : []);
   if (cm.widget === "bytea") {
     const b = v as { type?: string; data?: unknown[] };
-    if (b && b.type === "Buffer" && Array.isArray(b.data))
-      return `⬇ ${b.data.length} bytes`;
+    if (b && b.type === "Buffer" && Array.isArray(b.data)) return `⬇ ${b.data.length} bytes`;
     return "";
   }
   if (cm.widget === "datetime" && typeof v === "string") {
@@ -44,15 +36,7 @@ function toInputValue(cm: ColumnMeta, v: unknown): string {
   return String(v);
 }
 
-function ReferenceInput({
-  cm,
-  value,
-  onChange,
-}: {
-  cm: ColumnMeta;
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string; onChange: (v: string) => void }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
@@ -62,14 +46,7 @@ function ReferenceInput({
   const ref = cm.ref!;
 
   const { data: options } = useQuery<{ id: string; label: string }[]>({
-    queryKey: [
-      "refs",
-      ref.connection,
-      ref.schema,
-      ref.table,
-      ref.column,
-      search,
-    ],
+    queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
       const res = await fetch(
         `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
@@ -82,23 +59,14 @@ function ReferenceInput({
 
   // resolve the label of the current value once (exact id lookup) for display
   useQuery<{ id: string; label: string }[]>({
-    queryKey: [
-      "ref-label",
-      ref.connection,
-      ref.schema,
-      ref.table,
-      ref.column,
-      value,
-    ],
+    queryKey: ["ref-label", ref.connection, ref.schema, ref.table, ref.column, value],
     queryFn: async () => {
       const res = await fetch(
         `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(value)}`,
       );
       const body = await res.json();
       if (res.ok) {
-        const hit = (body as { id: string; label: string }[]).find(
-          (o) => o.id === value,
-        );
+        const hit = (body as { id: string; label: string }[]).find((o) => o.id === value);
         if (hit) setPickedLabel(hit.label);
       }
       return body;
@@ -122,13 +90,7 @@ function ReferenceInput({
           <input
             className="input"
             placeholder={`Search ${ref.table}…`}
-            value={
-              open
-                ? search
-                : displayLabel
-                  ? `${displayLabel} (${value})`
-                  : value
-            }
+            value={open ? search : displayLabel ? `${displayLabel} (${value})` : value}
             onFocus={() => {
               setOpen(true);
               setSearch("");
@@ -163,15 +125,11 @@ function ReferenceInput({
                   key={o.id}
                   onMouseDown={() => pick(o.id, o.label)}
                 >
-                  {o.label}{" "}
-                  <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
+                  {o.label} <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
                 </Button>
               ))}
               {options?.length === 0 && (
-                <div
-                  className="px-3 py-2 text-[12px]"
-                  style={{ color: "var(--muted-foreground-faint)" }}
-                >
+                <div className="px-3 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
                   No matches — try Browse
                 </div>
               )}
@@ -202,13 +160,7 @@ function ReferenceInput({
 // Tag/chip editor for array columns. Value is a JSON string of the element
 // list; elements are edited as text (Postgres coerces them to the element type
 // on write). Add with Enter or comma, remove with the chip's ✕.
-function ChipInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function ChipInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   let items: string[] = [];
   try {
     const parsed = value ? JSON.parse(value) : [];
@@ -226,11 +178,7 @@ function ChipInput({
   return (
     <div className="input flex flex-wrap items-center gap-1 h-auto min-h-8 py-1">
       {items.map((it, i) => (
-        <span
-          key={i}
-          className="tag flex items-center gap-1"
-          style={{ fontSize: 11.5 }}
-        >
+        <span key={i} className="tag flex items-center gap-1" style={{ fontSize: 11.5 }}>
           {it}
           <button
             type="button"
@@ -277,12 +225,8 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     const init: Record<string, string> = {};
     for (const cm of editable) {
       // when duplicating, clear PK columns so the DB assigns new ones
-      const clear =
-        !!duplicateFrom &&
-        !row &&
-        meta.table.primaryKey.includes(cm.col.name);
-      init[cm.col.name] =
-        source && !clear ? toInputValue(cm, source[cm.col.name]) : "";
+      const clear = !!duplicateFrom && !row && meta.table.primaryKey.includes(cm.col.name);
+      init[cm.col.name] = source && !clear ? toInputValue(cm, source[cm.col.name]) : "";
     }
     setValues(init);
     // duplicated fields count as user-entered so create sends them all
@@ -370,10 +314,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
             body: JSON.stringify({
               pk,
               data,
-              expectedUpdatedAt:
-                meta.updatedAtColumn && row
-                  ? row[meta.updatedAtColumn]
-                  : undefined,
+              expectedUpdatedAt: meta.updatedAtColumn && row ? row[meta.updatedAtColumn] : undefined,
             }),
           });
       const body = await res.json();
@@ -393,14 +334,11 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
   const del = useMutation({
     mutationFn: async () => {
-      const res = await fetch(
-        `/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`,
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pk }),
-        },
-      );
+      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pk }),
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Delete failed");
     },
@@ -426,14 +364,9 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && close()}>
-      <SheetContent
-        side="right"
-        className="w-150 max-w-full overflow-y-auto scrollbar-thin p-6"
-      >
+      <SheetContent side="right" className="w-150 max-w-full overflow-y-auto scrollbar-thin p-6">
         <SheetHeader className="mb-5">
-          <SheetTitle>
-            {isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}
-          </SheetTitle>
+          <SheetTitle>{isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}</SheetTitle>
         </SheetHeader>
 
         <div className="space-y-4">
@@ -445,21 +378,13 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
               <div key={name}>
                 <label className="label">
                   {cm.label}
-                  {cm.required && !disabled && (
-                    <span style={{ color: "var(--destructive)" }}> *</span>
-                  )}
-                  <span
-                    className="ml-2 code"
-                    style={{ color: "var(--muted-foreground-faint)", fontSize: 10.5 }}
-                  >
+                  {cm.required && !disabled && <span style={{ color: "var(--destructive)" }}> *</span>}
+                  <span className="ml-2 code" style={{ color: "var(--muted-foreground-faint)", fontSize: 10.5 }}>
                     {cm.col.udtName}
                   </span>
                 </label>
                 {disabled ? (
-                  <div
-                    className="input opacity-60 code"
-                    style={{ minHeight: 32 }}
-                  >
+                  <div className="input opacity-60 code" style={{ minHeight: 32 }}>
                     {cm.redacted ? (
                       <RedactedValue value={row?.[name]} />
                     ) : row ? (
@@ -469,20 +394,10 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     )}
                   </div>
                 ) : cm.widget === "reference" && cm.ref ? (
-                  <ReferenceInput
-                    cm={cm}
-                    value={v}
-                    onChange={(nv) => setVal(name, nv)}
-                  />
+                  <ReferenceInput cm={cm} value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : cm.widget === "select" && cm.options ? (
-                  <select
-                    className="input"
-                    value={v}
-                    onChange={(e) => setVal(name, e.target.value)}
-                  >
-                    <option value="">
-                      {cm.col.nullable ? "∅ null" : "— pick —"}
-                    </option>
+                  <select className="input" value={v} onChange={(e) => setVal(name, e.target.value)}>
+                    <option value="">{cm.col.nullable ? "∅ null" : "— pick —"}</option>
                     {cm.options.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -490,11 +405,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     ))}
                   </select>
                 ) : cm.widget === "toggle" ? (
-                  <select
-                    className="input"
-                    value={v}
-                    onChange={(e) => setVal(name, e.target.value)}
-                  >
+                  <select className="input" value={v} onChange={(e) => setVal(name, e.target.value)}>
                     {cm.col.nullable && <option value="">∅ null</option>}
                     <option value="true">true</option>
                     <option value="false">false</option>
@@ -519,15 +430,9 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     </Button>
                   </div>
                 ) : cm.widget === "bytea" ? (
-                  <div
-                    className="input opacity-70 code flex items-center"
-                    style={{ minHeight: 32 }}
-                  >
+                  <div className="input opacity-70 code flex items-center" style={{ minHeight: 32 }}>
                     {row ? toInputValue(cm, row[name]) || "∅" : "∅"}
-                    <span
-                      className="ml-2"
-                      style={{ color: "var(--muted-foreground-faint)", fontSize: 11 }}
-                    >
+                    <span className="ml-2" style={{ color: "var(--muted-foreground-faint)", fontSize: 11 }}>
                       binary — not editable here
                     </span>
                   </div>
@@ -562,10 +467,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                   </p>
                 )}
                 {cm.help && !jsonErrors[name] && (
-                  <p
-                    className="text-[12px] mt-1"
-                    style={{ color: "var(--muted-foreground-faint)" }}
-                  >
+                  <p className="text-[12px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
                     {cm.help}
                   </p>
                 )}
@@ -585,11 +487,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
         <div className="mt-6 flex items-center gap-2">
           <Button disabled={save.isPending} onClick={() => save.mutate()}>
-            {save.isPending
-              ? "Saving…"
-              : isCreate
-                ? "Create row"
-                : "Save changes"}
+            {save.isPending ? "Saving…" : isCreate ? "Create row" : "Save changes"}
           </Button>
           {!isCreate && (
             <Button

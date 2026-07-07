@@ -6,7 +6,7 @@
 // endpoints — no new write path needed.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCatalog, buildTableMeta } from "./useTableMeta";
+import { useTableMeta } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
@@ -20,27 +20,11 @@ interface Target {
   otherTable: string;
 }
 
-export function LinkedRecordsCard({
-  title,
-  target,
-  selfValue,
-}: {
-  title: string;
-  target: Target;
-  selfValue: unknown;
-}) {
+export function LinkedRecordsCard({ title, target, selfValue }: { title: string; target: Target; selfValue: unknown }) {
   const qc = useQueryClient();
-  const { data: catalog } = useCatalog();
   const [linking, setLinking] = useState(false);
 
-  const junctionMeta = catalog
-    ? buildTableMeta(
-        catalog,
-        target.connection,
-        target.junctionSchema,
-        target.junctionTable,
-      )
-    : null;
+  const { meta: junctionMeta } = useTableMeta(target.connection, target.junctionSchema, target.junctionTable);
 
   const key = [
     "linked",
@@ -75,25 +59,23 @@ export function LinkedRecordsCard({
     if (!junctionMeta) return;
     const pk: Record<string, unknown> = {};
     for (const k of junctionMeta.table.primaryKey) pk[k] = junctionRow[k];
-    await fetch(
-      `/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}/row`,
-      { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pk }) },
-    );
+    await fetch(`/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}/row`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pk }),
+    });
     qc.invalidateQueries({ queryKey: key });
   }
 
   async function link(otherId: string) {
-    await fetch(
-      `/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          [target.selfFkColumn]: selfValue,
-          [target.otherFkColumn]: otherId,
-        }),
-      },
-    );
+    await fetch(`/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        [target.selfFkColumn]: selfValue,
+        [target.otherFkColumn]: otherId,
+      }),
+    });
     qc.invalidateQueries({ queryKey: key });
     setLinking(false);
   }
@@ -143,10 +125,7 @@ export function LinkedRecordsCard({
             connection: target.connection,
             schema: target.otherSchema,
             table: target.otherTable,
-            column:
-              junctionMeta?.columns.find(
-                (c) => c.col.name === target.otherFkColumn,
-              )?.ref?.column ?? "",
+            column: junctionMeta?.columns.find((c) => c.col.name === target.otherFkColumn)?.ref?.column ?? "",
           }}
           title={`Link ${target.otherTable}`}
           onPick={(id) => link(id)}

@@ -56,7 +56,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   const schemasRes = await pool.query<{ nspname: string }>(
     `SELECT nspname FROM pg_namespace
      WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'
-     ORDER BY nspname`
+     ORDER BY nspname`,
   );
   let schemaNames = schemasRes.rows.map((r) => r.nspname).filter((n) => !SYSTEM_SCHEMAS.includes(n));
   if (conn.allowedSchemas && conn.allowedSchemas.length > 0) {
@@ -82,7 +82,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
      JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE c.relkind IN ('r', 'p', 'v', 'm') AND n.nspname = ANY($1)
      ORDER BY n.nspname, c.relname`,
-    [schemaNames]
+    [schemaNames],
   );
 
   // columns (with enum values, comments, generated flag)
@@ -102,7 +102,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
        AND t.typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = c.udt_schema)
      WHERE c.table_schema = ANY($1)
      ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
-    [schemaNames]
+    [schemaNames],
   );
 
   // constraints: pk, fk, unique
@@ -122,7 +122,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
      LEFT JOIN pg_class frel ON frel.oid = con.confrelid
      LEFT JOIN pg_namespace fn ON fn.oid = frel.relnamespace
      WHERE n.nspname = ANY($1) AND con.contype IN ('p', 'f', 'u', 'c')`,
-    [schemaNames]
+    [schemaNames],
   );
 
   // assemble

@@ -1,4 +1,3 @@
-
 # Demo fleet: two independent Postgres databases simulating microservices.
 #   users-db  (port 54321) — customers + crm schema
 #   orders-db (port 54322) — orders + order_items (no FK to customers: cross-DB)

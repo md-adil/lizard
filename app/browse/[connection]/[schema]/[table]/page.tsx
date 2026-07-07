@@ -3,11 +3,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import {
-  useCatalog,
-  buildTableMeta,
-  type TableMeta,
-} from "@/components/browse/useTableMeta";
+import { useTableMeta } from "@/components/browse/useTableMeta";
 import Link from "next/link";
 import {
   Breadcrumb,
@@ -30,12 +26,7 @@ import {
   selfRefColumn,
   type ViewType,
 } from "@/components/browse/view-types";
-import {
-  GalleryView,
-  KanbanView,
-  CalendarView,
-  TreeView,
-} from "@/components/browse/table-views";
+import { GalleryView, KanbanView, CalendarView, TreeView } from "@/components/browse/table-views";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
 import type { SavedViewConfig } from "@/lib/types";
@@ -63,23 +54,10 @@ export default function TablePage() {
   }>();
   const router = useRouter();
   const {
-    data: catalog,
+    meta,
     isLoading: catalogLoading,
     error: catalogError,
-  } = useCatalog();
-
-  const meta: TableMeta | null = useMemo(
-    () =>
-      catalog
-        ? buildTableMeta(
-            catalog,
-            params.connection,
-            params.schema,
-            params.table,
-          )
-        : null,
-    [catalog, params],
-  );
+  } = useTableMeta(params.connection, params.schema, params.table);
 
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
@@ -88,23 +66,15 @@ export default function TablePage() {
     combinator: "and",
     conditions: [],
   });
-  const [editing, setEditing] = useState<
-    Record<string, unknown> | null | "new"
-  >();
+  const [editing, setEditing] = useState<Record<string, unknown> | null | "new">();
   const [search, setSearch] = useState("");
   const [viewType, setViewType] = useState<ViewType>("table");
   const [groupBy, setGroupBy] = useState<string | undefined>();
   const [dateField, setDateField] = useState<string | undefined>();
   // Phase 8.8 — Grafana-style auto-refresh, default off (ms; 0 = off).
   const [refreshMs, setRefreshMs] = useState(0);
-  const [columnVisibility, setColumnVisibility] = useColumnVisibility(
-    meta?.connectionId,
-    params.schema,
-    params.table,
-  );
-  const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>(
-    [],
-  );
+  const [columnVisibility, setColumnVisibility] = useColumnVisibility(meta?.connectionId, params.schema, params.table);
+  const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>([]);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const clearSelection = () => {
     setSelectedRows([]);
@@ -114,42 +84,29 @@ export default function TablePage() {
   const [importing, setImporting] = useState(false);
 
   const pageSize = 50;
-  const { data, isLoading, isFetching, error, refetch } =
-    useQuery<ListResponse>({
-      queryKey: [
-        "rows",
-        params.connection,
-        params.schema,
-        params.table,
-        page,
-        sort,
-        sortDir,
-        filterSet,
-        search,
-      ],
-      queryFn: async () => {
-        const qs = new URLSearchParams({
-          page: String(page),
-          pageSize: String(pageSize),
-          ...(sort ? { sort, sortDir } : {}),
-          ...(filterSet.conditions.length
-            ? {
-                filters: JSON.stringify(filterSet.conditions),
-                combinator: filterSet.combinator,
-              }
-            : {}),
-          ...(search ? { search } : {}),
-        });
-        const res = await fetch(
-          `/api/data/${params.connection}/${params.schema}/${params.table}?${qs}`,
-        );
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
-        return body;
-      },
-      placeholderData: keepPreviousData,
-      enabled: !!meta,
-    });
+  const { data, isLoading, isFetching, error, refetch } = useQuery<ListResponse>({
+    queryKey: ["rows", params.connection, params.schema, params.table, page, sort, sortDir, filterSet, search],
+    queryFn: async () => {
+      const qs = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        ...(sort ? { sort, sortDir } : {}),
+        ...(filterSet.conditions.length
+          ? {
+              filters: JSON.stringify(filterSet.conditions),
+              combinator: filterSet.combinator,
+            }
+          : {}),
+        ...(search ? { search } : {}),
+      });
+      const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}?${qs}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
+      return body;
+    },
+    placeholderData: keepPreviousData,
+    enabled: !!meta,
+  });
 
   // Phase 8.8 — Grafana-style auto-refresh (off by default; no LISTEN/NOTIFY,
   // see PLAN.md §8.8 for why: a trigger-based approach would need DDL on the
@@ -157,12 +114,7 @@ export default function TablePage() {
   useInterval(() => refetch(), refreshMs > 0 ? refreshMs : null);
 
   if (catalogLoading) return <PagePad>Loading catalog…</PagePad>;
-  if (catalogError)
-    return (
-      <PagePad style={{ color: "var(--destructive)" }}>
-        Failed to load catalog.
-      </PagePad>
-    );
+  if (catalogError) return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
   if (!meta)
     return (
       <PagePad>
@@ -203,14 +155,11 @@ export default function TablePage() {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
         for (const k of meta.table.primaryKey) pk[k] = row[k];
-        await fetch(
-          `/api/data/${params.connection}/${params.schema}/${params.table}/row`,
-          {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pk }),
-          },
-        );
+        await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}/row`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pk }),
+        });
       }
       clearSelection();
       refetch();
@@ -245,9 +194,7 @@ export default function TablePage() {
     refreshMs,
   };
   const applyView = (c: SavedViewConfig) => {
-    setFilterSet(
-      (c.filterSet as FilterSet) ?? { combinator: "and", conditions: [] },
-    );
+    setFilterSet((c.filterSet as FilterSet) ?? { combinator: "and", conditions: [] });
     setSort(c.sort);
     setSortDir(c.sortDir ?? "asc");
     setSearch(c.search ?? "");
@@ -281,19 +228,11 @@ export default function TablePage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={<Link href={`/browse/${params.connection}`} />}
-            >
-              {params.connection}
-            </BreadcrumbLink>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link href={`/browse/${params.connection}/${params.schema}`} />
-              }
-            >
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
               {params.schema}
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -314,10 +253,7 @@ export default function TablePage() {
             )}
           </div>
           {meta.table.comment && (
-            <p
-              className="text-[13px] mt-1"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <p className="text-[13px] mt-1" style={{ color: "var(--muted-foreground)" }}>
               {meta.table.comment}
             </p>
           )}
@@ -330,11 +266,7 @@ export default function TablePage() {
             currentConfig={viewConfig}
             onApply={applyView}
           />
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<a href={exportHref} download />}
-          >
+          <Button variant="outline" nativeButton={false} render={<a href={exportHref} download />}>
             ⬇ Export CSV
           </Button>
           {!meta.isView && (
@@ -345,17 +277,11 @@ export default function TablePage() {
           <Button
             variant="outline"
             nativeButton={false}
-            render={
-              <Link
-                href={`/browse/${params.connection}/${params.schema}/${params.table}/customize`}
-              />
-            }
+            render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}/customize`} />}
           >
             ⚙ Customize
           </Button>
-          {!meta.isView && (
-            <Button onClick={() => setEditing("new")}>＋ New row</Button>
-          )}
+          {!meta.isView && <Button onClick={() => setEditing("new")}>＋ New row</Button>}
         </div>
       </div>
 
@@ -388,10 +314,7 @@ export default function TablePage() {
         pagination; alternate views render the currently-loaded page). */}
       <div className="flex items-center gap-3 mb-3">
         {views.length > 1 && (
-          <Tabs
-            value={viewType}
-            onValueChange={(v) => setViewType(v as ViewType)}
-          >
+          <Tabs value={viewType} onValueChange={(v) => setViewType(v as ViewType)}>
             <TabsList variant="line">
               {views.map((v) => (
                 <TabsTrigger key={v} value={v}>
@@ -445,10 +368,7 @@ export default function TablePage() {
           <option value={60000}>Refresh: 1m</option>
         </select>
         {isFetching && refreshMs > 0 && (
-          <Loader2
-            className="size-3.5 animate-spin"
-            style={{ color: "var(--primary)" }}
-          />
+          <Loader2 className="size-3.5 animate-spin" style={{ color: "var(--primary)" }} />
         )}
       </div>
       {viewType === "table" && canBulkDelete && selectedRows.length > 0 && (
@@ -459,12 +379,7 @@ export default function TablePage() {
           <span className="text-[13px]" style={{ color: "var(--primary)" }}>
             {selectedRows.length} selected
           </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={bulkDeleting}
-            onClick={bulkDelete}
-          >
+          <Button variant="destructive" size="sm" disabled={bulkDeleting} onClick={bulkDelete}>
             {bulkDeleting ? "Deleting…" : "🗑 Delete selected"}
           </Button>
           <Button variant="ghost" size="sm" onClick={clearSelection}>
@@ -491,13 +406,7 @@ export default function TablePage() {
           clearSelectionSignal={clearSelectionSignal}
         />
       )}
-      {viewType === "gallery" && (
-        <GalleryView
-          meta={meta}
-          rows={data?.rows ?? EMPTY_ROWS}
-          onOpen={openRow}
-        />
-      )}
+      {viewType === "gallery" && <GalleryView meta={meta} rows={data?.rows ?? EMPTY_ROWS} onOpen={openRow} />}
       {viewType === "kanban" && activeGroupBy && (
         <KanbanView
           meta={meta}
@@ -509,52 +418,26 @@ export default function TablePage() {
         />
       )}
       {viewType === "calendar" && activeDateField && (
-        <CalendarView
-          meta={meta}
-          rows={data?.rows ?? EMPTY_ROWS}
-          dateField={activeDateField}
-          onOpen={openRow}
-        />
+        <CalendarView meta={meta} rows={data?.rows ?? EMPTY_ROWS} dateField={activeDateField} onOpen={openRow} />
       )}
       {viewType === "tree" && parentField && (
-        <TreeView
-          meta={meta}
-          rows={data?.rows ?? EMPTY_ROWS}
-          parentField={parentField}
-          onOpen={openRow}
-        />
+        <TreeView meta={meta} rows={data?.rows ?? EMPTY_ROWS} parentField={parentField} onOpen={openRow} />
       )}
       {!isLoading && data?.rows.length === 0 && (
-        <p
-          className="px-1 py-6 text-[13px]"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+        <p className="px-1 py-6 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           No rows{filterSet.conditions.length ? " match the filters" : ""}.
         </p>
       )}
 
-      <div
-        className="flex items-center gap-3 mt-3 text-[13px]"
-        style={{ color: "var(--muted-foreground)" }}
-      >
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={page === 0}
-          onClick={() => setPage((p) => p - 1)}
-        >
+      <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+        <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
           ← Prev
         </Button>
         <span>
           Page {page + 1}
           {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
         </span>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!data?.hasMore}
-          onClick={() => setPage((p) => p + 1)}
-        >
+        <Button variant="outline" size="sm" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
           Next →
         </Button>
       </div>
@@ -566,29 +449,14 @@ export default function TablePage() {
           onClose={() => setEditing(undefined)}
         />
       )}
-      {importing && (
-        <ImportCsvDialog
-          meta={meta}
-          onClose={() => setImporting(false)}
-          onImported={() => refetch()}
-        />
-      )}
+      {importing && <ImportCsvDialog meta={meta} onClose={() => setImporting(false)} onImported={() => refetch()} />}
     </div>
   );
 }
 
-function PagePad({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-}) {
+function PagePad({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div
-      className="px-8 py-10 text-[14px]"
-      style={{ color: "var(--muted-foreground)", ...style }}
-    >
+    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
       {children}
     </div>
   );

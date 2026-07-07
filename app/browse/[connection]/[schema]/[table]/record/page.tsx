@@ -1,14 +1,11 @@
 "use client";
 
-// Record details page: the row itself, each JSON column, and every related
-// table (parents via FKs/virtual FKs, children via reverse FKs — including
-// cross-database relations) rendered as dedicated cards with their own menus.
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  useCatalog,
+  useTableMeta,
   buildTableMeta,
   formatCell,
   type TableMeta,
@@ -22,11 +19,7 @@ import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
 import { humanize } from "@/lib/introspect/heuristics";
-import {
-  SAME_SCHEMA,
-  isPattern,
-  vfkDisplayColumn,
-} from "@/lib/introspect/virtual-fk";
+import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -67,29 +60,17 @@ function RelatedCard({
           </span>
         )}
         <span className="flex-1" />
-        <Button
-          variant="outline"
-          size="sm"
-          title="Enlarge"
-          onClick={() => setExpanded(true)}
-        >
+        <Button variant="outline" size="sm" title="Enlarge" onClick={() => setExpanded(true)}>
           ⤢
         </Button>
         {menu && menu.length > 0 && (
           <div className="relative">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setOpen((s) => !s)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setOpen((s) => !s)}>
               ⋯
             </Button>
             {open && (
               <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setOpen(false)}
-                />
+                <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
                 <div
                   className="absolute right-0 z-20 mt-1 w-44 rounded-md border py-1"
                   style={{
@@ -104,9 +85,7 @@ function RelatedCard({
                         href={m.href}
                         className="block px-3 py-1.5 text-[12.5px] hoverable"
                         style={{
-                          color: m.danger
-                            ? "var(--destructive)"
-                            : "var(--foreground)",
+                          color: m.danger ? "var(--destructive)" : "var(--foreground)",
                         }}
                         onClick={() => setOpen(false)}
                       >
@@ -118,9 +97,7 @@ function RelatedCard({
                         className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
                         key={m.label}
                         style={{
-                          color: m.danger
-                            ? "var(--destructive)"
-                            : "var(--foreground)",
+                          color: m.danger ? "var(--destructive)" : "var(--foreground)",
                         }}
                         onClick={() => {
                           setOpen(false);
@@ -153,18 +130,14 @@ function RelatedCard({
           }}
         >
           <div className="flex items-center gap-2 mb-4 pr-6">
-            <DialogTitle className="text-[16px] font-semibold">
-              {title}
-            </DialogTitle>
+            <DialogTitle className="text-[16px] font-semibold">{title}</DialogTitle>
             {subtitle && (
               <span className="tag code" style={{ fontSize: 10 }}>
                 {subtitle}
               </span>
             )}
           </div>
-          <div className="flex-1 min-h-0 overflow-auto scrollbar-thin pr-1 text-[13.5px]">
-            {children}
-          </div>
+          <div className="flex-1 min-h-0 overflow-auto scrollbar-thin pr-1 text-[13.5px]">{children}</div>
         </DialogContent>
       </Dialog>
     </Card>
@@ -180,15 +153,12 @@ function FieldList({
   row: Record<string, unknown>;
   fkLabels: Record<string, Record<string, string>>;
 }) {
-  const cols = meta.columns.filter(
-    (c) => !c.hidden && !["json", "jsonb"].includes(c.col.udtName),
-  );
+  const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "json");
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
       {cols.map((cm) => {
         const v = row[cm.col.name];
-        const label =
-          cm.ref && v != null ? fkLabels[cm.col.name]?.[String(v)] : undefined;
+        const label = cm.ref && v != null ? fkLabels[cm.col.name]?.[String(v)] : undefined;
         const f = formatCell(v);
         return (
           <div key={cm.col.name} className="min-w-0">
@@ -201,9 +171,7 @@ function FieldList({
             <div
               className="text-[13px] truncate"
               style={{
-                color: f.muted
-                  ? "var(--muted-foreground-faint)"
-                  : "var(--foreground)",
+                color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)",
               }}
               title={cm.redacted ? undefined : f.text}
             >
@@ -240,7 +208,20 @@ function JsonCard({
   column: string;
 }) {
   const qc = useQueryClient();
-  const value = row[column];
+  const stored = row[column];
+  // A real json/jsonb column arrives already parsed into an object; a
+  // text column with its widget overridden to "json" arrives as a raw
+  // string that still needs parsing to render/edit as structured JSON.
+  const value =
+    typeof stored === "string" && stored.trim() !== ""
+      ? (() => {
+          try {
+            return JSON.parse(stored);
+          } catch {
+            return stored;
+          }
+        })()
+      : stored;
   const pretty = value == null ? "" : JSON.stringify(value, null, 2);
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState(false);
@@ -257,14 +238,11 @@ function JsonCard({
           throw new Error("Invalid JSON");
         }
       }
-      const res = await fetch(
-        `/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pk, data: { [column]: parsed } }),
-        },
-      );
+      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pk, data: { [column]: parsed } }),
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Save failed");
     },
@@ -317,34 +295,18 @@ function JsonCard({
     >
       {editing ? (
         <>
-          <textarea
-            className="input code w-full"
-            rows={8}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
+          <textarea className="input code w-full" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
           {err && (
-            <p
-              className="text-[12px] mt-1"
-              style={{ color: "var(--destructive)" }}
-            >
+            <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
               {err}
             </p>
           )}
-          <Button
-            size="sm"
-            className="mt-2"
-            disabled={save.isPending}
-            onClick={() => save.mutate()}
-          >
+          <Button size="sm" className="mt-2" disabled={save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? "Saving…" : "Save JSON"}
           </Button>
         </>
       ) : value == null ? (
-        <p
-          className="text-[13px]"
-          style={{ color: "var(--muted-foreground-faint)" }}
-        >
+        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
           ∅ null
         </p>
       ) : raw ? (
@@ -382,14 +344,11 @@ function BelongsToCard({
   value: unknown;
 }) {
   const targetMeta = useMemo(
-    () =>
-      buildTableMeta(catalog, target.connection, target.schema, target.table),
+    () => buildTableMeta(catalog, target.connection, target.schema, target.table),
     [catalog, target],
   );
   const [editing, setEditing] = useState(false);
-  const pkParam = encodeURIComponent(
-    JSON.stringify({ [target.column]: value }),
-  );
+  const pkParam = encodeURIComponent(JSON.stringify({ [target.column]: value }));
   // only the reference column can carry a transform (e.g. case-insensitive),
   // so this key is a single-entry map — but keyTransforms is shaped to
   // support composite keys if that's ever needed here too.
@@ -401,13 +360,7 @@ function BelongsToCard({
     row: Record<string, unknown>;
     fkLabels: Record<string, Record<string, string>>;
   }>({
-    queryKey: [
-      "record",
-      target.connection,
-      target.schema,
-      target.table,
-      String(value),
-    ],
+    queryKey: ["record", target.connection, target.schema, target.table, String(value)],
     queryFn: async () => {
       const res = await fetch(
         `/api/data/${target.connection}/${target.schema}/${target.table}/row?pk=${pkParam}${keyTransformsParam}`,
@@ -436,10 +389,7 @@ function BelongsToCard({
       ]}
     >
       {value == null ? (
-        <p
-          className="text-[13px]"
-          style={{ color: "var(--muted-foreground-faint)" }}
-        >
+        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
           ∅ not linked
         </p>
       ) : error ? (
@@ -447,19 +397,12 @@ function BelongsToCard({
           {(error as Error).message}
         </p>
       ) : !data || !targetMeta ? (
-        <div
-          className="h-16 rounded animate-pulse"
-          style={{ background: "var(--border)" }}
-        />
+        <div className="h-16 rounded animate-pulse" style={{ background: "var(--border)" }} />
       ) : (
         <FieldList meta={targetMeta} row={data.row} fkLabels={data.fkLabels} />
       )}
       {editing && data && targetMeta && (
-        <RowEditor
-          meta={targetMeta}
-          row={data.row}
-          onClose={() => setEditing(false)}
-        />
+        <RowEditor meta={targetMeta} row={data.row} onClose={() => setEditing(false)} />
       )}
     </RelatedCard>
   );
@@ -478,13 +421,10 @@ function HasManyCard({
   value: unknown;
 }) {
   const meta = useMemo(
-    () =>
-      buildTableMeta(catalog, source.connection, source.schema, source.table),
+    () => buildTableMeta(catalog, source.connection, source.schema, source.table),
     [catalog, source],
   );
-  const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(
-    null,
-  );
+  const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [sort, setSort] = useState<string | undefined>();
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const { data, error } = useQuery<{
@@ -492,18 +432,9 @@ function HasManyCard({
     total: number | null;
     fkLabels: Record<string, Record<string, string>>;
   }>({
-    queryKey: [
-      "related",
-      source.connection,
-      source.schema,
-      source.table,
-      fkColumn,
-      String(value),
-    ],
+    queryKey: ["related", source.connection, source.schema, source.table, fkColumn, String(value)],
     queryFn: async () => {
-      const filters = JSON.stringify([
-        { column: fkColumn, op: "eq", value: String(value) },
-      ]);
+      const filters = JSON.stringify([{ column: fkColumn, op: "eq", value: String(value) }]);
       const res = await fetch(
         `/api/data/${source.connection}/${source.schema}/${source.table}?page=0&pageSize=8&filters=${encodeURIComponent(filters)}`,
       );
@@ -532,15 +463,9 @@ function HasManyCard({
           {(error as Error).message}
         </p>
       ) : !data ? (
-        <div
-          className="h-16 rounded animate-pulse"
-          style={{ background: "var(--border)" }}
-        />
+        <div className="h-16 rounded animate-pulse" style={{ background: "var(--border)" }} />
       ) : data.rows.length === 0 ? (
-        <p
-          className="text-[13px]"
-          style={{ color: "var(--muted-foreground-faint)" }}
-        >
+        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
           No related rows.
         </p>
       ) : (
@@ -573,22 +498,13 @@ function HasManyCard({
             maxHeight="calc(100vh - 400px)"
           />
           {data.total != null && data.total > data.rows.length && (
-            <p
-              className="text-[12px] mt-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
+            <p className="text-[12px] mt-1.5" style={{ color: "var(--muted-foreground-faint)" }}>
               showing {data.rows.length} of {data.total}
             </p>
           )}
         </>
       )}
-      {editingRow && (
-        <RowEditor
-          meta={meta}
-          row={editingRow}
-          onClose={() => setEditingRow(null)}
-        />
-      )}
+      {editingRow && <RowEditor meta={meta} row={editingRow} onClose={() => setEditingRow(null)} />}
     </RelatedCard>
   );
 }
@@ -602,7 +518,7 @@ function RecordView() {
   const search = useSearchParams();
   const router = useRouter();
   const qc = useQueryClient();
-  const { data: catalog } = useCatalog();
+  const { meta, catalog } = useTableMeta(params.connection, params.schema, params.table);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
@@ -625,19 +541,6 @@ function RecordView() {
     }
   }, [search]);
 
-  const meta = useMemo(
-    () =>
-      catalog
-        ? buildTableMeta(
-            catalog,
-            params.connection,
-            params.schema,
-            params.table,
-          )
-        : null,
-    [catalog, params],
-  );
-
   const { data, error } = useQuery<{
     row: Record<string, unknown>;
     fkLabels: Record<string, Record<string, string>>;
@@ -653,9 +556,7 @@ function RecordView() {
     queryFn: async () => {
       const qs = new URLSearchParams({ pk: JSON.stringify(pk) });
       if (keyTransforms) qs.set("keyTransforms", JSON.stringify(keyTransforms));
-      const res = await fetch(
-        `/api/data/${params.connection}/${params.schema}/${params.table}/row?${qs}`,
-      );
+      const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}/row?${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
       return body;
@@ -726,10 +627,7 @@ function RecordView() {
                 (f) =>
                   f !== fk &&
                   f.columns.length === 1 &&
-                  !(
-                    f.referencedSchema === params.schema &&
-                    f.referencedTable === params.table
-                  ),
+                  !(f.referencedSchema === params.schema && f.referencedTable === params.table),
               );
               if (otherFk) {
                 manyToMany.push({
@@ -749,18 +647,14 @@ function RecordView() {
     }
     // reverse virtual FKs (any connection → this table)
     for (const v of catalog.virtualFks) {
-      if (v.toConnection !== params.connection || v.toTable !== params.table)
-        continue;
+      if (v.toConnection !== params.connection || v.toTable !== params.table) continue;
       // $schema resolves to the record's own schema; else must match literally
-      const targetSchemaMatches =
-        v.toSchema === SAME_SCHEMA || v.toSchema === params.schema;
+      const targetSchemaMatches = v.toSchema === SAME_SCHEMA || v.toSchema === params.schema;
       if (!targetSchemaMatches) continue;
-      const fromSchema =
-        v.toSchema === SAME_SCHEMA ? params.schema : v.fromSchema;
+      const fromSchema = v.toSchema === SAME_SCHEMA ? params.schema : v.fromSchema;
       const fkColumn = vfkDisplayColumn(v);
       // can't enumerate a concrete back-link when the source side is a pattern
-      if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable))
-        continue;
+      if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
       hasMany.push({
         connection: v.fromConnection,
         schema: fromSchema,
@@ -773,33 +667,24 @@ function RecordView() {
 
   if (!catalog || !meta)
     return (
-      <div
-        className="px-8 py-10 text-[13px]"
-        style={{ color: "var(--muted-foreground)" }}
-      >
+      <div className="px-8 py-10 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
         Loading…
       </div>
     );
   if (error)
     return (
-      <div
-        className="px-8 py-10 text-[13px]"
-        style={{ color: "var(--destructive)" }}
-      >
+      <div className="px-8 py-10 text-[13px]" style={{ color: "var(--destructive)" }}>
         {(error as Error).message}
       </div>
     );
 
   const row = data?.row;
-  const jsonColumns = meta.columns.filter(
-    (c) => ["json", "jsonb"].includes(c.col.udtName) && !c.hidden,
-  );
+  const jsonColumns = meta.columns.filter((c) => c.widget === "json" && !c.hidden);
   const pkText = Object.entries(pk)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
   // the value other tables' FKs point at (single-column PK case)
-  const pkValue =
-    meta.table.primaryKey.length === 1 ? pk[meta.table.primaryKey[0]] : null;
+  const pkValue = meta.table.primaryKey.length === 1 ? pk[meta.table.primaryKey[0]] : null;
 
   return (
     <div className="px-8 py-7 max-w-6xl">
@@ -810,40 +695,24 @@ function RecordView() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={<Link href={`/browse/${params.connection}`} />}
-            >
-              {params.connection}
-            </BreadcrumbLink>
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link href={`/browse/${params.connection}/${params.schema}`} />
-              }
-            >
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
               {params.schema}
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link
-                  href={`/browse/${params.connection}/${params.schema}/${params.table}`}
-                />
-              }
-            >
+            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}`} />}>
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
             <BreadcrumbPage>
-              {meta.displayColumn && row
-                ? String(row[meta.displayColumn] ?? pkText)
-                : pkText}
+              {meta.displayColumn && row ? String(row[meta.displayColumn] ?? pkText) : pkText}
             </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
@@ -851,9 +720,7 @@ function RecordView() {
 
       <div className="flex items-center gap-3 mb-5">
         <h1 className="text-lg font-semibold">
-          {meta.displayColumn && row
-            ? String(row[meta.displayColumn] ?? pkText)
-            : pkText}
+          {meta.displayColumn && row ? String(row[meta.displayColumn] ?? pkText) : pkText}
         </h1>
         <span className="tag code">{pkText}</span>
         <span className="flex-1" />
@@ -866,26 +733,16 @@ function RecordView() {
               variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
-                const res = await fetch(
-                  `/api/data/${params.connection}/${params.schema}/${params.table}/row`,
-                  {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pk }),
-                  },
-                );
+                const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}/row`, {
+                  method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ pk }),
+                });
                 if (res.ok) {
                   qc.invalidateQueries({
-                    queryKey: [
-                      "rows",
-                      params.connection,
-                      params.schema,
-                      params.table,
-                    ],
+                    queryKey: ["rows", params.connection, params.schema, params.table],
                   });
-                  router.push(
-                    `/browse/${params.connection}/${params.schema}/${params.table}`,
-                  );
+                  router.push(`/browse/${params.connection}/${params.schema}/${params.table}`);
                 }
               }}
             >
@@ -899,17 +756,11 @@ function RecordView() {
         <div className="grid grid-cols-2 gap-4">
           {/* main details card */}
           <Card className="col-span-2 p-4">
-            <div
-              className="h-3.5 w-28 rounded animate-pulse mb-4"
-              style={{ background: "var(--input)" }}
-            />
+            <div className="h-3.5 w-28 rounded animate-pulse mb-4" style={{ background: "var(--input)" }} />
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               {[55, 40, 70, 35, 60, 45, 65, 50].map((w, i) => (
                 <div key={i} className="flex flex-col gap-1.5">
-                  <div
-                    className="h-2.5 rounded animate-pulse"
-                    style={{ background: "var(--border)", width: "38%" }}
-                  />
+                  <div className="h-2.5 rounded animate-pulse" style={{ background: "var(--border)", width: "38%" }} />
                   <div
                     className="h-3.5 rounded animate-pulse"
                     style={{
@@ -966,23 +817,11 @@ function RecordView() {
           </div>
 
           {jsonColumns.map((c) => (
-            <JsonCard
-              key={c.col.name}
-              meta={meta}
-              row={row}
-              pk={pk}
-              column={c.col.name}
-            />
+            <JsonCard key={c.col.name} meta={meta} row={row} pk={pk} column={c.col.name} />
           ))}
 
           {relations.belongsTo.map((b) => (
-            <BelongsToCard
-              key={b.column}
-              catalog={catalog}
-              title={b.title}
-              target={b.target}
-              value={row[b.column]}
-            />
+            <BelongsToCard key={b.column} catalog={catalog} title={b.title} target={b.target} value={row[b.column]} />
           ))}
 
           {pkValue != null &&
@@ -1008,27 +847,15 @@ function RecordView() {
 
           {Object.keys(pk).length > 0 && (
             <div className="col-span-2">
-              <RecordComments
-                connectionId={meta.connectionId}
-                schema={params.schema}
-                table={params.table}
-                pk={pk}
-              />
+              <RecordComments connectionId={meta.connectionId} schema={params.schema} table={params.table} pk={pk} />
             </div>
           )}
         </div>
       )}
 
-      {editing && row && (
-        <RowEditor meta={meta} row={row} onClose={() => setEditing(false)} />
-      )}
+      {editing && row && <RowEditor meta={meta} row={row} onClose={() => setEditing(false)} />}
       {duplicating && row && (
-        <RowEditor
-          meta={meta}
-          row={null}
-          duplicateFrom={row}
-          onClose={() => setDuplicating(false)}
-        />
+        <RowEditor meta={meta} row={null} duplicateFrom={row} onClose={() => setDuplicating(false)} />
       )}
     </div>
   );
@@ -1038,10 +865,7 @@ export default function RecordPage() {
   return (
     <Suspense
       fallback={
-        <div
-          className="px-8 py-10 text-[13px]"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+        <div className="px-8 py-10 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           Loading…
         </div>
       }

@@ -10,25 +10,12 @@ import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnMeta } from "./useTableMeta";
-import type {
-  FilterCondition,
-  FilterOp,
-  FilterSet,
-  Combinator,
-} from "@/lib/data/filters";
+import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/data/filters";
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
-type Kind =
-  | "text"
-  | "number"
-  | "date"
-  | "boolean"
-  | "enum"
-  | "reference"
-  | "array"
-  | "jsonb";
+type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
 
 function kindOf(cm: ColumnMeta): Kind {
   if (cm.ref) return "reference";
@@ -38,12 +25,7 @@ function kindOf(cm: ColumnMeta): Kind {
   if (cm.col.udtName === "bool") return "boolean";
   if (cm.col.udtName === "date") return "date";
   if (cm.col.udtName.startsWith("timestamp")) return "date";
-  if (
-    ["int2", "int4", "int8", "float4", "float8", "numeric", "money"].includes(
-      cm.col.udtName,
-    )
-  )
-    return "number";
+  if (["int2", "int4", "int8", "float4", "float8", "numeric", "money"].includes(cm.col.udtName)) return "number";
   return "text";
 }
 
@@ -85,18 +67,7 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
     "null",
     "notnull",
   ],
-  number: [
-    "eq",
-    "neq",
-    "gt",
-    "gte",
-    "lt",
-    "lte",
-    "between",
-    "in",
-    "null",
-    "notnull",
-  ],
+  number: ["eq", "neq", "gt", "gte", "lt", "lte", "between", "in", "null", "notnull"],
   date: ["eq", "gt", "gte", "lt", "lte", "between", "null", "notnull"],
   boolean: ["eq", "null", "notnull"],
   enum: ["eq", "neq", "in", "null", "notnull"],
@@ -121,14 +92,7 @@ function opLabel(kind: Kind, op: FilterOp): string {
 function useRefSearch(cm: ColumnMeta, search: string, enabled: boolean) {
   const ref = cm.ref!;
   return useQuery<{ id: string; label: string }[]>({
-    queryKey: [
-      "refs",
-      ref.connection,
-      ref.schema,
-      ref.table,
-      ref.column,
-      search,
-    ],
+    queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
       const res = await fetch(
         `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
@@ -140,13 +104,7 @@ function useRefSearch(cm: ColumnMeta, search: string, enabled: boolean) {
   });
 }
 
-function RefSelect({
-  cm,
-  onSelect,
-}: {
-  cm: ColumnMeta;
-  onSelect: (id: string, label: string) => void;
-}) {
+function RefSelect({ cm, onSelect }: { cm: ColumnMeta; onSelect: (id: string, label: string) => void }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -187,24 +145,22 @@ function RefSelect({
             className="scrollbar-thin"
           >
             {data?.map((o) => (
-              <Button variant="ghost" className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
+              <Button
+                variant="ghost"
+                className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
                 key={o.id}
                 type="button"
-               
+
                 onMouseDown={() => {
                   onSelect(o.id, o.label);
                   setSearch("");
                 }}
               >
-                {o.label}{" "}
-                <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
+                {o.label} <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
               </Button>
             ))}
             {data?.length === 0 && (
-              <div
-                className="px-3 py-2 text-[12px]"
-                style={{ color: "var(--muted-foreground-faint)" }}
-              >
+              <div className="px-3 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
                 No matches
               </div>
             )}
@@ -258,9 +214,7 @@ function ConditionRow({
   const kind = kindOf(cm);
   const ops = OPS_BY_KIND[kind];
   const noValue = NO_VALUE_OPS.includes(cond.op);
-  const dateType = cm.col.udtName.startsWith("timestamp")
-    ? "datetime-local"
-    : "date";
+  const dateType = cm.col.udtName.startsWith("timestamp") ? "datetime-local" : "date";
   const [chipDraft, setChipDraft] = useState("");
   // remembered labels for reference "in" chips
   const [refLabels, setRefLabels] = useState<Record<string, string>>({});
@@ -269,9 +223,7 @@ function ConditionRow({
   const setCol = (name: string) => {
     const next = columns.find((c) => c.col.name === name)!;
     const nextKind = kindOf(next);
-    const nextOp = OPS_BY_KIND[nextKind].includes(cond.op)
-      ? cond.op
-      : OPS_BY_KIND[nextKind][0];
+    const nextOp = OPS_BY_KIND[nextKind].includes(cond.op) ? cond.op : OPS_BY_KIND[nextKind][0];
     onChange({ column: name, op: nextOp, value: "", value2: "", values: [] });
   };
 
@@ -279,8 +231,7 @@ function ConditionRow({
     if (noValue) return null;
 
     if (cond.op === "between") {
-      const t =
-        kind === "number" ? "number" : kind === "date" ? dateType : "text";
+      const t = kind === "number" ? "number" : kind === "date" ? dateType : "text";
       return (
         <div className="flex items-center gap-1">
           <input
@@ -314,17 +265,11 @@ function ConditionRow({
                 <button
                   key={o}
                   className="tag"
-                  style={
-                    on
-                      ? { color: "var(--primary)", borderColor: "var(--primary)" }
-                      : {}
-                  }
+                  style={on ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
                   onClick={() =>
                     onChange({
                       ...cond,
-                      values: on
-                        ? values.filter((x) => x !== o)
-                        : [...values, o],
+                      values: on ? values.filter((x) => x !== o) : [...values, o],
                     })
                   }
                 >
@@ -345,8 +290,7 @@ function ConditionRow({
                 title={`Pick ${cm.label}`}
                 onPick={(id, label) => {
                   setRefLabels((m) => ({ ...m, [id]: label ?? id }));
-                  if (!values.includes(id))
-                    onChange({ ...cond, values: [...values, id] });
+                  if (!values.includes(id)) onChange({ ...cond, values: [...values, id] });
                   setBrowsing(false);
                 }}
                 onClose={() => setBrowsing(false)}
@@ -355,22 +299,21 @@ function ConditionRow({
             <Chips
               values={values}
               labels={refLabels}
-              onRemove={(v) =>
-                onChange({ ...cond, values: values.filter((x) => x !== v) })
-              }
+              onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })}
             />
             <div className="flex items-center gap-1">
               <RefSelect
                 cm={cm}
                 onSelect={(id, label) => {
                   setRefLabels((m) => ({ ...m, [id]: label }));
-                  if (!values.includes(id))
-                    onChange({ ...cond, values: [...values, id] });
+                  if (!values.includes(id)) onChange({ ...cond, values: [...values, id] });
                 }}
               />
-              <Button variant="outline" size="sm"
+              <Button
+                variant="outline"
+                size="sm"
                 type="button"
-               
+
                 title="Browse"
                 onClick={() => setBrowsing(true)}
               >
@@ -383,12 +326,7 @@ function ConditionRow({
       // text/number "in": type + Enter to add chips
       return (
         <div className="min-w-40">
-          <Chips
-            values={values}
-            onRemove={(v) =>
-              onChange({ ...cond, values: values.filter((x) => x !== v) })
-            }
-          />
+          <Chips values={values} onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })} />
           <input
             className="input"
             style={{ padding: "3px 8px", fontSize: 12 }}
@@ -400,8 +338,7 @@ function ConditionRow({
               if (e.key === "Enter") {
                 e.stopPropagation(); // adding a chip shouldn't also apply the panel
                 if (chipDraft.trim()) {
-                  if (!values.includes(chipDraft))
-                    onChange({ ...cond, values: [...values, chipDraft] });
+                  if (!values.includes(chipDraft)) onChange({ ...cond, values: [...values, chipDraft] });
                   setChipDraft("");
                 }
               }
@@ -461,8 +398,10 @@ function ConditionRow({
           {cond.value ? (
             <span className="tag" style={{ color: "var(--primary)" }}>
               {refLabels[cond.value] ?? cond.value}
-              <Button variant="ghost" className="ml-1.5"
-               
+              <Button
+                variant="ghost"
+                className="ml-1.5"
+
                 onClick={() => onChange({ ...cond, value: "" })}
               >
                 ✕
@@ -477,9 +416,11 @@ function ConditionRow({
               }}
             />
           )}
-          <Button variant="outline" size="sm"
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
-           
+
             title="Browse"
             onClick={() => setBrowsing(true)}
           >
@@ -504,9 +445,7 @@ function ConditionRow({
       <input
         className="input flex-1 min-w-30"
         style={{ padding: "3px 8px", fontSize: 12 }}
-        type={
-          kind === "number" ? "number" : kind === "date" ? dateType : "text"
-        }
+        type={kind === "number" ? "number" : kind === "date" ? dateType : "text"}
         placeholder="value"
         value={cond.value ?? ""}
         onChange={(e) => onChange({ ...cond, value: e.target.value })}
@@ -549,8 +488,10 @@ function ConditionRow({
         ))}
       </select>
       {valueEditor()}
-      <Button variant="destructive" size="sm"
-       
+      <Button
+        variant="destructive"
+        size="sm"
+
         style={{ padding: "2px 7px" }}
         onClick={onRemove}
         title="Remove condition"
@@ -584,8 +525,7 @@ export function FilterPanel({
   const emit = (s: FilterSet) => onChange(complete(s));
 
   const applied = value;
-  const dirty =
-    JSON.stringify(complete(set)) !== JSON.stringify(complete(applied));
+  const dirty = JSON.stringify(complete(set)) !== JSON.stringify(complete(applied));
 
   const addCondition = () => {
     const col = columns[0];
@@ -643,11 +583,7 @@ export function FilterPanel({
             <button
               key={c}
               className="tag"
-              style={
-                set.combinator === c
-                  ? { color: "var(--primary)", borderColor: "var(--primary)" }
-                  : {}
-              }
+              style={set.combinator === c ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
               onClick={() => setCombinator(c)}
             >
               {c === "and" ? "all" : "any"}
@@ -667,10 +603,7 @@ export function FilterPanel({
 
       <div className="space-y-2 max-h-[50vh] overflow-y-auto scrollbar-thin pr-1">
         {set.conditions.length === 0 && (
-          <p
-            className="text-[13px] py-2"
-            style={{ color: "var(--muted-foreground-faint)" }}
-          >
+          <p className="text-[13px] py-2" style={{ color: "var(--muted-foreground-faint)" }}>
             No conditions yet. Add one below.
           </p>
         )}
@@ -696,8 +629,10 @@ export function FilterPanel({
         )}
         <span className="flex-1" />
         {onClose && (
-          <Button variant="outline" size="sm"
-           
+          <Button
+            variant="outline"
+            size="sm"
+
             onClick={() => {
               emit(set);
               onClose();
@@ -706,8 +641,9 @@ export function FilterPanel({
             Close
           </Button>
         )}
-        <Button size="sm"
-         
+        <Button
+          size="sm"
+
           disabled={!dirty}
           onClick={() => emit(set)}
         >
@@ -733,36 +669,22 @@ export function FilterBuilder({
 
   return (
     <div>
-      <Button variant="outline" className="shrink-0"
-       
-        style={
-          activeCount
-            ? { color: "var(--primary)", borderColor: "var(--primary)" }
-            : {}
-        }
+      <Button
+        variant="outline"
+        className="shrink-0"
+
+        style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
         onClick={() => setOpen((o) => !o)}
       >
         ⛃ Filter
         {activeCount > 0 && (
-          <span
-            className="ml-1 tag"
-            style={{ fontSize: 10, color: "var(--primary)" }}
-          >
+          <span className="ml-1 tag" style={{ fontSize: 10, color: "var(--primary)" }}>
             {activeCount}
           </span>
         )}
-        <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>
-          {open ? "▲" : "▼"}
-        </span>
+        <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
       </Button>
-      {open && (
-        <FilterPanel
-          columns={columns}
-          value={value}
-          onChange={onChange}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      {open && <FilterPanel columns={columns} value={value} onChange={onChange} onClose={() => setOpen(false)} />}
     </div>
   );
 }

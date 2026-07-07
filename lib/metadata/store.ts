@@ -17,9 +17,9 @@ import type {
   Panel,
   ChartSpec,
 } from "@/lib/types";
+import { MIGRATIONS, runMigrations } from "@/migrations";
 
-const DB_PATH =
-  process.env.LIZARD_METADATA_PATH || join(process.cwd(), "data", "lizard.sqlite");
+const DB_PATH = process.env.LIZARD_METADATA_PATH || join(process.cwd(), "data", "lizard.sqlite");
 
 let db: DatabaseSync | null = null;
 
@@ -27,172 +27,24 @@ function getDb(): DatabaseSync {
   if (db) return db;
   mkdirSync(dirname(DB_PATH), { recursive: true });
   db = new DatabaseSync(DB_PATH);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS connections (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      host TEXT NOT NULL,
-      port INTEGER NOT NULL,
-      database TEXT NOT NULL,
-      read_user TEXT NOT NULL,
-      read_password TEXT NOT NULL,
-      write_user TEXT,
-      write_password TEXT,
-      ssl INTEGER NOT NULL DEFAULT 0,
-      allowed_schemas TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS virtual_fks (
-      id TEXT PRIMARY KEY,
-      from_connection TEXT NOT NULL,
-      from_schema TEXT NOT NULL,
-      from_table TEXT NOT NULL,
-      to_connection TEXT NOT NULL,
-      to_schema TEXT NOT NULL,
-      to_table TEXT NOT NULL,
-      pairs TEXT NOT NULL,      -- JSON: VfkPair[]
-      constants TEXT NOT NULL,  -- JSON: VfkConstant[]
-      label TEXT,
-      join_hint TEXT
-    );
-    CREATE TABLE IF NOT EXISTS table_overrides (
-      connection_id TEXT NOT NULL,
-      schema_name TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      hidden INTEGER NOT NULL DEFAULT 0,
-      display_column TEXT,
-      label TEXT,
-      PRIMARY KEY (connection_id, schema_name, table_name)
-    );
-    CREATE TABLE IF NOT EXISTS column_overrides (
-      connection_id TEXT NOT NULL,
-      schema_name TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      column_name TEXT NOT NULL,
-      label TEXT,
-      widget TEXT,
-      hidden INTEGER NOT NULL DEFAULT 0,
-      readonly INTEGER NOT NULL DEFAULT 0,
-      redacted INTEGER NOT NULL DEFAULT 0,
-      sort_order INTEGER,
-      help TEXT,
-      PRIMARY KEY (connection_id, schema_name, table_name, column_name)
-    );
-    -- per-user grid column visibility ("Columns" toggle) -- distinct from
-    -- column_overrides.hidden, which is a shared structural hide applied to
-    -- every user and every surface (grid, record page, RowEditor). This is
-    -- just one person's personal view preference for the grid.
-    CREATE TABLE IF NOT EXISTS user_column_prefs (
-      user_id TEXT NOT NULL,
-      connection_id TEXT NOT NULL,
-      schema_name TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      column_name TEXT NOT NULL,
-      hidden INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (user_id, connection_id, schema_name, table_name, column_name)
-    );
-    -- Phase 8.9: per-record comments/annotations. Pure Lizard-side state,
-    -- keyed by a canonical PK string; works on any target table, no DDL there.
-    CREATE TABLE IF NOT EXISTS record_comments (
-      id TEXT PRIMARY KEY,
-      author_id TEXT NOT NULL,
-      author_name TEXT,
-      connection_id TEXT NOT NULL,
-      schema_name TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      pk_key TEXT NOT NULL,
-      body TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_record_comments_target
-      ON record_comments (connection_id, schema_name, table_name, pk_key);
-    -- Phase 8.3: saved views (named filter/sort/columns/view-type per table).
-    CREATE TABLE IF NOT EXISTS saved_views (
-      id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL,
-      shared INTEGER NOT NULL DEFAULT 1,
-      connection_id TEXT NOT NULL,
-      schema_name TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      name TEXT NOT NULL,
-      config TEXT NOT NULL,   -- JSON: { filterSet, sort, sortDir, search, columnVisibility, viewType, groupBy }
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_saved_views_target
-      ON saved_views (connection_id, schema_name, table_name);
-    CREATE TABLE IF NOT EXISTS saved_queries (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      nl_prompt TEXT,
-      target TEXT NOT NULL,
-      connections TEXT NOT NULL,
-      sql TEXT NOT NULL,
-      dialect TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS dashboards (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      refresh_seconds INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS panels (
-      id TEXT PRIMARY KEY,
-      dashboard_id TEXT NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
-      chart_spec TEXT NOT NULL,
-      x INTEGER NOT NULL DEFAULT 0,
-      y INTEGER NOT NULL DEFAULT 0,
-      w INTEGER NOT NULL DEFAULT 6,
-      h INTEGER NOT NULL DEFAULT 8
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      actor TEXT NOT NULL DEFAULT 'admin',
-      action TEXT NOT NULL,
-      sql TEXT,
-      connections TEXT,
-      row_count INTEGER,
-      duration_ms INTEGER,
-      error TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
-      name TEXT,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'viewer',
-      disabled INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      expires_at TEXT NOT NULL
-    );
-    -- per-connection access control; admins bypass this entirely
-    CREATE TABLE IF NOT EXISTS connection_grants (
-      user_id TEXT NOT NULL,
-      connection_id TEXT NOT NULL,
-      access TEXT NOT NULL DEFAULT 'read',  -- 'read' | 'write'
-      PRIMARY KEY (user_id, connection_id)
-    );
-  `);
-  // Additive migration for columns added after the table already existed on
-  // disk — CREATE TABLE IF NOT EXISTS above is a no-op once the file exists.
-  try {
-    db.exec(`ALTER TABLE column_overrides ADD COLUMN redacted INTEGER NOT NULL DEFAULT 0`);
-  } catch {
-    // column already present
-  }
+  db.exec("PRAGMA journal_mode = WAL;");
   return db;
 }
 
 // Shared SQLite handle so the auth layer writes to the same metadata file.
 export function getMetaDb(): DatabaseSync {
   return getDb();
+}
+
+// Opens the metadata DB and applies any pending migrations. Called once from
+// instrumentation.ts at process startup, so migrations run before the first
+// request instead of lazily inside it. Safe to call again — the module-level
+// `db` cache means later calls (including getDb() elsewhere) are a no-op;
+// this also acts as a fallback for contexts that don't run instrumentation
+// (tests, scripts).
+export function initMetadataDb(): void {
+  const db = getDb();
+  runMigrations(db, MIGRATIONS);
 }
 
 // ---------- connections ----------
@@ -220,9 +72,7 @@ export function listConnections(): ConnectionConfig[] {
 }
 
 export function getConnection(idOrName: string): ConnectionConfig | null {
-  const r = getDb()
-    .prepare("SELECT * FROM connections WHERE id = ? OR name = ?")
-    .get(idOrName, idOrName);
+  const r = getDb().prepare("SELECT * FROM connections WHERE id = ? OR name = ?").get(idOrName, idOrName);
   return r ? rowToConnection(r as Record<string, unknown>) : null;
 }
 
@@ -231,7 +81,7 @@ export function addConnection(input: ConnectionInput): ConnectionConfig {
   getDb()
     .prepare(
       `INSERT INTO connections (id, name, host, port, database, read_user, read_password, write_user, write_password, ssl, allowed_schemas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -244,7 +94,7 @@ export function addConnection(input: ConnectionInput): ConnectionConfig {
       input.writeUser,
       input.writePassword,
       input.ssl ? 1 : 0,
-      input.allowedSchemas ? JSON.stringify(input.allowedSchemas) : null
+      input.allowedSchemas ? JSON.stringify(input.allowedSchemas) : null,
     );
   return getConnection(id)!;
 }
@@ -255,7 +105,7 @@ export function updateConnection(id: string, input: Partial<ConnectionInput>): C
   const merged = { ...existing, ...input };
   getDb()
     .prepare(
-      `UPDATE connections SET name=?, host=?, port=?, database=?, read_user=?, read_password=?, write_user=?, write_password=?, ssl=?, allowed_schemas=? WHERE id=?`
+      `UPDATE connections SET name=?, host=?, port=?, database=?, read_user=?, read_password=?, write_user=?, write_password=?, ssl=?, allowed_schemas=? WHERE id=?`,
     )
     .run(
       merged.name,
@@ -268,7 +118,7 @@ export function updateConnection(id: string, input: Partial<ConnectionInput>): C
       merged.writePassword,
       merged.ssl ? 1 : 0,
       merged.allowedSchemas ? JSON.stringify(merged.allowedSchemas) : null,
-      id
+      id,
     );
   return getConnection(id);
 }
@@ -301,7 +151,7 @@ export function addVirtualFk(fk: Omit<VirtualFk, "id">): VirtualFk {
   getDb()
     .prepare(
       `INSERT INTO virtual_fks (id, from_connection, from_schema, from_table, to_connection, to_schema, to_table, pairs, constants, label, join_hint)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -314,7 +164,7 @@ export function addVirtualFk(fk: Omit<VirtualFk, "id">): VirtualFk {
       JSON.stringify(fk.pairs),
       JSON.stringify(fk.constants),
       fk.label,
-      fk.joinHint
+      fk.joinHint,
     );
   return { ...fk, id };
 }
@@ -358,7 +208,7 @@ export function setTableOverride(o: TableOverride): void {
       `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name)
-       DO UPDATE SET hidden=excluded.hidden, display_column=excluded.display_column, label=excluded.label`
+       DO UPDATE SET hidden=excluded.hidden, display_column=excluded.display_column, label=excluded.label`,
     )
     .run(o.connectionId, o.schema, o.table, o.hidden ? 1 : 0, o.displayColumn, o.label);
 }
@@ -382,7 +232,7 @@ export function listColumnOverrides(): ColumnOverride[] {
 
 export function getColumnOverrides(connectionId: string, schema: string, table: string): ColumnOverride[] {
   return listColumnOverrides().filter(
-    (o) => o.connectionId === connectionId && o.schema === schema && o.table === table
+    (o) => o.connectionId === connectionId && o.schema === schema && o.table === table,
   );
 }
 
@@ -393,7 +243,7 @@ export function setColumnOverride(o: ColumnOverride): void {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name, column_name)
        DO UPDATE SET label=excluded.label, widget=excluded.widget, hidden=excluded.hidden,
-                     readonly=excluded.readonly, redacted=excluded.redacted, sort_order=excluded.sort_order, help=excluded.help`
+                     readonly=excluded.readonly, redacted=excluded.redacted, sort_order=excluded.sort_order, help=excluded.help`,
     )
     .run(
       o.connectionId,
@@ -406,7 +256,7 @@ export function setColumnOverride(o: ColumnOverride): void {
       o.readonly ? 1 : 0,
       o.redacted ? 1 : 0,
       o.sortOrder,
-      o.help
+      o.help,
     );
 }
 
@@ -487,35 +337,21 @@ export function listRecordComments(
   return rows.map(rowToComment);
 }
 
-export function addRecordComment(
-  c: Omit<RecordComment, "id" | "createdAt">,
-): RecordComment {
+export function addRecordComment(c: Omit<RecordComment, "id" | "createdAt">): RecordComment {
   const id = randomUUID();
   getDb()
     .prepare(
       `INSERT INTO record_comments (id, author_id, author_name, connection_id, schema_name, table_name, pk_key, body)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(
-      id,
-      c.authorId,
-      c.authorName,
-      c.connectionId,
-      c.schema,
-      c.table,
-      c.pkKey,
-      c.body,
-    );
-  return getDb()
-    .prepare("SELECT * FROM record_comments WHERE id=?")
-    .get(id) as unknown as RecordComment;
+    .run(id, c.authorId, c.authorName, c.connectionId, c.schema, c.table, c.pkKey, c.body);
+  return getDb().prepare("SELECT * FROM record_comments WHERE id=?").get(id) as unknown as RecordComment;
 }
 
 // Returns the comment's author_id so the route can enforce author-or-admin.
 export function getRecordCommentAuthor(id: string): string | null {
-  const r = getDb()
-    .prepare("SELECT author_id FROM record_comments WHERE id=?")
-    .get(id) as { author_id?: string } | undefined;
+  const r = getDb().prepare("SELECT author_id FROM record_comments WHERE id=?").get(id) as
+    { author_id?: string } | undefined;
   return r?.author_id ?? null;
 }
 
@@ -540,12 +376,7 @@ function rowToSavedView(r: Record<string, unknown>): SavedView {
 }
 
 // Views visible to a user: shared ones + their own private ones.
-export function listSavedViews(
-  userId: string,
-  connectionId: string,
-  schema: string,
-  table: string,
-): SavedView[] {
+export function listSavedViews(userId: string, connectionId: string, schema: string, table: string): SavedView[] {
   const rows = getDb()
     .prepare(
       `SELECT * FROM saved_views
@@ -557,34 +388,19 @@ export function listSavedViews(
   return rows.map(rowToSavedView);
 }
 
-export function addSavedView(
-  v: Omit<SavedView, "id" | "createdAt">,
-): SavedView {
+export function addSavedView(v: Omit<SavedView, "id" | "createdAt">): SavedView {
   const id = randomUUID();
   getDb()
     .prepare(
       `INSERT INTO saved_views (id, owner_id, shared, connection_id, schema_name, table_name, name, config)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(
-      id,
-      v.ownerId,
-      v.shared ? 1 : 0,
-      v.connectionId,
-      v.schema,
-      v.table,
-      v.name,
-      JSON.stringify(v.config),
-    );
-  return getDb()
-    .prepare("SELECT * FROM saved_views WHERE id=?")
-    .get(id) as unknown as SavedView;
+    .run(id, v.ownerId, v.shared ? 1 : 0, v.connectionId, v.schema, v.table, v.name, JSON.stringify(v.config));
+  return getDb().prepare("SELECT * FROM saved_views WHERE id=?").get(id) as unknown as SavedView;
 }
 
 export function getSavedViewOwner(id: string): string | null {
-  const r = getDb()
-    .prepare("SELECT owner_id FROM saved_views WHERE id=?")
-    .get(id) as { owner_id?: string } | undefined;
+  const r = getDb().prepare("SELECT owner_id FROM saved_views WHERE id=?").get(id) as { owner_id?: string } | undefined;
   return r?.owner_id ?? null;
 }
 
@@ -595,7 +411,10 @@ export function deleteSavedView(id: string): void {
 // ---------- saved queries ----------
 
 export function listSavedQueries(): SavedQuery[] {
-  const rows = getDb().prepare("SELECT * FROM saved_queries ORDER BY created_at DESC").all() as Record<string, unknown>[];
+  const rows = getDb().prepare("SELECT * FROM saved_queries ORDER BY created_at DESC").all() as Record<
+    string,
+    unknown
+  >[];
   return rows.map((r) => ({
     id: r.id as string,
     name: r.name as string,
@@ -612,7 +431,7 @@ export function addSavedQuery(q: Omit<SavedQuery, "id" | "createdAt">): SavedQue
   const id = randomUUID();
   getDb()
     .prepare(
-      "INSERT INTO saved_queries (id, name, nl_prompt, target, connections, sql, dialect) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO saved_queries (id, name, nl_prompt, target, connections, sql, dialect) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(id, q.name, q.nlPrompt, q.target, JSON.stringify(q.connections), q.sql, q.dialect);
   return listSavedQueries().find((s) => s.id === id)!;
@@ -644,7 +463,9 @@ export function listDashboards(): Dashboard[] {
     name: r.name as string,
     refreshSeconds: r.refresh_seconds as number | null,
     createdAt: r.created_at as string,
-    panels: (d.prepare("SELECT * FROM panels WHERE dashboard_id = ?").all(r.id as string) as Record<string, unknown>[]).map(rowToPanel),
+    panels: (
+      d.prepare("SELECT * FROM panels WHERE dashboard_id = ?").all(r.id as string) as Record<string, unknown>[]
+    ).map(rowToPanel),
   }));
 }
 
@@ -654,9 +475,7 @@ export function getDashboard(id: string): Dashboard | null {
 
 export function addDashboard(name: string, refreshSeconds: number | null = null): Dashboard {
   const id = randomUUID();
-  getDb()
-    .prepare("INSERT INTO dashboards (id, name, refresh_seconds) VALUES (?, ?, ?)")
-    .run(id, name, refreshSeconds);
+  getDb().prepare("INSERT INTO dashboards (id, name, refresh_seconds) VALUES (?, ?, ?)").run(id, name, refreshSeconds);
   return getDashboard(id)!;
 }
 
@@ -665,7 +484,11 @@ export function updateDashboard(id: string, fields: { name?: string; refreshSeco
   if (!existing) return;
   getDb()
     .prepare("UPDATE dashboards SET name = ?, refresh_seconds = ? WHERE id = ?")
-    .run(fields.name ?? existing.name, fields.refreshSeconds === undefined ? existing.refreshSeconds : fields.refreshSeconds, id);
+    .run(
+      fields.name ?? existing.name,
+      fields.refreshSeconds === undefined ? existing.refreshSeconds : fields.refreshSeconds,
+      id,
+    );
 }
 
 export function deleteDashboard(id: string): void {
@@ -674,7 +497,11 @@ export function deleteDashboard(id: string): void {
   d.prepare("DELETE FROM dashboards WHERE id = ?").run(id);
 }
 
-export function addPanel(dashboardId: string, spec: ChartSpec, pos?: { x: number; y: number; w: number; h: number }): Panel {
+export function addPanel(
+  dashboardId: string,
+  spec: ChartSpec,
+  pos?: { x: number; y: number; w: number; h: number },
+): Panel {
   const id = randomUUID();
   const p = pos ?? { x: 0, y: 0, w: 6, h: 8 };
   getDb()
@@ -683,7 +510,10 @@ export function addPanel(dashboardId: string, spec: ChartSpec, pos?: { x: number
   return { id, dashboardId, spec, ...p };
 }
 
-export function updatePanel(id: string, fields: { spec?: ChartSpec; x?: number; y?: number; w?: number; h?: number }): void {
+export function updatePanel(
+  id: string,
+  fields: { spec?: ChartSpec; x?: number; y?: number; w?: number; h?: number },
+): void {
   const r = getDb().prepare("SELECT * FROM panels WHERE id = ?").get(id) as Record<string, unknown> | undefined;
   if (!r) return;
   const cur = rowToPanel(r);
@@ -695,7 +525,7 @@ export function updatePanel(id: string, fields: { spec?: ChartSpec; x?: number; 
       fields.y ?? cur.y,
       fields.w ?? cur.w,
       fields.h ?? cur.h,
-      id
+      id,
     );
 }
 
@@ -716,7 +546,7 @@ export function logAudit(entry: {
 }): void {
   getDb()
     .prepare(
-      "INSERT INTO audit_log (actor, action, sql, connections, row_count, duration_ms, error) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO audit_log (actor, action, sql, connections, row_count, duration_ms, error) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       entry.actor ?? "admin",
@@ -725,12 +555,10 @@ export function logAudit(entry: {
       entry.connections ? JSON.stringify(entry.connections) : null,
       entry.rowCount ?? null,
       entry.durationMs ?? null,
-      entry.error ?? null
+      entry.error ?? null,
     );
 }
 
 export function listAudit(limit = 200): Record<string, unknown>[] {
-  return getDb()
-    .prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?")
-    .all(limit) as Record<string, unknown>[];
+  return getDb().prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
 }

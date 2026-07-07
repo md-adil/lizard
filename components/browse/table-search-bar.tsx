@@ -11,14 +11,7 @@ import { isComplete } from "@/lib/data/filters";
 import { FilterPanel } from "./filter-builder";
 import { Button } from "@/components/ui/button";
 
-const TEXT_LIKE = new Set([
-  "text",
-  "varchar",
-  "bpchar",
-  "citext",
-  "name",
-  "char",
-]);
+const TEXT_LIKE = new Set(["text", "varchar", "bpchar", "citext", "name", "char"]);
 const SEARCH_ROW_LIMIT = 500_000;
 
 interface Props {
@@ -43,9 +36,7 @@ export function TableSearchBar({
   const [searchInput, setSearchInput] = useState(search);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const textColCount = columns.filter((c) =>
-    TEXT_LIKE.has(c.col.udtName),
-  ).length;
+  const textColCount = columns.filter((c) => TEXT_LIKE.has(c.col.udtName)).length;
   const tooLarge = rowEstimate >= SEARCH_ROW_LIMIT;
   const activeCount = filterSet.conditions.filter(isComplete).length;
 
@@ -59,27 +50,20 @@ export function TableSearchBar({
     <div>
       <div className="flex items-center gap-2">
         {/* filter toggle button — left */}
-        <Button variant="outline" className="shrink-0"
-         
-          style={
-            activeCount
-              ? { color: "var(--primary)", borderColor: "var(--primary)" }
-              : {}
-          }
+        <Button
+          variant="outline"
+          className="shrink-0"
+
+          style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
           onClick={() => setFilterOpen((o) => !o)}
         >
           ⛃ Filter
           {activeCount > 0 && (
-            <span
-              className="ml-1 tag"
-              style={{ fontSize: 10, color: "var(--primary)" }}
-            >
+            <span className="ml-1 tag" style={{ fontSize: 10, color: "var(--primary)" }}>
               {activeCount}
             </span>
           )}
-          <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>
-            {filterOpen ? "▲" : "▼"}
-          </span>
+          <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{filterOpen ? "▲" : "▼"}</span>
         </Button>
 
         {/* search input group: input + search button joined */}
@@ -114,8 +98,10 @@ export function TableSearchBar({
               onKeyDown={(e) => e.key === "Enter" && commit()}
             />
             {searchInput && (
-              <Button variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2"
-               
+              <Button
+                variant="ghost"
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+
                 style={{ color: "var(--muted-foreground-faint)", fontSize: 12 }}
                 title="Clear search"
                 onClick={clear}
@@ -126,7 +112,6 @@ export function TableSearchBar({
           </div>
 
           <Button
-           
             style={{
               borderRadius: 0,
               border: "none",
@@ -137,11 +122,7 @@ export function TableSearchBar({
             title="Search (Enter)"
             onClick={commit}
           >
-            {isLoading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Search size={14} />
-            )}
+            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
           </Button>
         </div>
       </div>

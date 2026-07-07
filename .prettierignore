@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+data
+*.sqlite
+PLAN.md
+package-lock.json

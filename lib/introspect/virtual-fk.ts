@@ -28,17 +28,8 @@ export function isPattern(s: string): boolean {
 }
 
 // Does this virtual FK apply when browsing connection.schema.table?
-export function vfkMatchesSource(
-  v: VirtualFk,
-  connection: string,
-  schema: string,
-  table: string,
-): boolean {
-  return (
-    v.fromConnection === connection &&
-    matchesGlob(v.fromSchema, schema) &&
-    matchesGlob(v.fromTable, table)
-  );
+export function vfkMatchesSource(v: VirtualFk, connection: string, schema: string, table: string): boolean {
+  return v.fromConnection === connection && matchesGlob(v.fromSchema, schema) && matchesGlob(v.fromTable, table);
 }
 
 // Concrete target schema for a source row in `sourceSchema`.
@@ -58,10 +49,7 @@ export function vfkTargetColumn(v: VirtualFk): string | undefined {
 
 // Normalize a source value in JS to mirror the SQL transform on the target,
 // so tuple keys computed on both sides line up.
-export function applyTransform(
-  value: unknown,
-  t: VfkTransform = "none",
-): string {
+export function applyTransform(value: unknown, t: VfkTransform = "none"): string {
   const s = String(value);
   switch (t) {
     case "lower":
@@ -78,20 +66,11 @@ export function applyTransform(
 // Compact human summary, e.g. "user_id → billing.$schema.customers.id (lower)".
 export function vfkSummary(v: VirtualFk): string {
   const pairs = v.pairs
-    .map(
-      (p) =>
-        `${p.from} = ${p.to}${p.transform && p.transform !== "none" ? ` [${p.transform}]` : ""}`,
-    )
+    .map((p) => `${p.from} = ${p.to}${p.transform && p.transform !== "none" ? ` [${p.transform}]` : ""}`)
     .join(", ");
-  const consts = v.constants
-    .map((c) => `${c.toColumn}='${c.value}'`)
-    .join(", ");
+  const consts = v.constants.map((c) => `${c.toColumn}='${c.value}'`).join(", ");
   const target = `${v.toConnection}.${v.toSchema}.${v.toTable}`;
-  return [
-    `${target} ON ${pairs}`,
-    consts ? `WHERE ${consts}` : "",
-    v.joinHint ? `HINT: ${v.joinHint}` : "",
-  ]
+  return [`${target} ON ${pairs}`, consts ? `WHERE ${consts}` : "", v.joinHint ? `HINT: ${v.joinHint}` : ""]
     .filter(Boolean)
     .join(" ");
 }

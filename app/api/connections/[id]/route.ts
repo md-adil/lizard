@@ -19,7 +19,8 @@ export async function PATCH(req: Request, { params }: Params) {
       ...body,
       writeUser: body.writeUser === undefined ? undefined : body.writeUser || null,
       writePassword: body.writePassword === undefined ? undefined : body.writePassword || null,
-      allowedSchemas: body.allowedSchemas === undefined ? undefined : body.allowedSchemas?.length ? body.allowedSchemas : null,
+      allowedSchemas:
+        body.allowedSchemas === undefined ? undefined : body.allowedSchemas?.length ? body.allowedSchemas : null,
     });
     invalidateCatalog(id);
     const status = await testConnection(updated!);

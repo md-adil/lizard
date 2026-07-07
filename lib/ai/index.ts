@@ -40,17 +40,17 @@ export function serializeCatalog(catalog: Catalog, scope?: string[]): string {
           })
           .join(", ");
         const comment = t.comment ? ` — ${t.comment}` : "";
-        parts.push(`  ${schema.name}.${t.name} (~${t.rowEstimate} rows${t.kind === "view" ? ", view" : ""})${comment}: ${cols}`);
+        parts.push(
+          `  ${schema.name}.${t.name} (~${t.rowEstimate} rows${t.kind === "view" ? ", view" : ""})${comment}: ${cols}`,
+        );
       }
     }
   }
   const vfks = catalog.virtualFks.filter(
-    (v) => !scope || scope.length === 0 || (scope.includes(v.fromConnection) && scope.includes(v.toConnection))
+    (v) => !scope || scope.length === 0 || (scope.includes(v.fromConnection) && scope.includes(v.toConnection)),
   );
   for (const v of vfks) {
-    parts.push(
-      `VIRTUAL FK: ${v.fromConnection}.${v.fromSchema}.${v.fromTable} → ${vfkSummary(v)}`
-    );
+    parts.push(`VIRTUAL FK: ${v.fromConnection}.${v.fromSchema}.${v.fromTable} → ${vfkSummary(v)}`);
   }
   return parts.join("\n");
 }
@@ -99,7 +99,7 @@ RULES (strict):
 export async function planQuery(
   question: string,
   scope?: string[],
-  history?: { question: string; sql: string }[]
+  history?: { question: string; sql: string }[],
 ): Promise<AiQueryPlan> {
   const catalog = await getCatalog();
   const schemaText = serializeCatalog(catalog, scope);
@@ -172,7 +172,17 @@ export async function planChart(prompt: string, scope?: string[]): Promise<Chart
             yFields: { type: "array", items: { type: "string" } },
             seriesField: { type: ["string", "null"] },
           },
-          required: ["title", "chartType", "target", "connections", "sql", "dialect", "xField", "yFields", "seriesField"],
+          required: [
+            "title",
+            "chartType",
+            "target",
+            "connections",
+            "sql",
+            "dialect",
+            "xField",
+            "yFields",
+            "seriesField",
+          ],
         },
       },
     ],

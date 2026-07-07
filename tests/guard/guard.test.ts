@@ -38,7 +38,7 @@ describe("SQL Guard — legitimate queries pass", () => {
   it("federated duckdb-style query", () => {
     allowed(
       `SELECT c.name, count(o.id) FROM users_service.public.customers c JOIN orders_service.public.orders o ON o.customer_id = c.id GROUP BY 1`,
-      "duckdb"
+      "duckdb",
     );
   });
 

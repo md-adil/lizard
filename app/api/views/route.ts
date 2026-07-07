@@ -27,9 +27,7 @@ const configSchema = z.object({
   sortDir: z.enum(["asc", "desc"]).optional(),
   search: z.string().optional(),
   columnVisibility: z.record(z.string(), z.boolean()).optional(),
-  viewType: z
-    .enum(["table", "kanban", "gallery", "calendar", "tree"])
-    .optional(),
+  viewType: z.enum(["table", "kanban", "gallery", "calendar", "tree"]).optional(),
   groupBy: z.string().nullable().optional(),
   refreshMs: z.number().optional(),
 });
@@ -59,11 +57,7 @@ export async function POST(req: Request) {
     return ok(created, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return fail(
-        new Error(
-          e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-        ),
-      );
+      return fail(new Error(e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")));
     }
     return fail(e);
   }

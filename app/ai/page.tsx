@@ -57,12 +57,19 @@ export default function AiConsole() {
       setTurns((s) =>
         s.map((t, i) =>
           i === s.length - 1
-            ? { question: q, plan: body.plan, result: body.result, error: body.error ?? (!res.ok ? body.error ?? "Request failed" : undefined) }
-            : t
-        )
+            ? {
+                question: q,
+                plan: body.plan,
+                result: body.result,
+                error: body.error ?? (!res.ok ? (body.error ?? "Request failed") : undefined),
+              }
+            : t,
+        ),
       );
       if (!res.ok) {
-        setTurns((s) => s.map((t, i) => (i === s.length - 1 ? { question: q, error: body.error ?? "Request failed" } : t)));
+        setTurns((s) =>
+          s.map((t, i) => (i === s.length - 1 ? { question: q, error: body.error ?? "Request failed" } : t)),
+        );
       }
     } catch (e) {
       setTurns((s) => s.map((t, i) => (i === s.length - 1 ? { question: q, error: String(e) } : t)));
@@ -92,8 +99,8 @@ export default function AiConsole() {
               result: res.ok ? body : undefined,
               error: res.ok ? undefined : body.error,
             }
-          : x
-      )
+          : x,
+      ),
     );
   };
 
@@ -129,12 +136,18 @@ export default function AiConsole() {
         i === s.length - 1
           ? {
               question: sq.nlPrompt ?? sq.name,
-              plan: { target: sq.target, connections: sq.connections, sql: sq.sql, dialect: sq.dialect, explanation: `Saved query “${sq.name}”.` },
+              plan: {
+                target: sq.target,
+                connections: sq.connections,
+                sql: sq.sql,
+                dialect: sq.dialect,
+                explanation: `Saved query “${sq.name}”.`,
+              },
               result: res.ok ? body : undefined,
               error: res.ok ? undefined : body.error,
             }
-          : t
-      )
+          : t,
+      ),
     );
   };
 
@@ -143,12 +156,14 @@ export default function AiConsole() {
       <div className="flex-1 flex flex-col max-w-4xl mx-auto px-8 py-8 w-full">
         <h1 className="text-xl font-semibold mb-1">Ask your databases</h1>
         <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
-          Plain-language questions over one database or the whole fleet. The SQL and the databases touched
-          are always shown; everything is read-only and guarded.
+          Plain-language questions over one database or the whole fleet. The SQL and the databases touched are always
+          shown; everything is read-only and guarded.
         </p>
 
         <div className="flex gap-1.5 mb-3 flex-wrap">
-          <span className="text-[12px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>Scope:</span>
+          <span className="text-[12px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
+            Scope:
+          </span>
           <button
             className="tag"
             style={scope.length === 0 ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
@@ -185,8 +200,8 @@ export default function AiConsole() {
         <div className="flex-1 space-y-6 overflow-y-auto scrollbar-thin pb-8">
           {turns.length === 0 && (
             <div className="panel px-6 py-8 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-              Try: “how many customers per country?” · “revenue by month this year” ·
-              “top customers by order count with their emails” (spans both services)
+              Try: “how many customers per country?” · “revenue by month this year” · “top customers by order count with
+              their emails” (spans both services)
             </div>
           )}
           {turns.map((t, i) => (
@@ -215,10 +230,14 @@ export default function AiConsole() {
                         </span>
                       ))}
                       <span className="flex-1" />
-                      <Button variant="outline" size="sm"
-                       
+                      <Button
+                        variant="outline"
+                        size="sm"
+
                         onClick={() =>
-                          setTurns((s) => s.map((x, j) => (j === i ? { ...x, editing: !x.editing, editedSql: x.plan!.sql } : x)))
+                          setTurns((s) =>
+                            s.map((x, j) => (j === i ? { ...x, editing: !x.editing, editedSql: x.plan!.sql } : x)),
+                          )
                         }
                       >
                         {t.editing ? "Cancel edit" : "Edit SQL"}
@@ -230,7 +249,9 @@ export default function AiConsole() {
                           className="input code w-full"
                           rows={6}
                           value={t.editedSql}
-                          onChange={(e) => setTurns((s) => s.map((x, j) => (j === i ? { ...x, editedSql: e.target.value } : x)))}
+                          onChange={(e) =>
+                            setTurns((s) => s.map((x, j) => (j === i ? { ...x, editedSql: e.target.value } : x)))
+                          }
                         />
                         <Button size="sm" className="mt-2" onClick={() => rerun(i, t.editedSql!)}>
                           Run edited SQL
@@ -247,9 +268,15 @@ export default function AiConsole() {
               {t.error && (
                 <div
                   className="rounded-md border px-4 py-3 text-[13px] mb-2"
-                  style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)", background: "rgba(229,83,75,.06)" }}
+                  style={{
+                    color: "var(--destructive)",
+                    borderColor: "rgba(229,83,75,.4)",
+                    background: "rgba(229,83,75,.06)",
+                  }}
                 >
-                  <strong>{t.error.includes("Forbidden") || t.error.includes("Only SELECT") ? "Blocked by SQL Guard: " : ""}</strong>
+                  <strong>
+                    {t.error.includes("Forbidden") || t.error.includes("Only SELECT") ? "Blocked by SQL Guard: " : ""}
+                  </strong>
                   {t.error}
                 </div>
               )}
@@ -263,7 +290,12 @@ export default function AiConsole() {
                     {t.plan && (
                       <VisualizeButton
                         result={t.result}
-                        source={{ target: t.plan.target, connections: t.plan.connections, sql: t.plan.sql, dialect: t.plan.dialect }}
+                        source={{
+                          target: t.plan.target,
+                          connections: t.plan.connections,
+                          sql: t.plan.sql,
+                          dialect: t.plan.dialect,
+                        }}
                       />
                     )}
                   </div>
@@ -274,8 +306,14 @@ export default function AiConsole() {
         </div>
       </div>
 
-      <aside className="w-64 shrink-0 border-l px-4 py-8 overflow-y-auto scrollbar-thin" style={{ background: "var(--card)" }}>
-        <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted-foreground-faint)" }}>
+      <aside
+        className="w-64 shrink-0 border-l px-4 py-8 overflow-y-auto scrollbar-thin"
+        style={{ background: "var(--card)" }}
+      >
+        <div
+          className="text-[11px] font-semibold uppercase tracking-wider mb-2"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
           Saved queries
         </div>
         {saved?.length === 0 && (
@@ -289,15 +327,23 @@ export default function AiConsole() {
               {sq.name}
             </Button>
             {sq.nlPrompt && (
-              <p className="text-[11.5px] mt-0.5 truncate" style={{ color: "var(--muted-foreground-faint)" }} title={sq.nlPrompt}>
+              <p
+                className="text-[11.5px] mt-0.5 truncate"
+                style={{ color: "var(--muted-foreground-faint)" }}
+                title={sq.nlPrompt}
+              >
                 {sq.nlPrompt}
               </p>
             )}
             <div className="flex items-center gap-1 mt-1">
-              <span className="tag" style={{ fontSize: 10 }}>{sq.target}</span>
+              <span className="tag" style={{ fontSize: 10 }}>
+                {sq.target}
+              </span>
               <span className="flex-1" />
-              <Button variant="destructive" size="sm"
-               
+              <Button
+                variant="destructive"
+                size="sm"
+
                 style={{ padding: "0 6px", fontSize: 11 }}
                 onClick={async () => {
                   await fetch(`/api/saved-queries/${sq.id}`, { method: "DELETE" });
