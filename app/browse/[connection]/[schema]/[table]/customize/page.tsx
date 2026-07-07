@@ -9,11 +9,23 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCatalog, buildTableMeta } from "@/components/browse/useTableMeta";
-import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
+import {
+  SAME_SCHEMA,
+  matchesGlob,
+  isPattern,
+} from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbLink,
+  BreadcrumbItem,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
 
 export default function CustomizePage() {
   const params = useParams<{
@@ -26,7 +38,12 @@ export default function CustomizePage() {
   const meta = useMemo(
     () =>
       catalog
-        ? buildTableMeta(catalog, params.connection, params.schema, params.table)
+        ? buildTableMeta(
+            catalog,
+            params.connection,
+            params.schema,
+            params.table,
+          )
         : null,
     [catalog, params],
   );
@@ -46,8 +63,7 @@ export default function CustomizePage() {
   if (!catalog || !meta)
     return (
       <Pad>
-        Table {params.schema}.{params.table} not found on “
-        {params.connection}”.{" "}
+        Table {params.schema}.{params.table} not found on “{params.connection}”.{" "}
         <Link href={backHref} className="underline">
           Back
         </Link>
@@ -61,7 +77,9 @@ export default function CustomizePage() {
   const detectedPattern =
     (meta.tableOverride && isPattern(meta.tableOverride.schema)
       ? meta.tableOverride.schema
-      : null) ?? meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ?? null;
+      : null) ??
+    meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ??
+    null;
 
   const scope = explicitScope ?? (detectedPattern ? "pattern" : "schema");
   const pattern = explicitPattern ?? detectedPattern ?? "";
@@ -84,18 +102,47 @@ export default function CustomizePage() {
 
   return (
     <div className="px-8 py-7 max-w-6xl">
-      <div className="flex items-center gap-3 mb-5">
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={backHref} />}
-        >
-          ← {meta.label}
-        </Button>
-        <h1 className="text-lg font-semibold">Customize “{meta.label}”</h1>
-      </div>
-
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink
+              render={<Link href={`/browse/${params.connection}`} />}
+            >
+              {params.connection}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink
+              render={
+                <Link href={`/browse/${params.connection}/${params.schema}`} />
+              }
+            >
+              {params.schema}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink
+              render={
+                <Link
+                  href={`/browse/${params.connection}/${params.schema}/${meta.table.name}`}
+                />
+              }
+            >
+              {meta.label}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Customization</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
       <Tabs
         value={scope}
         onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")}
@@ -139,8 +186,8 @@ export default function CustomizePage() {
             style={{ color: "var(--muted-foreground)" }}
           >
             Link this table to another — composite keys, constant filters,
-            case-insensitive matches. Powers reference labels/pickers and
-            tells the AI how to join.
+            case-insensitive matches. Powers reference labels/pickers and tells
+            the AI how to join.
           </p>
           <VirtualFkEditor
             meta={meta}

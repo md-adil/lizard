@@ -15,9 +15,24 @@ function greeting() {
 
 const QUICK_LINKS = [
   { href: "/ai", icon: "✦", label: "Ask AI", desc: "Query in plain English" },
-  { href: "/dashboards", icon: "▦", label: "Dashboards", desc: "Saved charts across databases" },
-  { href: "/audit", icon: "≡", label: "Audit log", desc: "Every query and write" },
-  { href: "/settings", icon: "⚙", label: "Settings", desc: "Connections and users" },
+  {
+    href: "/dashboards",
+    icon: "▦",
+    label: "Dashboards",
+    desc: "Saved charts across databases",
+  },
+  {
+    href: "/audit",
+    icon: "≡",
+    label: "Audit log",
+    desc: "Every query and write",
+  },
+  {
+    href: "/settings",
+    icon: "⚙",
+    label: "Settings",
+    desc: "Connections and users",
+  },
 ];
 
 export default function HomePage() {
@@ -62,10 +77,18 @@ export default function HomePage() {
       </div>
 
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted-foreground-faint)" }}>
+        <h2
+          className="text-[13px] font-semibold uppercase tracking-wider"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
           Your databases
         </h2>
-        <Button variant="outline" size="sm" render={<Link href="/settings" />}>
+        <Button
+          variant="outline"
+          size="sm"
+          nativeButton={false}
+          render={<Link href="/settings" />}
+        >
           Manage connections
         </Button>
       </div>
@@ -84,7 +107,9 @@ export default function HomePage() {
             Add your first Postgres database in Settings to get a browsable
             console in seconds.
           </p>
-          <Button render={<Link href="/settings" />}>+ Add connection</Button>
+          <Button nativeButton={false} render={<Link href="/settings" />}>
+            + Add connection
+          </Button>
         </Card>
       )}
 
@@ -92,7 +117,11 @@ export default function HomePage() {
         {connections.map((c) => {
           const tableCount = c.schemas.reduce((n, s) => n + s.tables.length, 0);
           return (
-            <Link key={c.connectionId} href={`/browse/${c.connectionName}`} className="block">
+            <Link
+              key={c.connectionId}
+              href={`/browse/${c.connectionName}`}
+              className="block"
+            >
               <Card className="p-0 hover:bg-accent/40 transition-colors">
                 <div className="px-5 py-4">
                   <div className="flex items-center gap-2">
@@ -100,7 +129,10 @@ export default function HomePage() {
                       {c.connectionName}
                     </span>
                     {c.error && (
-                      <span className="tag" style={{ color: "var(--destructive)" }}>
+                      <span
+                        className="tag"
+                        style={{ color: "var(--destructive)" }}
+                      >
                         error
                       </span>
                     )}
@@ -116,8 +148,9 @@ export default function HomePage() {
                       className="text-[11.5px] mt-2"
                       style={{ color: "var(--muted-foreground-faint)" }}
                     >
-                      {c.schemas.length} schema{c.schemas.length !== 1 ? "s" : ""} ·{" "}
-                      {tableCount} table{tableCount !== 1 ? "s" : ""}
+                      {c.schemas.length} schema
+                      {c.schemas.length !== 1 ? "s" : ""} · {tableCount} table
+                      {tableCount !== 1 ? "s" : ""}
                     </div>
                   )}
                 </div>

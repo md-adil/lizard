@@ -52,6 +52,9 @@ interface ListResponse {
   fkLabels: Record<string, Record<string, string>>;
 }
 
+const EMPTY_ROWS: Record<string, unknown>[] = [];
+const EMPTY_FK_LABELS: Record<string, Record<string, string>> = {};
+
 export default function TablePage() {
   const params = useParams<{
     connection: string;
@@ -473,8 +476,8 @@ export default function TablePage() {
       {viewType === "table" && (
         <DataGrid
           columns={visibleCols}
-          rows={data?.rows ?? []}
-          fkLabels={data?.fkLabels ?? {}}
+          rows={data?.rows ?? EMPTY_ROWS}
+          fkLabels={data?.fkLabels ?? EMPTY_FK_LABELS}
           isLoading={isLoading}
           isFetching={isFetching}
           sort={sort}
@@ -489,13 +492,17 @@ export default function TablePage() {
         />
       )}
       {viewType === "gallery" && (
-        <GalleryView meta={meta} rows={data?.rows ?? []} onOpen={openRow} />
+        <GalleryView
+          meta={meta}
+          rows={data?.rows ?? EMPTY_ROWS}
+          onOpen={openRow}
+        />
       )}
       {viewType === "kanban" && activeGroupBy && (
         <KanbanView
           meta={meta}
-          rows={data?.rows ?? []}
-          fkLabels={data?.fkLabels ?? {}}
+          rows={data?.rows ?? EMPTY_ROWS}
+          fkLabels={data?.fkLabels ?? EMPTY_FK_LABELS}
           groupBy={activeGroupBy}
           onOpen={openRow}
           onChanged={() => refetch()}
@@ -504,7 +511,7 @@ export default function TablePage() {
       {viewType === "calendar" && activeDateField && (
         <CalendarView
           meta={meta}
-          rows={data?.rows ?? []}
+          rows={data?.rows ?? EMPTY_ROWS}
           dateField={activeDateField}
           onOpen={openRow}
         />
@@ -512,7 +519,7 @@ export default function TablePage() {
       {viewType === "tree" && parentField && (
         <TreeView
           meta={meta}
-          rows={data?.rows ?? []}
+          rows={data?.rows ?? EMPTY_ROWS}
           parentField={parentField}
           onOpen={openRow}
         />
