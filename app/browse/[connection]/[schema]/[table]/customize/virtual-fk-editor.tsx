@@ -163,7 +163,7 @@ export function VirtualFkEditor({
         <Card
           key={v.id}
           size="sm"
-          className="px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2 text-[12.5px]"
+          className="px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2"
         >
           <div className="min-w-0">
             {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
@@ -294,7 +294,7 @@ export function VirtualFkEditor({
               {pairs.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <select
-                    className="input flex-1 min-w-0"
+                    className="input"
                     value={p.from}
                     onChange={(e) => setPair(i, { from: e.target.value })}
                   >
@@ -312,7 +312,7 @@ export function VirtualFkEditor({
                     =
                   </span>
                   <select
-                    className="input flex-1 min-w-0"
+                    className="input"
                     value={p.to}
                     disabled={!targetTable}
                     onChange={(e) => setPair(i, { to: e.target.value })}
@@ -325,7 +325,7 @@ export function VirtualFkEditor({
                     ))}
                   </select>
                   <select
-                    className="input w-24 shrink-0"
+                    className="input"
                     value={p.transform ?? "none"}
                     onChange={(e) =>
                       setPair(i, { transform: e.target.value as VfkTransform })
@@ -372,7 +372,7 @@ export function VirtualFkEditor({
               {constants.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <select
-                    className="input flex-1 min-w-0"
+                    className="input"
                     value={c.toColumn}
                     disabled={!targetTable}
                     onChange={(e) => setConst(i, { toColumn: e.target.value })}
@@ -391,7 +391,7 @@ export function VirtualFkEditor({
                     =
                   </span>
                   <input
-                    className="input flex-1 min-w-0"
+                    className="input"
                     placeholder="value, e.g. user"
                     value={c.value}
                     onChange={(e) => setConst(i, { value: e.target.value })}
