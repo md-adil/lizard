@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useTableMeta,
+  useSchemaMeta,
   buildTableMeta,
   formatCell,
   type TableMeta,
@@ -239,7 +240,8 @@ function JsonCard({
           throw new Error("Invalid JSON");
         }
       }
-      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
+      const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+      const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pk, data: { [column]: parsed } }),
@@ -344,10 +346,7 @@ function BelongsToCard({
   };
   value: unknown;
 }) {
-  const targetMeta = useMemo(
-    () => buildTableMeta(catalog, target.connection, target.schema, target.table),
-    [catalog, target],
-  );
+  const { meta: targetMeta } = useTableMeta(target.connection, target.schema, target.table);
   const [editing, setEditing] = useState(false);
   const pkParam = encodeURIComponent(JSON.stringify({ [target.column]: value }));
   // only the reference column can carry a transform (e.g. case-insensitive),
@@ -363,8 +362,11 @@ function BelongsToCard({
   }>({
     queryKey: ["record", target.connection, target.schema, target.table, String(value)],
     queryFn: async () => {
+      const conn = catalog.connections.find((c) => c.connectionName === target.connection);
+      const isMysql = conn?.engine === "mysql";
+      const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(target.schema)}&`;
       const res = await fetch(
-        `/api/data/${target.connection}/${target.schema}/${target.table}/row?pk=${pkParam}${keyTransformsParam}`,
+        `/api/data/${target.connection}/${target.table}/row?${schemaParam}pk=${pkParam}${keyTransformsParam}`,
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
@@ -421,10 +423,7 @@ function HasManyCard({
   fkColumn: string;
   value: unknown;
 }) {
-  const meta = useMemo(
-    () => buildTableMeta(catalog, source.connection, source.schema, source.table),
-    [catalog, source],
-  );
+  const { meta } = useTableMeta(source.connection, source.schema, source.table);
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [sort, setSort] = useState<string | undefined>();
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -437,7 +436,7 @@ function HasManyCard({
     queryFn: async () => {
       const filters = JSON.stringify([{ column: fkColumn, op: "eq", value: String(value) }]);
       const res = await fetch(
-        `/api/data/${source.connection}/${source.schema}/${source.table}?page=0&pageSize=8&filters=${encodeURIComponent(filters)}`,
+        `/api/data/${source.connection}/${source.table}?schema=${encodeURIComponent(source.schema)}&page=0&pageSize=8&filters=${encodeURIComponent(filters)}`,
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "failed");
@@ -525,12 +524,20 @@ function RecordView() {
   const qc = useQueryClient();
   const schema = useSchemaParam();
   const { meta, catalog } = useTableMeta(params.connection, schema, params.table);
+  const resolvedSchema = meta?.schema ?? schema ?? "public";
+  const { schemaMeta } = useSchemaMeta(params.connection, resolvedSchema);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
   const pk = useMemo(() => {
     try {
-      return JSON.parse(search.get("pk") ?? "{}") as Record<string, unknown>;
+      // pk may be a direct param or embedded in the `query` param (as `pk=...`)
+      // which is how recordHref encodes it via URLSearchParams({query}).
+      const direct = search.get("pk");
+      if (direct) return JSON.parse(direct) as Record<string, unknown>;
+      const queryStr = search.get("query") ?? "";
+      const inner = new URLSearchParams(queryStr).get("pk");
+      return inner ? (JSON.parse(inner) as Record<string, unknown>) : {};
     } catch {
       return {};
     }
@@ -540,8 +547,11 @@ function RecordView() {
   // getRow's keyTransforms.
   const keyTransforms = useMemo(() => {
     try {
-      const raw = search.get("keyTransforms");
-      return raw ? (JSON.parse(raw) as Record<string, string>) : undefined;
+      const direct = search.get("keyTransforms");
+      if (direct) return JSON.parse(direct) as Record<string, string>;
+      const queryStr = search.get("query") ?? "";
+      const inner = new URLSearchParams(queryStr).get("keyTransforms");
+      return inner ? (JSON.parse(inner) as Record<string, string>) : undefined;
     } catch {
       return undefined;
     }
@@ -562,7 +572,8 @@ function RecordView() {
     queryFn: async () => {
       const qs = new URLSearchParams({ pk: JSON.stringify(pk) });
       if (keyTransforms) qs.set("keyTransforms", JSON.stringify(keyTransforms));
-      const res = await fetch(`/api/data/${params.connection}/${schema}/${params.table}/row?${qs}`);
+      const schemaParam = meta?.connectionEngine === "mysql" ? "" : `schema=${encodeURIComponent(meta?.schema ?? "public")}&`;
+      const res = await fetch(`/api/data/${params.connection}/${params.table}/row?${schemaParam}${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
       return body;
@@ -591,6 +602,7 @@ function RecordView() {
           otherTable: string;
         }[],
       };
+    const schema = meta.schema;
     const belongsTo = meta.columns
       .filter((c) => c.ref)
       .map((c) => ({ title: c.label, column: c.col.name, target: c.ref! }));
@@ -609,43 +621,40 @@ function RecordView() {
       table: string;
       fkColumn: string;
     }[] = [];
-    // reverse real FKs (same connection)
-    for (const conn of catalog.connections) {
-      if (conn.connectionName !== params.connection) continue;
-      for (const s of conn.schemas) {
-        for (const t of s.tables) {
-          for (const fk of t.foreignKeys) {
-            if (
-              fk.referencedSchema === schema &&
-              fk.referencedTable === params.table &&
-              fk.columns.length === 1 &&
-              !(t.name === params.table && s.name === schema)
-            ) {
-              hasMany.push({
-                connection: conn.connectionName,
-                schema: s.name,
-                table: t.name,
-                fkColumn: fk.columns[0],
+    // reverse real FKs — scan tables in the same schema (loaded on demand)
+    if (schemaMeta?.tables) {
+      for (const t of schemaMeta.tables) {
+        for (const fk of t.foreignKeys) {
+          if (
+            fk.referencedSchema === schema &&
+            fk.referencedTable === params.table &&
+            fk.columns.length === 1 &&
+            !(t.name === params.table)
+          ) {
+            hasMany.push({
+              connection: params.connection,
+              schema,
+              table: t.name,
+              fkColumn: fk.columns[0],
+            });
+            // Phase 8.5 — a junction table: `t` has this FK back to us plus
+            // another single-column FK to a different table → M2M.
+            const otherFk = t.foreignKeys.find(
+              (f) =>
+                f !== fk &&
+                f.columns.length === 1 &&
+                !(f.referencedSchema === schema && f.referencedTable === params.table),
+            );
+            if (otherFk) {
+              manyToMany.push({
+                connection: params.connection,
+                junctionSchema: schema,
+                junctionTable: t.name,
+                selfFkColumn: fk.columns[0],
+                otherFkColumn: otherFk.columns[0],
+                otherSchema: otherFk.referencedSchema,
+                otherTable: otherFk.referencedTable,
               });
-              // Phase 8.5 — a junction table: `t` has this FK back to us plus
-              // another single-column FK to a different table → M2M.
-              const otherFk = t.foreignKeys.find(
-                (f) =>
-                  f !== fk &&
-                  f.columns.length === 1 &&
-                  !(f.referencedSchema === schema && f.referencedTable === params.table),
-              );
-              if (otherFk) {
-                manyToMany.push({
-                  connection: conn.connectionName,
-                  junctionSchema: s.name,
-                  junctionTable: t.name,
-                  selfFkColumn: fk.columns[0],
-                  otherFkColumn: otherFk.columns[0],
-                  otherSchema: otherFk.referencedSchema,
-                  otherTable: otherFk.referencedTable,
-                });
-              }
             }
           }
         }
@@ -669,7 +678,7 @@ function RecordView() {
       });
     }
     return { belongsTo, hasMany, manyToMany };
-  }, [catalog, meta, params]);
+  }, [catalog, meta, schemaMeta, params]);
 
   if (!catalog || !meta)
     return (
@@ -733,7 +742,8 @@ function RecordView() {
               variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
-                const res = await fetch(`/api/data/${params.connection}/${schema}/${params.table}/row`, {
+                const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+                const res = await fetch(`/api/data/${params.connection}/${params.table}/row${query}`, {
                   method: "DELETE",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ pk }),
@@ -847,7 +857,7 @@ function RecordView() {
 
           {Object.keys(pk).length > 0 && (
             <div className="col-span-2">
-              <RecordComments connectionId={meta.connectionId} schema={schema} table={params.table} pk={pk} />
+              <RecordComments connectionId={meta.connectionId} schema={meta.schema} table={params.table} pk={pk} />
             </div>
           )}
         </div>

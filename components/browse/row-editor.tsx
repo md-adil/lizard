@@ -3,7 +3,7 @@
 // Right-side drawer with an auto-generated form for creating/editing a row.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { TableMeta, ColumnMeta } from "./useTableMeta";
+import { useCatalog, type TableMeta, type ColumnMeta } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
@@ -45,11 +45,16 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const ref = cm.ref!;
 
+  const { data: catalog } = useCatalog();
+  const targetConn = catalog?.connections.find((c) => c.connectionName === ref.connection);
+  const isMysql = targetConn?.engine === "mysql";
+  const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(ref.schema)}&`;
+
   const { data: options } = useQuery<{ id: string; label: string }[]>({
     queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
       const res = await fetch(
-        `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
+        `/api/data/${ref.connection}/${ref.table}/refs?${schemaParam}column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
       );
       if (!res.ok) throw new Error("refs failed");
       return res.json();
@@ -62,7 +67,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
     queryKey: ["ref-label", ref.connection, ref.schema, ref.table, ref.column, value],
     queryFn: async () => {
       const res = await fetch(
-        `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(value)}`,
+        `/api/data/${ref.connection}/${ref.table}/refs?${schemaParam}column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(value)}`,
       );
       const body = await res.json();
       if (res.ok) {
@@ -301,14 +306,15 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     mutationFn: async () => {
       const data = buildPayload();
       if (!data) throw new Error("Fix the highlighted fields");
-      const base = `/api/data/${meta.connection}/${meta.schema}/${meta.table.name}`;
+      const base = `/api/data/${meta.connection}/${meta.table.name}`;
+      const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
       const res = isCreate
-        ? await fetch(base, {
+        ? await fetch(`${base}${query}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
           })
-        : await fetch(`${base}/row`, {
+        : await fetch(`${base}/row${query}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -334,7 +340,8 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
   const del = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
+      const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+      const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pk }),

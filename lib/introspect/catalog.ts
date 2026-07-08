@@ -36,6 +36,7 @@ export async function getConnectionCatalog(conn: ConnectionConfig, refresh = fal
     const errCatalog: ConnectionCatalog = {
       connectionId: conn.id,
       connectionName: conn.name,
+      engine: conn.engine,
       database: conn.database,
       schemas: [],
       fetchedAt: new Date().toISOString(),
@@ -76,6 +77,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     return {
       connectionId: conn.id,
       connectionName: conn.name,
+      engine: conn.engine,
       database: conn.database,
       schemas: [],
       fetchedAt: new Date().toISOString(),
@@ -198,6 +200,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   return {
     connectionId: conn.id,
     connectionName: conn.name,
+    engine: conn.engine,
     database: conn.database,
     schemas: [...bySchema.values()].filter((s) => s.tables.length > 0),
     fetchedAt: new Date().toISOString(),

@@ -151,6 +151,7 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
   return {
     connectionId: conn.id,
     connectionName: conn.name,
+    engine: conn.engine,
     database: db,
     schemas: tables.length > 0 ? [{ name: db, tables }] : [],
     fetchedAt: new Date().toISOString(),

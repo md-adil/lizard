@@ -15,8 +15,16 @@ export async function GET(req: Request) {
     const connections =
       readable === "all" ? catalog.connections : catalog.connections.filter((c) => readable.has(c.connectionId));
     const visibleIds = new Set(connections.map((c) => c.connectionId));
+    const lightConnections = connections.map((c) => ({
+      connectionId: c.connectionId,
+      connectionName: c.connectionName,
+      database: c.database,
+      engine: c.engine,
+      error: c.error,
+      schemas: c.schemas.map((s) => ({ name: s.name })),
+    }));
     return ok({
-      connections,
+      connections: lightConnections,
       virtualFks: catalog.virtualFks,
       tableOverrides: listTableOverrides().filter((o) => visibleIds.has(o.connectionId)),
       columnOverrides: listColumnOverrides().filter((o) => visibleIds.has(o.connectionId)),

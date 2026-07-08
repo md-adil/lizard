@@ -3,16 +3,17 @@ import { ok, fail } from "@/lib/api";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = {
-  params: Promise<{ connection: string; schema: string; table: string }>;
+  params: Promise<{ connection: string; table: string }>;
 };
 
 // Phase 8.5 — M2M linked records. [schema]/[table] here is the JUNCTION
 // table; query params describe both FK columns and the other side.
 export async function GET(req: Request, { params }: Params) {
   try {
-    const { connection, schema, table } = await params;
+    const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
+    const schema = url.searchParams.get("schema") ?? "";
     const selfFkColumn = url.searchParams.get("selfFkColumn") ?? "";
     const otherFkColumn = url.searchParams.get("otherFkColumn") ?? "";
     const otherSchema = url.searchParams.get("otherSchema") ?? "";

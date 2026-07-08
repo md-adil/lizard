@@ -109,6 +109,7 @@ export function KanbanView({
   onChanged: () => void;
 }) {
   const cm = meta.columns.find((c) => c.col.name === groupBy);
+  const isBool = cm?.col.udtName === "bool";
   const nullable = cm?.col.nullable ?? true;
   const canWrite = !meta.isView && meta.table.primaryKey.length > 0;
 
@@ -117,7 +118,7 @@ export function KanbanView({
   const NULL_KEY = "∅";
   let keys: string[];
   if (cm?.options) keys = [...cm.options];
-  else if (cm?.col.udtName === "bool") keys = ["true", "false"];
+  else if (isBool) keys = ["true", "false"];
   else {
     keys = [
       ...new Set(
@@ -135,16 +136,25 @@ export function KanbanView({
     if (cm?.ref) return fkLabels[groupBy]?.[key] ?? key;
     return key;
   };
+  // Normalize bool values: MySQL returns 1/0, Postgres returns true/false.
+  const normalizeBool = (v: unknown): string => {
+    if (v === true || v === 1 || v === "1" || v === "true") return "true";
+    if (v === false || v === 0 || v === "0" || v === "false") return "false";
+    return String(v);
+  };
   const groupOf = (row: Row) => {
     const v = row[groupBy];
-    return v == null ? NULL_KEY : String(v);
+    if (v == null) return NULL_KEY;
+    if (isBool) return normalizeBool(v);
+    return String(v);
   };
 
   async function move(row: Row, toKey: string) {
     if (!canWrite) return;
     const value = toKey === NULL_KEY ? null : toKey;
     if (groupOf(row) === toKey) return;
-    await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
+    const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+    await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pk: rowPk(meta, row), data: { [groupBy]: value } }),

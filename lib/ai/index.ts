@@ -25,7 +25,7 @@ export function serializeCatalog(catalog: Catalog, scope?: string[]): string {
   for (const conn of catalog.connections) {
     if (scope && scope.length > 0 && !scope.includes(conn.connectionName)) continue;
     if (conn.error) continue;
-    parts.push(`connection ${conn.connectionName} (postgres database "${conn.database}")`);
+    parts.push(`connection ${conn.connectionName} (${conn.engine} database "${conn.database}")`);
     for (const schema of conn.schemas) {
       for (const t of schema.tables) {
         const cols = t.columns
@@ -61,7 +61,7 @@ const planSchema = z.object({
   target: z.enum(["single", "federated"]),
   connections: z.array(z.string()).min(1),
   sql: z.string().min(1),
-  dialect: z.enum(["postgres", "duckdb"]),
+  dialect: z.enum(["postgres", "mysql", "duckdb"]),
   explanation: z.string(),
 });
 
@@ -71,14 +71,14 @@ const chartSpecSchema = z.object({
   target: z.enum(["single", "federated"]),
   connections: z.array(z.string()).min(1),
   sql: z.string().min(1),
-  dialect: z.enum(["postgres", "duckdb"]),
+  dialect: z.enum(["postgres", "mysql", "duckdb"]),
   xField: z.string().nullable(),
   yFields: z.array(z.string()),
   seriesField: z.string().nullable(),
 });
 
 function systemPrompt(schemaText: string): string {
-  return `You are Lizard's SQL planner for a fleet of Postgres microservice databases. Today is ${new Date().toISOString().slice(0, 10)}.
+  return `You are Lizard's SQL planner for a fleet of Postgres and MySQL microservice databases. Today is ${new Date().toISOString().slice(0, 10)}.
 
 DATABASE FLEET SCHEMA:
 ${schemaText}
@@ -86,8 +86,18 @@ ${schemaText}
 RULES (strict):
 - SELECT only. One single statement. No comments. No semicolons. Never any DML/DDL.
 - Decide the target:
-  - If every table you need lives in ONE connection → target "single", dialect "postgres", connections = [that connection], and reference tables as schema.table (NO connection prefix).
-  - If tables span MULTIPLE connections → target "federated", dialect "duckdb", connections = all involved, and EVERY table reference MUST be fully qualified as connection_name.schema.table (each connection is attached in DuckDB under its name).
+  - If every table you need lives in ONE connection:
+    - target: "single"
+    - dialect: the connection's database engine ("postgres" or "mysql")
+    - connections: [that connection]
+    - Table references:
+      - For postgres: qualify as "schema.table" (e.g. "public.users").
+      - For mysql: qualify as "table" (e.g. "users") (do NOT prefix with schema or database name, quote using backticks if necessary).
+  - If tables span MULTIPLE connections:
+    - target: "federated"
+    - dialect: "duckdb"
+    - connections: all involved connections
+    - Table references: EVERY table reference MUST be fully qualified as connection_name.schema.table (e.g. "users_service.public.users" for postgres tables, and "orders_service.orders_service.orders" for mysql tables since mysql maps database to a synthetic schema name equal to the database).
 - DuckDB dialect is Postgres-like: date_trunc, intervals, joins, CTEs all work. Prefer ANSI SQL that works in both.
 - Cross-connection joins have no real foreign keys — use the declared VIRTUAL FK hints.
 - Use enum values exactly as listed. Quote nothing that doesn't need quoting.
@@ -125,7 +135,7 @@ export async function planQuery(
             target: { type: "string", enum: ["single", "federated"] },
             connections: { type: "array", items: { type: "string" } },
             sql: { type: "string" },
-            dialect: { type: "string", enum: ["postgres", "duckdb"] },
+            dialect: { type: "string", enum: ["postgres", "mysql", "duckdb"] },
             explanation: { type: "string" },
           },
           required: ["target", "connections", "sql", "dialect", "explanation"],
@@ -167,7 +177,7 @@ export async function planChart(prompt: string, scope?: string[]): Promise<Chart
             target: { type: "string", enum: ["single", "federated"] },
             connections: { type: "array", items: { type: "string" } },
             sql: { type: "string" },
-            dialect: { type: "string", enum: ["postgres", "duckdb"] },
+            dialect: { type: "string", enum: ["postgres", "mysql", "duckdb"] },
             xField: { type: ["string", "null"] },
             yFields: { type: "array", items: { type: "string" } },
             seriesField: { type: ["string", "null"] },

@@ -12,6 +12,7 @@ import type {
   ColumnOverride,
   ColumnInfo,
   VfkTransform,
+  SchemaCatalog,
 } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -69,6 +70,7 @@ export interface ColumnMeta {
 export interface TableMeta {
   connection: string;
   connectionId: string;
+  connectionEngine: string;
   schema: string;
   table: TableInfo;
   label: string;
@@ -85,9 +87,9 @@ export function buildTableMeta(
   connection: string,
   schema: string,
   tableName: string,
+  table: TableInfo,
 ): TableMeta | null {
   const conn = catalog.connections.find((c) => c.connectionName === connection);
-  const table = conn?.schemas.find((s) => s.name === schema)?.tables.find((t) => t.name === tableName);
   if (!conn || !table) return null;
 
   const tOverride = resolveTableOverride(catalog.tableOverrides, conn.connectionId, schema, tableName);
@@ -141,6 +143,7 @@ export function buildTableMeta(
   return {
     connection,
     connectionId: conn.connectionId,
+    connectionEngine: conn.engine,
     schema,
     table,
     label: tOverride?.label || humanize(tableName),
@@ -158,13 +161,34 @@ export function buildTableMeta(
 // pickers. Components that already have `catalog` from a parent (e.g. to
 // build meta for several tables at once) should keep calling buildTableMeta
 // directly instead.
+export function useSchemaMeta(connection: string | undefined, schema: string | undefined) {
+  const { data: schemaMeta, isLoading, error } = useQuery<SchemaCatalog>({
+    queryKey: ["schema-meta", connection, schema],
+    queryFn: async () => {
+      const res = await fetch(`/api/catalog/${connection}/${schema}`);
+      if (!res.ok) throw new Error("Failed to load schema metadata");
+      return res.json();
+    },
+    enabled: !!connection && !!schema,
+  });
+  return { schemaMeta, isLoading, error };
+}
+
 export function useTableMeta(connection: string | undefined, schema: string | undefined, table: string | undefined) {
-  const { data: catalog, isLoading, error } = useCatalog();
-  const meta = useMemo(
-    () => (catalog && connection && schema && table ? buildTableMeta(catalog, connection, schema, table) : null),
-    [catalog, connection, schema, table],
-  );
-  return { meta, catalog, isLoading, error };
+  const { data: catalog } = useCatalog();
+  const conn = catalog?.connections.find((c) => c.connectionName === connection);
+  const resolvedSchema = schema || (conn?.engine === "mysql" ? conn.database : "public");
+
+  const { schemaMeta, isLoading, error } = useSchemaMeta(connection, resolvedSchema);
+
+  const meta = useMemo(() => {
+    if (!catalog || !connection || !resolvedSchema || !table || !schemaMeta) return null;
+    const tableInfo = schemaMeta.tables.find((t) => t.name === table);
+    if (!tableInfo) return null;
+    return buildTableMeta(catalog, connection, resolvedSchema, table, tableInfo);
+  }, [catalog, connection, resolvedSchema, table, schemaMeta]);
+
+  return { meta, catalog, isLoading: isLoading || !catalog, error };
 }
 
 const INTERVAL_KEYS = new Set(["years", "months", "days", "hours", "minutes", "seconds", "milliseconds"]);

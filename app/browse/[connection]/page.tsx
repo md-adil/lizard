@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useCatalog } from "@/components/browse/useTableMeta";
-import type { TableInfo } from "@/lib/types";
+import type { SchemaCatalog, TableInfo } from "@/lib/types";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -56,6 +57,68 @@ function TableCard({ connection, schema, table }: { connection: string; schema: 
   );
 }
 
+function useSchemaData(connection: string, schemaName: string) {
+  return useQuery<SchemaCatalog>({
+    queryKey: ["schema-tables", connection, schemaName],
+    queryFn: async () => {
+      const res = await fetch(`/api/catalog/${encodeURIComponent(connection)}/${encodeURIComponent(schemaName)}`);
+      if (!res.ok) throw new Error("failed to load schema");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+}
+
+function SchemaGrid({
+  connection,
+  schemaName,
+  search,
+  multiSchema,
+}: {
+  connection: string;
+  schemaName: string;
+  search: string;
+  multiSchema: boolean;
+}) {
+  const { data: schemaData, isLoading } = useSchemaData(connection, schemaName);
+  const q = search.trim().toLowerCase();
+
+  if (isLoading) {
+    return (
+      <div className="mb-6">
+        {multiSchema && (
+          <div className="text-[12px] font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--muted-foreground-faint)" }}>
+            {schemaName}
+          </div>
+        )}
+        <p className="text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>Loading tables…</p>
+      </div>
+    );
+  }
+
+  const tables = (schemaData?.tables ?? [])
+    .filter((t) => !q || t.name.toLowerCase().includes(q))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (tables.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      {multiSchema && (
+        <div className="text-[12px] font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--muted-foreground-faint)" }}>
+          {schemaName}
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        {tables.map((t) => (
+          <TableCard key={t.name} connection={connection} schema={schemaName} table={t} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ConnectionPage() {
   const { connection } = useParams<{ connection: string }>();
   const { data: catalog, isLoading, error } = useCatalog();
@@ -63,13 +126,10 @@ export default function ConnectionPage() {
 
   const conn = useMemo(() => catalog?.connections.find((c) => c.connectionName === connection), [catalog, connection]);
 
-  const totalTables = useMemo(() => conn?.schemas.reduce((n, s) => n + s.tables.length, 0) ?? 0, [conn]);
-
   if (isLoading) return <PagePad>Loading…</PagePad>;
   if (error) return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
   if (!conn) return <PagePad>Connection &quot;{connection}&quot; not found.</PagePad>;
 
-  const q = search.trim().toLowerCase();
   const sortedSchemas = conn.schemas.slice().sort((a, b) => a.name.localeCompare(b.name));
   const multiSchema = sortedSchemas.length > 1;
 
@@ -89,8 +149,7 @@ export default function ConnectionPage() {
 
       <h1 className="text-xl font-semibold mb-1">{conn.connectionName}</h1>
       <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
-        {conn.database} · {conn.schemas.length} schema{conn.schemas.length !== 1 ? "s" : ""} · {totalTables} table
-        {totalTables !== 1 ? "s" : ""}
+        {conn.database} · {conn.schemas.length} schema{conn.schemas.length !== 1 ? "s" : ""}
       </p>
 
       {conn.error && (
@@ -111,27 +170,15 @@ export default function ConnectionPage() {
         autoFocus
       />
 
-      {sortedSchemas.map((schema) => {
-        const tables = schema.tables
-          .filter((t) => !q || t.name.toLowerCase().includes(q))
-          .slice()
-          .sort((a, b) => a.name.localeCompare(b.name));
-        if (tables.length === 0) return null;
-        return (
-          <div key={schema.name} className="mb-6">
-            {multiSchema && (
-              <div className="text-[12px] font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--muted-foreground-faint)" }}>
-                {schema.name}
-              </div>
-            )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {tables.map((t) => (
-                <TableCard key={t.name} connection={connection} schema={schema.name} table={t} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      {sortedSchemas.map((schema) => (
+        <SchemaGrid
+          key={schema.name}
+          connection={connection}
+          schemaName={schema.name}
+          search={search}
+          multiSchema={multiSchema}
+        />
+      ))}
     </div>
   );
 }

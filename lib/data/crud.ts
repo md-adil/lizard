@@ -9,7 +9,9 @@ import {
   applyTransform,
 } from "@/lib/introspect/virtual-fk";
 import { findUpdatedAtColumn } from "@/lib/introspect/heuristics";
-import { getPool } from "@/lib/db/pools";
+import { getClient, type DbClient } from "@/lib/db/pools";
+import { getDialect } from "@/app/api/database/registry";
+import type { Dialect } from "@/app/api/database/driver";
 import {
   getConnection,
   getColumnOverrides,
@@ -75,9 +77,10 @@ async function resolveTable(
   const catalog = await getConnectionCatalog(conn);
   if (catalog.error)
     throw new CrudError(`Connection error: ${catalog.error}`, 502);
-  const sch = catalog.schemas.find((s) => s.name === schema);
+  const targetSchema = conn.engine === "mysql" ? (schema || conn.database) : schema;
+  const sch = catalog.schemas.find((s) => s.name === targetSchema);
   const tbl = sch?.tables.find((t) => t.name === table);
-  if (!tbl) throw new CrudError(`Unknown table: ${schema}.${table}`, 404);
+  if (!tbl) throw new CrudError(`Unknown table: ${targetSchema}.${table}`, 404);
   return { conn, table: tbl };
 }
 
@@ -114,62 +117,73 @@ export async function listRows(params: ListParams) {
     params.schema,
     params.table,
   );
-  const pool = getPool(conn, "read");
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
 
-  const { clause: filterClause, values: filterValues } = buildFilterClause(
-    table,
-    params.filters ?? [],
-    params.combinator ?? "and",
-  );
-  const allValues: unknown[] = [...filterValues];
-
-  let searchClause = "";
-  if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
-    const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    const textCols = table.columns.filter((c) =>
-      TEXT_LIKE_TYPES.has(c.udtName),
+  try {
+    const { clause: filterClause, values: filterValues } = buildFilterClause(
+      table,
+      params.filters ?? [],
+      params.combinator ?? "and",
+      dialect,
     );
-    if (textCols.length > 0) {
-      const idx = allValues.length + 1;
-      allValues.push(`%${term}%`);
-      searchClause = `(${textCols.map((c) => `${quoteIdent(c.name)} ILIKE $${idx}`).join(" OR ")})`;
+    const allValues: unknown[] = [...filterValues];
+
+    let searchClause = "";
+    if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
+      const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const textCols = table.columns.filter((c) =>
+        TEXT_LIKE_TYPES.has(c.udtName),
+      );
+      if (textCols.length > 0) {
+        const idx = allValues.length + 1;
+        allValues.push(`%${term}%`);
+        searchClause = `(${textCols.map((c) => dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(idx))).join(" OR ")})`;
+      }
     }
+
+    const clauses = [filterClause, searchClause].filter(Boolean);
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    let orderSql = "";
+    if (params.sort) {
+      assertColumn(table, params.sort);
+      orderSql = `ORDER BY ${dialect.quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"}`;
+      if (dialect.engine === "postgres") {
+        orderSql += " NULLS LAST";
+      }
+    } else if (table.primaryKey.length > 0) {
+      orderSql = `ORDER BY ${table.primaryKey.map((c) => dialect.quoteIdent(c)).join(", ")}`;
+    }
+
+    const pageSize = Math.min(Math.max(params.pageSize, 1), 200);
+    const offset = Math.max(params.page, 0) * pageSize;
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(table.name)}`
+      : dialect.quoteIdent(table.name);
+
+    const sql = `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${pageSize + 1} OFFSET ${offset}`;
+    const res = await client.query(sql, allValues);
+    const hasMore = res.rows.length > pageSize;
+    const rows = hasMore ? res.rows.slice(0, pageSize) : res.rows;
+
+    // exact count for small tables, estimate for big ones
+    let total: number | null = null;
+    if (table.rowEstimate < 100_000) {
+      const countRes = await client.query(
+        `SELECT count(*) AS n FROM ${fqtn} ${whereSql}`,
+        allValues,
+      );
+      total = Number(countRes.rows[0].n);
+    } else if (!whereSql) {
+      total = table.rowEstimate;
+    }
+
+    const fkLabels = await fetchFkLabels(conn, table, rows);
+    return { rows, hasMore, total, fkLabels };
+  } finally {
+    client.release();
   }
-
-  const clauses = [filterClause, searchClause].filter(Boolean);
-  const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-
-  let orderSql = "";
-  if (params.sort) {
-    assertColumn(table, params.sort);
-    orderSql = `ORDER BY ${quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"} NULLS LAST`;
-  } else if (table.primaryKey.length > 0) {
-    orderSql = `ORDER BY ${table.primaryKey.map(quoteIdent).join(", ")}`;
-  }
-
-  const pageSize = Math.min(Math.max(params.pageSize, 1), 200);
-  const offset = Math.max(params.page, 0) * pageSize;
-  const fqtn = `${quoteIdent(table.schema)}.${quoteIdent(table.name)}`;
-
-  const sql = `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${pageSize + 1} OFFSET ${offset}`;
-  const res = await pool.query(sql, allValues);
-  const hasMore = res.rows.length > pageSize;
-  const rows = hasMore ? res.rows.slice(0, pageSize) : res.rows;
-
-  // exact count for small tables, estimate for big ones
-  let total: number | null = null;
-  if (table.rowEstimate < 100_000) {
-    const countRes = await pool.query(
-      `SELECT count(*)::bigint AS n FROM ${fqtn} ${whereSql}`,
-      allValues,
-    );
-    total = Number(countRes.rows[0].n);
-  } else if (!whereSql) {
-    total = table.rowEstimate;
-  }
-
-  const fkLabels = await fetchFkLabels(conn, table, rows);
-  return { rows, hasMore, total, fkLabels };
 }
 
 const EXPORT_ROW_LIMIT = 100_000;
@@ -185,48 +199,59 @@ export async function exportRows(
     params.schema,
     params.table,
   );
-  const pool = getPool(conn, "read");
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
 
-  const { clause: filterClause, values: filterValues } = buildFilterClause(
-    table,
-    params.filters ?? [],
-    params.combinator ?? "and",
-  );
-  const allValues: unknown[] = [...filterValues];
-
-  let searchClause = "";
-  if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
-    const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    const textCols = table.columns.filter((c) =>
-      TEXT_LIKE_TYPES.has(c.udtName),
+  try {
+    const { clause: filterClause, values: filterValues } = buildFilterClause(
+      table,
+      params.filters ?? [],
+      params.combinator ?? "and",
+      dialect,
     );
-    if (textCols.length > 0) {
-      const idx = allValues.length + 1;
-      allValues.push(`%${term}%`);
-      searchClause = `(${textCols.map((c) => `${quoteIdent(c.name)} ILIKE $${idx}`).join(" OR ")})`;
+    const allValues: unknown[] = [...filterValues];
+
+    let searchClause = "";
+    if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
+      const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const textCols = table.columns.filter((c) =>
+        TEXT_LIKE_TYPES.has(c.udtName),
+      );
+      if (textCols.length > 0) {
+        const idx = allValues.length + 1;
+        allValues.push(`%${term}%`);
+        searchClause = `(${textCols.map((c) => dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(idx))).join(" OR ")})`;
+      }
     }
+
+    const clauses = [filterClause, searchClause].filter(Boolean);
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    let orderSql = "";
+    if (params.sort) {
+      assertColumn(table, params.sort);
+      orderSql = `ORDER BY ${dialect.quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"}`;
+      if (dialect.engine === "postgres") {
+        orderSql += " NULLS LAST";
+      }
+    } else if (table.primaryKey.length > 0) {
+      orderSql = `ORDER BY ${table.primaryKey.map((c) => dialect.quoteIdent(c)).join(", ")}`;
+    }
+
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(table.name)}`
+      : dialect.quoteIdent(table.name);
+    const res = await client.query(
+      `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${EXPORT_ROW_LIMIT + 1}`,
+      allValues,
+    );
+    const truncated = res.rows.length > EXPORT_ROW_LIMIT;
+    const rows = truncated ? res.rows.slice(0, EXPORT_ROW_LIMIT) : res.rows;
+    const columns = res.fields.map((f) => f.name);
+    return { columns, rows, truncated };
+  } finally {
+    client.release();
   }
-
-  const clauses = [filterClause, searchClause].filter(Boolean);
-  const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-
-  let orderSql = "";
-  if (params.sort) {
-    assertColumn(table, params.sort);
-    orderSql = `ORDER BY ${quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"} NULLS LAST`;
-  } else if (table.primaryKey.length > 0) {
-    orderSql = `ORDER BY ${table.primaryKey.map(quoteIdent).join(", ")}`;
-  }
-
-  const fqtn = `${quoteIdent(table.schema)}.${quoteIdent(table.name)}`;
-  const res = await pool.query(
-    `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${EXPORT_ROW_LIMIT + 1}`,
-    allValues,
-  );
-  const truncated = res.rows.length > EXPORT_ROW_LIMIT;
-  const rows = truncated ? res.rows.slice(0, EXPORT_ROW_LIMIT) : res.rows;
-  const columns = res.fields.map((f) => f.name);
-  return { columns, rows, truncated };
 }
 
 // Phase 8.5 — M2M linked records. A junction table is just a regular table
@@ -261,16 +286,33 @@ export async function listLinkedRows(
   if (!otherPk) throw new CrudError("Target table has no primary key", 400);
   const display = displayColumnFor(conn, otherTable) ?? otherPk;
 
-  const pool = getPool(conn, "read");
-  const res = await pool.query(
-    `SELECT j.*, o.${quoteIdent(display)}::text AS __label, o.${quoteIdent(otherPk)}::text AS __other_id
-     FROM ${quoteIdent(junctionSchema)}.${quoteIdent(junctionTable)} j
-     JOIN ${quoteIdent(otherSchema)}.${quoteIdent(otherTableName)} o
-       ON o.${quoteIdent(otherPk)}::text = j.${quoteIdent(otherFkColumn)}::text
-     WHERE j.${quoteIdent(selfFkColumn)}::text = $1`,
-    [String(selfValue)],
-  );
-  return res.rows;
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+  try {
+    const fqJunction = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(junctionSchema)}.${dialect.quoteIdent(junctionTable)}`
+      : dialect.quoteIdent(junctionTable);
+    const fqOther = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(otherSchema)}.${dialect.quoteIdent(otherTableName)}`
+      : dialect.quoteIdent(otherTableName);
+
+    const selectDisplay = dialect.castToText(`o.${dialect.quoteIdent(display)}`);
+    const selectOtherPk = dialect.castToText(`o.${dialect.quoteIdent(otherPk)}`);
+    const joinOnOther = dialect.castToText(`o.${dialect.quoteIdent(otherPk)}`);
+    const joinOnJunction = dialect.castToText(`j.${dialect.quoteIdent(otherFkColumn)}`);
+    const whereSelf = dialect.castToText(`j.${dialect.quoteIdent(selfFkColumn)}`);
+
+    const sql = `SELECT j.*, ${selectDisplay} AS __label, ${selectOtherPk} AS __other_id
+                 FROM ${fqJunction} j
+                 JOIN ${fqOther} o
+                   ON ${joinOnOther} = ${joinOnJunction}
+                 WHERE ${whereSelf} = ${dialect.placeholder(1)}`;
+
+    const res = await client.query(sql, [String(selfValue)]);
+    return res.rows;
+  } finally {
+    client.release();
+  }
 }
 
 function transformSql(expr: string, t: VfkTransform): string {
@@ -383,19 +425,21 @@ async function fetchFkLabels(
         // Nothing to resolve if the label would just echo the id.
         if (job.pairs.length === 1 && display === job.pairs[0].to) return;
 
+        const targetDialect = getDialect(job.targetConn.engine);
         const params: unknown[] = [];
         const targetExpr = (col: string, t: VfkTransform) =>
-          transformSql(`t.${quoteIdent(col)}::text`, t);
+          transformSql(targetDialect.castToText(`t.${targetDialect.quoteIdent(col)}`), t);
 
-        const valuesRows = tuples.map(
-          (tuple) =>
-            `(${tuple
-              .map((val) => {
-                params.push(val);
-                return `$${params.length}`;
-              })
-              .join(", ")})`,
-        );
+        const valuesRows = tuples.map((tuple, rowIndex) => {
+          const cols = tuple.map((val, colIndex) => {
+            params.push(val);
+            const placeholder = targetDialect.placeholder(params.length);
+            return rowIndex === 0 ? `${placeholder} AS k${colIndex}` : placeholder;
+          });
+          return `SELECT ${cols.join(", ")}`;
+        });
+        const keysSubquery = `(${valuesRows.join(" UNION ALL ")})`;
+
         const keyCols = job.pairs.map((_, i) => `k${i}`);
         const onClause = job.pairs
           .map((p, i) => `${targetExpr(p.to, p.transform)} = keys.k${i}`)
@@ -405,32 +449,42 @@ async function fetchFkLabels(
         );
         const constClause = job.constants.map((c) => {
           params.push(c.value);
-          return `t.${quoteIdent(c.toColumn)}::text = $${params.length}`;
+          return `${targetDialect.castToText(`t.${targetDialect.quoteIdent(c.toColumn)}`)} = ${targetDialect.placeholder(params.length)}`;
         });
         const where = constClause.length
           ? `WHERE ${constClause.join(" AND ")}`
           : "";
 
-        const pool = getPool(job.targetConn, "read");
-        const res = await pool.query(
-          `SELECT ${selectKeys.join(", ")}, ${quoteIdent(display)}::text AS label
-           FROM ${quoteIdent(job.schema)}.${quoteIdent(job.table)} t
-           JOIN (VALUES ${valuesRows.join(", ")}) AS keys(${keyCols.join(", ")})
-             ON ${onClause}
-           ${where}`,
-          params,
-        );
+        const client = await getClient(job.targetConn, "read");
+        try {
+          const fqTable = targetDialect.supportsSchemas
+            ? `${targetDialect.quoteIdent(job.schema)}.${targetDialect.quoteIdent(job.table)}`
+            : targetDialect.quoteIdent(job.table);
 
-        const keyToLabel = new Map<string, string>();
-        for (const tr of res.rows) {
-          keyToLabel.set(keyCols.map((kc) => tr[kc]).join(SEP), tr.label);
+          const selectDisplay = targetDialect.castToText(`t.${targetDialect.quoteIdent(display)}`);
+
+          const res = await client.query(
+            `SELECT ${selectKeys.join(", ")}, ${selectDisplay} AS label
+             FROM ${fqTable} t
+             JOIN ${keysSubquery} keys
+               ON ${onClause}
+             ${where}`,
+            params,
+          );
+
+          const keyToLabel = new Map<string, string>();
+          for (const tr of res.rows) {
+            keyToLabel.set(keyCols.map((kc) => tr[kc]).join(SEP), tr.label);
+          }
+          const map: Record<string, string> = {};
+          for (const [tupleKey, rawVal] of rawByKey) {
+            const label = keyToLabel.get(tupleKey);
+            if (label != null) map[rawVal] = label;
+          }
+          if (Object.keys(map).length) out[job.displayColumn] = map;
+        } finally {
+          client.release();
         }
-        const map: Record<string, string> = {};
-        for (const [tupleKey, rawVal] of rawByKey) {
-          const label = keyToLabel.get(tupleKey);
-          if (label != null) map[rawVal] = label;
-        }
-        if (Object.keys(map).length) out[job.displayColumn] = map;
       } catch {
         /* label resolution is best-effort */
       }
@@ -445,13 +499,14 @@ function pkWhere(
   table: TableInfo,
   pk: Record<string, unknown>,
   values: unknown[],
+  dialect: Dialect,
 ): string {
   if (table.primaryKey.length === 0)
     throw new CrudError("Table has no primary key; editing is not supported");
   const parts = table.primaryKey.map((col) => {
     if (!(col in pk)) throw new CrudError(`Missing primary key part: ${col}`);
     values.push(String(pk[col]));
-    return `${quoteIdent(col)}::text = $${values.length}`;
+    return `${dialect.castToText(dialect.quoteIdent(col))} = ${dialect.placeholder(values.length)}`;
   });
   return parts.join(" AND ");
 }
@@ -471,6 +526,7 @@ function lookupWhere(
   table: TableInfo,
   key: Record<string, unknown>,
   values: unknown[],
+  dialect: Dialect,
   keyTransforms: Record<string, VfkTransform> = {},
 ): string {
   const cols = Object.keys(key);
@@ -479,7 +535,8 @@ function lookupWhere(
     assertColumn(table, col);
     const t = keyTransforms[col] ?? "none";
     values.push(applyTransform(key[col], t));
-    return `${transformSql(`${quoteIdent(col)}::text`, t)} = $${values.length}`;
+    const expr = dialect.castToText(dialect.quoteIdent(col));
+    return `${transformSql(expr, t)} = ${dialect.placeholder(values.length)}`;
   });
   return parts.join(" AND ");
 }
@@ -492,16 +549,25 @@ export async function getRow(
   keyTransforms?: Record<string, VfkTransform>,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  const dialect = getDialect(conn.engine);
   const values: unknown[] = [];
-  const where = lookupWhere(table, pk, values, keyTransforms);
-  const res = await getPool(conn, "read").query(
-    `SELECT * FROM ${quoteIdent(schema)}.${quoteIdent(tableName)} WHERE ${where}`,
-    values,
-  );
-  if (res.rows.length === 0) throw new CrudError("Row not found", 404);
-  const row = res.rows[0];
-  const fkLabels = await fetchFkLabels(conn, table, [row]);
-  return { row, fkLabels };
+  const where = lookupWhere(table, pk, values, dialect, keyTransforms);
+  const client = await getClient(conn, "read");
+  try {
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+      : dialect.quoteIdent(tableName);
+    const res = await client.query(
+      `SELECT * FROM ${fqtn} WHERE ${where}`,
+      values,
+    );
+    if (res.rows.length === 0) throw new CrudError("Row not found", 404);
+    const row = res.rows[0];
+    const fkLabels = await fetchFkLabels(conn, table, [row]);
+    return { row, fkLabels };
+  } finally {
+    client.release();
+  }
 }
 
 // Options for a reference picker: search the referenced table by its display column.
@@ -515,63 +581,47 @@ export async function referenceOptions(
   const { conn, table } = await resolveTable(connection, schema, tableName);
   assertColumn(table, refColumn);
   const display = displayColumnFor(conn, table) ?? refColumn;
-  const pool = getPool(conn, "read");
-  const params: unknown[] = [];
-  let where = "";
-  if (search) {
-    params.push(`%${search}%`);
-    where = `WHERE ${quoteIdent(display)}::text ILIKE $1 OR ${quoteIdent(refColumn)}::text ILIKE $1`;
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+  try {
+    const params: unknown[] = [];
+    let where = "";
+    if (search) {
+      params.push(`%${search}%`);
+      const dispExpr = dialect.castToText(dialect.quoteIdent(display));
+      const refExpr = dialect.castToText(dialect.quoteIdent(refColumn));
+      const matchDisp = dialect.caseInsensitiveLike(dispExpr, dialect.placeholder(1));
+      const matchRef = dialect.caseInsensitiveLike(refExpr, dialect.placeholder(1));
+      where = `WHERE ${matchDisp} OR ${matchRef}`;
+    }
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+      : dialect.quoteIdent(tableName);
+
+    const selectId = dialect.castToText(dialect.quoteIdent(refColumn));
+    const selectLabel = dialect.castToText(dialect.quoteIdent(display));
+
+    const res = await client.query(
+      `SELECT ${selectId} AS id, ${selectLabel} AS label
+       FROM ${fqtn} ${where}
+       ORDER BY 2 LIMIT 50`,
+      params,
+    );
+    return res.rows as { id: string; label: string }[];
+  } finally {
+    client.release();
   }
-  const res = await pool.query(
-    `SELECT ${quoteIdent(refColumn)}::text AS id, ${quoteIdent(display)}::text AS label
-     FROM ${quoteIdent(schema)}.${quoteIdent(tableName)} ${where}
-     ORDER BY 2 LIMIT 50`,
-    params,
-  );
-  return res.rows as { id: string; label: string }[];
 }
 
 // ---------- writes ----------
 
-function friendlyDbError(e: unknown): CrudError {
-  const err = e as {
-    code?: string;
-    detail?: string;
-    message?: string;
-    column?: string;
-    constraint?: string;
-  };
-  switch (err.code) {
-    case "23505":
-      return new CrudError(
-        `Duplicate value violates unique constraint${err.detail ? `: ${err.detail}` : ""}`,
-        409,
-      );
-    case "23503":
-      return new CrudError(
-        `Referenced row does not exist${err.detail ? `: ${err.detail}` : ""}`,
-        409,
-      );
-    case "23502":
-      return new CrudError(
-        `"${err.column}" is required and cannot be empty`,
-        400,
-      );
-    case "23514":
-      return new CrudError(
-        `Value violates check constraint "${err.constraint}"`,
-        400,
-      );
-    case "22P02":
-      return new CrudError(`Invalid value format: ${err.message}`, 400);
-    case "42501":
-      return new CrudError(
-        "The write role lacks permission for this operation",
-        403,
-      );
-    default:
-      return new CrudError(err.message ?? "Database error", 400);
+function friendlyDbError(e: unknown, dialect: Dialect): CrudError {
+  if (e instanceof CrudError) return e;
+  const mapped = dialect.mapError(e);
+  if (mapped) {
+    return new CrudError(mapped.message, mapped.status);
   }
+  return new CrudError(e instanceof Error ? e.message : String(e), 400);
 }
 
 function writableColumns(
@@ -626,29 +676,48 @@ export async function createRow(
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
+  const dialect = getDialect(conn.engine);
   const cols = writableColumns(table, data);
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
   const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
   const values = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
-  const placeholders = cols.map((_, i) => `$${i + 1}`);
-  const sql = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(tableName)} (${cols.map(quoteIdent).join(", ")})
-               VALUES (${placeholders.join(", ")}) RETURNING *`;
-  const pool = getPool(conn, "write");
-  const client = await pool.connect();
+  const placeholders = cols.map((_, i) => dialect.placeholder(i + 1));
+  const fqtn = dialect.supportsSchemas
+    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    : dialect.quoteIdent(tableName);
+
+  const returningClause = dialect.supportsReturning ? " RETURNING *" : "";
+  const sql = `INSERT INTO ${fqtn} (${cols.map((c) => dialect.quoteIdent(c)).join(", ")})
+               VALUES (${placeholders.join(", ")})${returningClause}`;
+  const client = await getClient(conn, "write");
   try {
-    await client.query("BEGIN");
+    await client.beginTransaction();
     const res = await client.query(sql, values);
-    await client.query("COMMIT");
+    await client.commit();
     logAudit({
       action: "create",
       sql: `INSERT INTO ${schema}.${tableName}`,
       connections: [conn.name],
       rowCount: 1,
     });
-    return res.rows[0];
+    if (dialect.supportsReturning) {
+      return res.rows[0];
+    } else {
+      const pkObj: Record<string, unknown> = {};
+      if (table.primaryKey.length === 1) {
+        const pkCol = table.primaryKey[0];
+        pkObj[pkCol] = data[pkCol] ?? res.insertId;
+      } else {
+        for (const pkCol of table.primaryKey) {
+          pkObj[pkCol] = data[pkCol];
+        }
+      }
+      const { row } = await getRow(connection, schema, tableName, pkObj);
+      return row;
+    }
   } catch (e) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw friendlyDbError(e);
+    await client.rollback().catch(() => {});
+    throw friendlyDbError(e, dialect);
   } finally {
     client.release();
   }
@@ -671,14 +740,17 @@ export async function bulkInsertRows(
   }
   const { conn, table } = await resolveTable(connection, schema, tableName);
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
+  const dialect = getDialect(conn.engine);
+  const fqtn = dialect.supportsSchemas
+    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    : dialect.quoteIdent(tableName);
 
   const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
-  const pool = getPool(conn, "write");
-  const client = await pool.connect();
+  const client = await getClient(conn, "write");
   let inserted = 0;
   const errors: { row: number; message: string }[] = [];
   try {
-    await client.query("BEGIN");
+    await client.beginTransaction();
     for (let i = 0; i < rows.length; i++) {
       const cols = writableColumns(table, rows[i]);
       if (cols.length === 0) {
@@ -686,21 +758,21 @@ export async function bulkInsertRows(
         continue;
       }
       const values = cols.map((c) => coerceValue(table, c, rows[i][c], jsonCols));
-      const placeholders = cols.map((_, j) => `$${j + 1}`);
+      const placeholders = cols.map((_, j) => dialect.placeholder(j + 1));
       await client.query("SAVEPOINT import_row");
       try {
         await client.query(
-          `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(tableName)} (${cols.map(quoteIdent).join(", ")}) VALUES (${placeholders.join(", ")})`,
+          `INSERT INTO ${fqtn} (${cols.map((c) => dialect.quoteIdent(c)).join(", ")}) VALUES (${placeholders.join(", ")})`,
           values,
         );
         await client.query("RELEASE SAVEPOINT import_row");
         inserted++;
       } catch (e) {
         await client.query("ROLLBACK TO SAVEPOINT import_row");
-        errors.push({ row: i, message: friendlyDbError(e).message });
+        errors.push({ row: i, message: friendlyDbError(e, dialect).message });
       }
     }
-    await client.query("COMMIT");
+    await client.commit();
     logAudit({
       action: "import",
       sql: `INSERT INTO ${schema}.${tableName} (bulk, ${inserted} rows)`,
@@ -709,8 +781,8 @@ export async function bulkInsertRows(
     });
     return { inserted, errors };
   } catch (e) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw friendlyDbError(e);
+    await client.rollback().catch(() => {});
+    throw friendlyDbError(e, dialect);
   } finally {
     client.release();
   }
@@ -726,30 +798,37 @@ export async function updateRow(
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
+  const dialect = getDialect(conn.engine);
   const cols = writableColumns(table, data).filter(
     (c) => !table.primaryKey.includes(c),
   );
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
   const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
   const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
-  const sets = cols.map((c, i) => `${quoteIdent(c)} = $${i + 1}`);
-  let where = pkWhere(table, pk, values);
+  const sets = cols.map((c, i) => `${dialect.quoteIdent(c)} = ${dialect.placeholder(i + 1)}`);
+  let where = pkWhere(table, pk, values, dialect);
   // optimistic concurrency when the table has a recognisable timestamp column
   const updatedAtCol = findUpdatedAtColumn(table.columns);
   if (expectedUpdatedAt && updatedAtCol) {
     values.push(expectedUpdatedAt);
-    // Cast both sides to timestamptz (session = UTC) and truncate to
-    // milliseconds so microsecond precision differences never cause a false mismatch.
-    where += ` AND date_trunc('milliseconds', ${quoteIdent(updatedAtCol)}::timestamptz) = date_trunc('milliseconds', $${values.length}::timestamptz)`;
+    if (dialect.engine === "postgres") {
+      where += ` AND date_trunc('milliseconds', ${dialect.quoteIdent(updatedAtCol)}::timestamptz) = date_trunc('milliseconds', ${dialect.placeholder(values.length)}::timestamptz)`;
+    } else if (dialect.engine === "mysql") {
+      where += ` AND CAST(${dialect.quoteIdent(updatedAtCol)} AS DATETIME(3)) = CAST(${dialect.placeholder(values.length)} AS DATETIME(3))`;
+    }
   }
-  const sql = `UPDATE ${quoteIdent(schema)}.${quoteIdent(tableName)} SET ${sets.join(", ")} WHERE ${where} RETURNING *`;
-  const pool = getPool(conn, "write");
-  const client = await pool.connect();
+  const fqtn = dialect.supportsSchemas
+    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    : dialect.quoteIdent(tableName);
+
+  const returningClause = dialect.supportsReturning ? " RETURNING *" : "";
+  const sql = `UPDATE ${fqtn} SET ${sets.join(", ")} WHERE ${where}${returningClause}`;
+  const client = await getClient(conn, "write");
   try {
-    await client.query("BEGIN");
+    await client.beginTransaction();
     const res = await client.query(sql, values);
-    await client.query("COMMIT");
-    if (res.rows.length === 0) {
+    await client.commit();
+    if (res.rowCount === 0) {
       throw new CrudError(
         expectedUpdatedAt
           ? "Row was modified by someone else since you loaded it (or no longer exists)"
@@ -763,11 +842,16 @@ export async function updateRow(
       connections: [conn.name],
       rowCount: 1,
     });
-    return res.rows[0];
+    if (dialect.supportsReturning) {
+      return res.rows[0];
+    } else {
+      const { row } = await getRow(connection, schema, tableName, pk);
+      return row;
+    }
   } catch (e) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.rollback().catch(() => {});
     if (e instanceof CrudError) throw e;
-    throw friendlyDbError(e);
+    throw friendlyDbError(e, dialect);
   } finally {
     client.release();
   }
@@ -781,15 +865,19 @@ export async function deleteRow(
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
+  const dialect = getDialect(conn.engine);
   const values: unknown[] = [];
-  const where = pkWhere(table, pk, values);
-  const sql = `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(tableName)} WHERE ${where}`;
-  const pool = getPool(conn, "write");
-  const client = await pool.connect();
+  const where = pkWhere(table, pk, values, dialect);
+  const fqtn = dialect.supportsSchemas
+    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    : dialect.quoteIdent(tableName);
+
+  const sql = `DELETE FROM ${fqtn} WHERE ${where}`;
+  const client = await getClient(conn, "write");
   try {
-    await client.query("BEGIN");
+    await client.beginTransaction();
     const res = await client.query(sql, values);
-    await client.query("COMMIT");
+    await client.commit();
     if (res.rowCount === 0) throw new CrudError("Row not found", 404);
     logAudit({
       action: "delete",
@@ -799,9 +887,9 @@ export async function deleteRow(
     });
     return { deleted: res.rowCount };
   } catch (e) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.rollback().catch(() => {});
     if (e instanceof CrudError) throw e;
-    throw friendlyDbError(e);
+    throw friendlyDbError(e, dialect);
   } finally {
     client.release();
   }

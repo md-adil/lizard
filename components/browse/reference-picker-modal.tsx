@@ -5,7 +5,7 @@
 // filterable, sortable, paginated grid. Clicking a row selects it.
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { useTableMeta } from "./useTableMeta";
+import { useTableMeta, useCatalog } from "./useTableMeta";
 import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
@@ -42,6 +42,11 @@ export function ReferencePickerModal({
   const [search, setSearch] = useState("");
   const pageSize = 25;
 
+  const { data: catalog } = useCatalog();
+  const conn = catalog?.connections.find((c) => c.connectionName === target.connection);
+  const isMysql = conn?.engine === "mysql";
+  const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(target.schema)}&`;
+
   const { data, isLoading, isFetching } = useQuery<ListResponse>({
     queryKey: ["refpick", target.connection, target.schema, target.table, page, sort, sortDir, filterSet, search],
     queryFn: async () => {
@@ -57,7 +62,7 @@ export function ReferencePickerModal({
           : {}),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(`/api/data/${target.connection}/${target.schema}/${target.table}?${qs}`);
+      const res = await fetch(`/api/data/${target.connection}/${target.table}?${schemaParam}${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;

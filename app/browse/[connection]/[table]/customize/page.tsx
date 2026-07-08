@@ -40,7 +40,7 @@ export default function CustomizePage() {
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
 
-  const backHref = tableHref(params.connection, schema, params.table);
+  const backHref = tableHref(params.connection, meta?.schema || schema || "public", params.table);
 
   if (isLoading) return <Pad>Loading…</Pad>;
   if (!catalog || !meta)

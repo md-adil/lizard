@@ -7,12 +7,13 @@ import { join } from "node:path";
 
 process.env.LIZARD_METADATA_PATH = join(mkdtempSync(join(tmpdir(), "lizard-test-")), "meta.sqlite");
 
-const { addConnection, addVirtualFk } = await import("@/lib/metadata/store");
+const { initMetadataDb, addConnection, addVirtualFk } = await import("@/lib/metadata/store");
 const { getCatalog } = await import("@/lib/introspect/catalog");
 const { listRows, createRow, updateRow, deleteRow, getRow } = await import("@/lib/data/crud");
 const { runGuardedQuery } = await import("@/lib/execute");
 
 beforeAll(() => {
+  initMetadataDb();
   addConnection({
     name: "users_service",
     engine: "postgres",

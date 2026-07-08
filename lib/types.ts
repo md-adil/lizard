@@ -86,6 +86,7 @@ export interface SchemaCatalog {
 export interface ConnectionCatalog {
   connectionId: string;
   connectionName: string;
+  engine: DbEngine;
   database: string;
   schemas: SchemaCatalog[];
   fetchedAt: string;
@@ -199,7 +200,7 @@ export interface SavedViewConfig {
 // ---------- querying ----------
 
 export type QueryTarget = "single" | "federated";
-export type SqlDialect = "postgres" | "duckdb";
+export type SqlDialect = "postgres" | "mysql" | "duckdb";
 
 export interface QueryRequest {
   target: QueryTarget;

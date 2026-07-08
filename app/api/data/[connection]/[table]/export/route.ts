@@ -3,7 +3,7 @@ import type { FilterCondition, Combinator } from "@/lib/data/filters";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = {
-  params: Promise<{ connection: string; schema: string; table: string }>;
+  params: Promise<{ connection: string; table: string }>;
 };
 
 // RFC-4180-ish field quoting: wrap in quotes and double embedded quotes when
@@ -22,10 +22,11 @@ function csvField(v: unknown): string {
 }
 
 export async function GET(req: Request, { params }: Params) {
-  const { connection, schema, table } = await params;
   try {
+    const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
+    const schema = url.searchParams.get("schema") ?? "";
     const filters: FilterCondition[] = url.searchParams.get("filters")
       ? JSON.parse(url.searchParams.get("filters")!)
       : [];

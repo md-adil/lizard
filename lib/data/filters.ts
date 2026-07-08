@@ -3,6 +3,7 @@
 // operators map to fixed SQL fragments (nothing user-supplied reaches SQL text).
 import type { TableInfo } from "@/lib/types";
 import { isArrayColumn, arrayElementUdt } from "@/lib/introspect/heuristics";
+import type { Dialect } from "@/app/api/database/driver";
 
 export type FilterOp =
   | "eq"
@@ -53,10 +54,6 @@ export function isComplete(c: FilterCondition): boolean {
   return c.value !== undefined && c.value !== "";
 }
 
-function q(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
-}
-
 // sanitized column type for casting text params to the column's type
 function castType(table: TableInfo, column: string): string {
   const col = table.columns.find((c) => c.name === column);
@@ -65,7 +62,7 @@ function castType(table: TableInfo, column: string): string {
 
 /**
  * Build a parameterized WHERE clause (without the WHERE keyword) from a set of
- * conditions. `startIndex` is the number of $-parameters already consumed by the
+ * conditions. `startIndex` is the number of parameters already consumed by the
  * caller so placeholders continue correctly. Unknown columns and incomplete
  * conditions are skipped.
  */
@@ -73,19 +70,20 @@ export function buildFilterClause(
   table: TableInfo,
   conditions: FilterCondition[],
   combinator: Combinator,
+  dialect: Dialect,
   startIndex = 0
 ): { clause: string; values: unknown[] } {
   const parts: string[] = [];
   const values: unknown[] = [];
   const push = (v: unknown) => {
     values.push(v);
-    return `$${startIndex + values.length}`;
+    return dialect.placeholder(startIndex + values.length);
   };
 
   for (const f of conditions) {
     if (!table.columns.some((c) => c.name === f.column)) continue;
     if (!isComplete(f)) continue;
-    const col = q(f.column);
+    const col = dialect.quoteIdent(f.column);
     const cast = castType(table, f.column);
 
     switch (f.op) {
@@ -96,65 +94,78 @@ export function buildFilterClause(
         parts.push(`${col} IS NOT NULL`);
         break;
       case "empty":
-        parts.push(`(${col} IS NULL OR ${col}::text = '')`);
+        parts.push(`(${col} IS NULL OR ${dialect.castToText(col)} = '')`);
         break;
       case "nempty":
-        parts.push(`(${col} IS NOT NULL AND ${col}::text <> '')`);
+        parts.push(`(${col} IS NOT NULL AND ${dialect.castToText(col)} <> '')`);
         break;
       case "contains":
-        parts.push(`${col}::text ILIKE ${push(`%${escapeLike(f.value!)}%`)}`);
+        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}%`)));
         break;
       case "ncontains":
-        parts.push(`(${col} IS NULL OR ${col}::text NOT ILIKE ${push(`%${escapeLike(f.value!)}%`)})`);
+        parts.push(`(${col} IS NULL OR NOT ${dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}%`))})`);
         break;
       case "startswith":
-        parts.push(`${col}::text ILIKE ${push(`${escapeLike(f.value!)}%`)}`);
+        parts.push(dialect.caseInsensitiveLike(col, push(`${escapeLike(f.value!, dialect.likeEscapeChar)}%`)));
         break;
       case "endswith":
-        parts.push(`${col}::text ILIKE ${push(`%${escapeLike(f.value!)}`)}`);
+        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}`)));
         break;
       case "eq":
-        parts.push(`${col}::text = ${push(f.value!)}`);
+        parts.push(`${dialect.castToText(col)} = ${push(f.value!)}`);
         break;
       case "neq":
         // rows where the column is null count as "not equal"
-        parts.push(`(${col} IS NULL OR ${col}::text <> ${push(f.value!)})`);
+        parts.push(`(${col} IS NULL OR ${dialect.castToText(col)} <> ${push(f.value!)})`);
         break;
       case "gt":
       case "gte":
       case "lt":
       case "lte": {
         const sym = { gt: ">", gte: ">=", lt: "<", lte: "<=" }[f.op];
-        parts.push(`${col} ${sym} ${push(f.value!)}::text::${cast}`);
+        const placeholder = push(f.value!);
+        const castExpr = dialect.cast(dialect.castToText(placeholder), cast);
+        parts.push(`${col} ${sym} ${castExpr}`);
         break;
       }
       case "between": {
         const a = push(f.value!);
         const b = push(f.value2!);
-        parts.push(`${col} BETWEEN ${a}::text::${cast} AND ${b}::text::${cast}`);
+        const castA = dialect.cast(dialect.castToText(a), cast);
+        const castB = dialect.cast(dialect.castToText(b), cast);
+        parts.push(`${col} BETWEEN ${castA} AND ${castB}`);
         break;
       }
       case "in": {
         const arr = (f.values ?? []).map(String);
-        parts.push(`${col}::text = ANY(${push(arr)})`);
+        if (dialect.supportsArrays) {
+          parts.push(`${dialect.castToText(col)} = ANY(${push(arr)})`);
+        } else {
+          parts.push(`${dialect.castToText(col)} IN (${arr.map((val) => push(val)).join(", ")})`);
+        }
         break;
       }
       case "regex":
-        parts.push(`${col}::text ~* ${push(f.value!)}`);
+        parts.push(dialect.regexMatch(col, push(f.value!)));
         break;
       case "arraycontains":
       case "arrayoverlap": {
+        if (!dialect.supportsArrays) continue;
         const colInfo = table.columns.find((c) => c.name === f.column)!;
         const elemCast = isArrayColumn(colInfo)
           ? arrayElementUdt(colInfo)
           : "text";
         const arr = (f.values ?? []).map(String);
         const sym = f.op === "arraycontains" ? "@>" : "&&";
-        parts.push(`${col} ${sym} ${push(arr)}::${elemCast}[]`);
+        parts.push(`${col} ${sym} ${dialect.cast(push(arr), `${elemCast}[]`)}`);
         break;
       }
       case "jsonbcontains":
-        parts.push(`${col} @> ${push(f.value!)}::jsonb`);
+        if (dialect.engine === "postgres") {
+          parts.push(`${col} @> ${dialect.cast(push(f.value!), "jsonb")}`);
+        } else if (dialect.engine === "mysql") {
+          parts.push(`JSON_CONTAINS(${col}, ${push(f.value!)})`);
+        }
         break;
     }
   }
@@ -165,6 +176,7 @@ export function buildFilterClause(
 }
 
 // escape LIKE metacharacters in user input for contains/startswith/endswith
-function escapeLike(s: string): string {
-  return s.replace(/[\\%_]/g, (m) => `\\${m}`);
+function escapeLike(s: string, escapeChar: string): string {
+  const re = new RegExp(`[${escapeChar.replace(/\\/g, "\\\\")}%_]`, "g");
+  return s.replace(re, (m) => `${escapeChar}${m}`);
 }

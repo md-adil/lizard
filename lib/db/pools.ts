@@ -55,6 +55,78 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
   return pool;
 }
 
+export interface DbClient {
+  query(sql: string, params?: unknown[]): Promise<{
+    rows: Record<string, any>[];
+    rowCount: number;
+    fields: { name: string; dataTypeID?: number; columnType?: number }[];
+    insertId?: number;
+  }>;
+  release(): void;
+  beginTransaction(): Promise<void>;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+}
+
+export async function getClient(conn: ConnectionConfig, role: Role): Promise<DbClient> {
+  if (conn.engine === "postgres") {
+    const pool = getPool(conn, role);
+    const client = await pool.connect();
+    return {
+      async query(sql, params) {
+        const res = await client.query(sql, params);
+        return {
+          rows: res.rows,
+          rowCount: res.rowCount ?? 0,
+          fields: res.fields.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
+        };
+      },
+      release() {
+        client.release();
+      },
+      async beginTransaction() {
+        await client.query("BEGIN");
+      },
+      async commit() {
+        await client.query("COMMIT");
+      },
+      async rollback() {
+        await client.query("ROLLBACK");
+      },
+    };
+  } else if (conn.engine === "mysql") {
+    const { getMysqlPool } = await import("@/app/api/database/mysql/pool");
+    const pool = getMysqlPool(conn, role);
+    const connection = await pool.getConnection();
+    return {
+      async query(sql, params) {
+        const [results, fields] = await connection.query(sql, params);
+        const isHeader = results && !Array.isArray(results);
+        return {
+          rows: isHeader ? [] : (results as any[]),
+          rowCount: isHeader ? (results as any).affectedRows : (results as any[]).length,
+          fields: (fields || []).map((f) => ({ name: f.name, columnType: f.columnType })),
+          insertId: isHeader ? (results as any).insertId : undefined,
+        };
+      },
+      release() {
+        connection.release();
+      },
+      async beginTransaction() {
+        await connection.beginTransaction();
+      },
+      async commit() {
+        await connection.commit();
+      },
+      async rollback() {
+        await connection.rollback();
+      },
+    };
+  } else {
+    throw new Error(`Engine "${conn.engine}" is not supported yet`);
+  }
+}
+
 export function getPoolByName(connectionName: string, role: Role): { conn: ConnectionConfig; pool: Pool } {
   const conn = getConnection(connectionName);
   if (!conn) throw new Error(`Unknown connection: ${connectionName}`);
@@ -65,6 +137,9 @@ export function connectionUri(conn: ConnectionConfig, role: Role): string {
   const user = role === "read" ? conn.readUser : conn.writeUser;
   const pass = role === "read" ? conn.readPassword : conn.writePassword;
   if (!user) throw new Error(`Connection "${conn.name}" has no ${role} credentials`);
+  if (conn.engine === "mysql") {
+    return `host=${conn.host} port=${conn.port} user=${user} password=${pass ?? ""} db=${conn.database}`;
+  }
   const ssl = conn.ssl ? "?sslmode=require" : "";
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass ?? "")}@${conn.host}:${conn.port}/${encodeURIComponent(conn.database)}${ssl}`;
 }

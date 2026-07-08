@@ -72,7 +72,8 @@ export function ImportCsvDialog({
     setImporting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/import`, {
+      const schemaQs = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+      const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/import${schemaQs}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: mapped }),

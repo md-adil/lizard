@@ -4,7 +4,7 @@ import { bulkInsertRows } from "@/lib/data/crud";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = {
-  params: Promise<{ connection: string; schema: string; table: string }>;
+  params: Promise<{ connection: string; table: string }>;
 };
 
 // Phase 8.7 — CSV import. The client parses the file and maps columns; this
@@ -15,8 +15,10 @@ const bodySchema = z.object({
 
 export async function POST(req: Request, { params }: Params) {
   try {
-    const { connection, schema, table } = await params;
+    const { connection, table } = await params;
     await requireConnectionAccess(connection, "write");
+    const url = new URL(req.url);
+    const schema = url.searchParams.get("schema") ?? "";
     const { rows } = bodySchema.parse(await req.json());
     const result = await bulkInsertRows(connection, schema, table, rows);
     return ok(result);

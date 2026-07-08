@@ -75,7 +75,7 @@ export default function TablePage() {
   const [dateField, setDateField] = useState<string | undefined>();
   // Phase 8.8 — Grafana-style auto-refresh, default off (ms; 0 = off).
   const [refreshMs, setRefreshMs] = useState(0);
-  const [columnVisibility, setColumnVisibility] = useColumnVisibility(meta?.connectionId, schema, params.table);
+  const [columnVisibility, setColumnVisibility] = useColumnVisibility(meta?.connectionId, meta?.schema || schema || "public", params.table);
   const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>([]);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const clearSelection = () => {
@@ -101,7 +101,8 @@ export default function TablePage() {
           : {}),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(`/api/data/${params.connection}/${schema}/${params.table}?${qs}`);
+      const schemaParam = meta!.connectionEngine === "mysql" ? "" : `schema=${encodeURIComponent(meta!.schema)}&`;
+      const res = await fetch(`/api/data/${params.connection}/${params.table}?${schemaParam}${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;
@@ -138,7 +139,7 @@ export default function TablePage() {
     if (meta.table.primaryKey.length === 0) return;
     const pkObj: Record<string, unknown> = {};
     for (const k of meta.table.primaryKey) pkObj[k] = row[k];
-    router.push(recordHref(params.connection, schema, params.table, `pk=${encodeURIComponent(JSON.stringify(pkObj))}`));
+    router.push(recordHref(params.connection, meta.schema, params.table, `pk=${encodeURIComponent(JSON.stringify(pkObj))}`));
   };
 
   // Phase 8.2 — bulk delete needs a real, writable primary key to target rows.
@@ -155,7 +156,8 @@ export default function TablePage() {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
         for (const k of meta.table.primaryKey) pk[k] = row[k];
-        await fetch(`/api/data/${params.connection}/${schema}/${params.table}/row`, {
+        const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+        await fetch(`/api/data/${params.connection}/${params.table}/row${query}`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ pk }),
@@ -180,7 +182,8 @@ export default function TablePage() {
       : {}),
     ...(search ? { search } : {}),
   });
-  const exportHref = `/api/data/${params.connection}/${schema}/${params.table}/export?${exportQs}`;
+  const schemaParam = meta.connectionEngine === "mysql" ? "" : `schema=${encodeURIComponent(meta.schema)}&`;
+  const exportHref = `/api/data/${params.connection}/${params.table}/export?${schemaParam}${exportQs}`;
 
   // saved-views (Phase 8.3): capture / restore the browsing state
   const viewConfig: SavedViewConfig = {
@@ -255,7 +258,7 @@ export default function TablePage() {
         <div className="flex gap-2">
           <SavedViewsBar
             connectionId={meta.connectionId}
-            schema={schema}
+            schema={meta.schema}
             table={params.table}
             currentConfig={viewConfig}
             onApply={applyView}
@@ -271,7 +274,7 @@ export default function TablePage() {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href={customizeHref(params.connection, schema, params.table)} />}
+            render={<Link href={customizeHref(params.connection, meta.schema, params.table)} />}
           >
             ⚙ Customize
           </Button>

@@ -5,16 +5,35 @@
 import type { DbEngine } from "@/lib/types";
 import { EngineNotSupportedError, type Dialect, type Driver } from "@/app/api/database/driver";
 import { postgresDialect } from "@/app/api/database/dialect/postgres";
+import { mysqlDialect } from "@/app/api/database/dialect/mysql";
 
-// Relational SQL-text primitives per engine. MySQL lands in 9B; Mongo never
-// gets a dialect (no SQL).
+// Relational SQL-text primitives per engine.
 const DIALECTS: Partial<Record<DbEngine, Dialect>> = {
   postgres: postgresDialect,
+  mysql: mysqlDialect,
 };
 
-// Full drivers (introspect + I/O) per engine. Postgres wiring moves here during
-// the 9A lib→app/api migration; until then getDriver throws for every engine.
-const DRIVERS: Partial<Record<DbEngine, Driver>> = {};
+// Full drivers (introspect + I/O) per engine.
+const DRIVERS: Partial<Record<DbEngine, Driver>> = {
+  postgres: {
+    engine: "postgres",
+    dialect: postgresDialect,
+    introspect: async (conn) => {
+      const { getConnectionCatalog } = await import("@/lib/introspect/catalog");
+      return getConnectionCatalog(conn, true);
+    },
+    defaultSchema: () => "public",
+  },
+  mysql: {
+    engine: "mysql",
+    dialect: mysqlDialect,
+    introspect: async (conn) => {
+      const { introspectMysql } = await import("@/app/api/database/mysql/introspect");
+      return introspectMysql(conn);
+    },
+    defaultSchema: (conn) => conn.database,
+  },
+};
 
 export function getDialect(engine: DbEngine): Dialect {
   const d = DIALECTS[engine];

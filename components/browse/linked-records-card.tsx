@@ -6,7 +6,7 @@
 // endpoints — no new write path needed.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTableMeta } from "./useTableMeta";
+import { useTableMeta, useCatalog } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
@@ -36,6 +36,11 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     String(selfValue),
   ];
 
+  const { data: catalog } = useCatalog();
+  const conn = catalog?.connections.find((c) => c.connectionName === target.connection);
+  const isMysql = conn?.engine === "mysql";
+  const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(target.junctionSchema)}&`;
+
   const { data } = useQuery<{ rows: Record<string, unknown>[] }>({
     queryKey: key,
     queryFn: async () => {
@@ -47,7 +52,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
         selfValue: String(selfValue),
       });
       const res = await fetch(
-        `/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}/linked?${qs}`,
+        `/api/data/${target.connection}/${target.junctionTable}/linked?${schemaParam}${qs}`,
       );
       if (!res.ok) throw new Error("failed to load linked records");
       return res.json();
@@ -59,7 +64,8 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     if (!junctionMeta) return;
     const pk: Record<string, unknown> = {};
     for (const k of junctionMeta.table.primaryKey) pk[k] = junctionRow[k];
-    await fetch(`/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}/row`, {
+    const query = isMysql ? "" : `?schema=${encodeURIComponent(target.junctionSchema)}`;
+    await fetch(`/api/data/${target.connection}/${target.junctionTable}/row${query}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pk }),
@@ -68,7 +74,8 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
   }
 
   async function link(otherId: string) {
-    await fetch(`/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}`, {
+    const query = isMysql ? "" : `?schema=${encodeURIComponent(target.junctionSchema)}`;
+    await fetch(`/api/data/${target.connection}/${target.junctionTable}${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

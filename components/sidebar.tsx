@@ -36,12 +36,12 @@ interface CatalogTable {
 }
 interface CatalogSchema {
   name: string;
-  tables: CatalogTable[];
 }
 interface CatalogConnection {
   connectionId: string;
   connectionName: string;
   database: string;
+  engine: string;
   schemas: CatalogSchema[];
   error?: string;
 }
@@ -55,6 +55,10 @@ interface TableOverride {
 interface CatalogResponse {
   connections: CatalogConnection[];
   tableOverrides: TableOverride[];
+}
+interface SchemaData {
+  name: string;
+  tables: CatalogTable[];
 }
 
 const NAV = [
@@ -82,6 +86,130 @@ function ThemeToggle() {
     >
       {theme === "light" ? "🌙" : "☀️"}
     </Button>
+  );
+}
+
+function useSchemaData(connection: string, schemaName: string) {
+  return useQuery<SchemaData>({
+    queryKey: ["schema-tables", connection, schemaName],
+    queryFn: async () => {
+      const res = await fetch(`/api/catalog/${encodeURIComponent(connection)}/${encodeURIComponent(schemaName)}`);
+      if (!res.ok) throw new Error("failed to load schema");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+}
+
+function SchemaSection({
+  connectionName,
+  schemaName,
+  overrideFor,
+  tableQ,
+  showHidden,
+  onToggleHidden,
+  showDivider,
+  loaded,
+  activeSchema,
+  pathname,
+}: {
+  connectionName: string;
+  schemaName: string;
+  overrideFor: (schema: string, table: string) => TableOverride | undefined;
+  tableQ: string;
+  showHidden: boolean;
+  onToggleHidden: (v: boolean) => void;
+  showDivider: boolean;
+  loaded: string[];
+  activeSchema: string | null;
+  pathname: string;
+}) {
+  const { data: schemaData, isLoading } = useSchemaData(connectionName, schemaName);
+
+  if (isLoading) {
+    return showDivider ? (
+      <div className="px-2.5 py-1 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
+        {schemaName} — loading…
+      </div>
+    ) : null;
+  }
+  if (!schemaData) return null;
+
+  const allTables = schemaData.tables.map((t) => {
+    const o = overrideFor(schemaName, t.name);
+    return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false };
+  });
+  const visibleTables = allTables
+    .filter((t) => !t.hidden)
+    .filter((t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ));
+  const hiddenTables = allTables
+    .filter((t) => t.hidden)
+    .filter((t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ));
+  if (visibleTables.length === 0 && hiddenTables.length === 0) return null;
+
+  return (
+    <div className="mb-1">
+      {showDivider && <SidebarGroupLabel className="mt-2">{schemaName}</SidebarGroupLabel>}
+      <SidebarMenu>
+        {visibleTables.map((t) => {
+          const path = `/browse/${connectionName}/${encodeURIComponent(t.name)}`;
+          const href = tableHref(connectionName, schemaName, t.name);
+          const active = pathname === path || pathname.startsWith(path + "/");
+          return (
+            <SidebarMenuItem key={t.name}>
+              <SidebarMenuButton
+                isActive={active}
+                render={<Link href={href} title={t.label !== t.name ? t.name : undefined} />}
+              >
+                {t.label}
+              </SidebarMenuButton>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<SidebarMenuAction showOnHover />}>
+                  <MoreHorizontal />
+                  <span className="sr-only">{t.label} actions</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right">
+                  <DropdownMenuItem render={<Link href={customizeHref(connectionName, schemaName, t.name)} />}>
+                    ⚙ Customize
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          );
+        })}
+      </SidebarMenu>
+      {hiddenTables.length > 0 && !showHidden && (
+        <Button
+          variant="ghost"
+          className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
+          style={{ color: "var(--muted-foreground-faint)" }}
+          onClick={() => onToggleHidden(true)}
+        >
+          <span>⊘</span>
+          <span>{hiddenTables.length} hidden</span>
+        </Button>
+      )}
+      {showHidden &&
+        hiddenTables.map((t) => {
+          const path = `/browse/${connectionName}/${encodeURIComponent(t.name)}`;
+          const href = tableHref(connectionName, schemaName, t.name);
+          const active = pathname === path || pathname.startsWith(path + "/");
+          return (
+            <Link
+              key={t.name}
+              href={href}
+              title={`${t.label !== t.name ? t.name + " · " : ""}hidden — open to customize`}
+              className="block rounded px-2.5 py-1 text-[14px] truncate line-through"
+              style={{
+                color: "var(--muted-foreground-faint)",
+                background: active ? "var(--sidebar-accent)" : undefined,
+              }}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+    </div>
   );
 }
 
@@ -230,7 +358,7 @@ export function Sidebar() {
         </SidebarGroup>
 
         {/* schema selector */}
-        {conn && !conn.error && (
+        {conn && !conn.error && conn.engine === "postgres" && (
           <SidebarGroup>
             <div className="flex items-center justify-between mb-1">
               <SidebarGroupLabel>Schemas</SidebarGroupLabel>
@@ -340,94 +468,21 @@ export function Sidebar() {
             loaded
               .filter((s) => !activeSchema || s === activeSchema)
               .map((schemaName) => {
-                const schema = conn.schemas.find((s) => s.name === schemaName);
-                if (!schema) return null;
-                const allTables = schema.tables.map((t) => {
-                  const o = overrideFor(schemaName, t.name);
-                  return {
-                    name: t.name,
-                    label: o?.label || t.name,
-                    hidden: o?.hidden ?? false,
-                  };
-                });
-                const visibleTables = allTables
-                  .filter((t) => !t.hidden)
-                  .filter(
-                    (t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ),
-                  );
-                const hiddenTables = allTables
-                  .filter((t) => t.hidden)
-                  .filter(
-                    (t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ),
-                  );
-                if (visibleTables.length === 0 && hiddenTables.length === 0) return null;
                 const showDivider = loaded.length > 1 && !activeSchema;
                 return (
-                  <div key={schemaName} className="mb-1">
-                    {showDivider && <SidebarGroupLabel className="mt-2">{schemaName}</SidebarGroupLabel>}
-                    <SidebarMenu>
-                      {visibleTables.map((t) => {
-                        const path = `/browse/${conn.connectionName}/${encodeURIComponent(t.name)}`;
-                        const href = tableHref(conn.connectionName, schemaName, t.name);
-                        const active = pathname === path || pathname.startsWith(path + "/");
-                        return (
-                          <SidebarMenuItem key={t.name}>
-                            <SidebarMenuButton
-                              isActive={active}
-                              render={<Link href={href} title={t.label !== t.name ? t.name : undefined} />}
-                            >
-                              {t.label}
-                            </SidebarMenuButton>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger render={<SidebarMenuAction showOnHover />}>
-                                <MoreHorizontal />
-                                <span className="sr-only">{t.label} actions</span>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" side="right">
-                                <DropdownMenuItem
-                                  render={<Link href={customizeHref(conn.connectionName, schemaName, t.name)} />}
-                                >
-                                  ⚙ Customize
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </SidebarMenuItem>
-                        );
-                      })}
-                    </SidebarMenu>
-                    {hiddenTables.length > 0 && !showHidden && (
-                      <Button
-                        variant="ghost"
-                        className="flex items-center gap-1 px-2.5 py-1 text-[12px] w-full text-left rounded hoverable"
-                        style={{ color: "var(--muted-foreground-faint)" }}
-                        onClick={() => setShowHidden(true)}
-                      >
-                        <span>⊘</span>
-                        <span>{hiddenTables.length} hidden</span>
-                      </Button>
-                    )}
-                    {showHidden &&
-                      hiddenTables.map((t) => {
-                        const path = `/browse/${conn.connectionName}/${encodeURIComponent(t.name)}`;
-                        const href = tableHref(conn.connectionName, schemaName, t.name);
-                        const active = pathname === path || pathname.startsWith(path + "/");
-                        return (
-                          <Link
-                            key={t.name}
-                            href={href}
-                            title={`${t.label !== t.name ? t.name + " · " : ""}hidden — open to customize`}
-                            className="block rounded px-2.5 py-1 text-[14px] truncate line-through"
-                            style={{
-                              background: active ? "var(--primary-soft)" : "transparent",
-                              color: "var(--muted-foreground-faint)",
-                              opacity: 0.6,
-                            }}
-                          >
-                            {t.label}
-                          </Link>
-                        );
-                      })}
-                  </div>
+                  <SchemaSection
+                    key={schemaName}
+                    connectionName={conn.connectionName}
+                    schemaName={schemaName}
+                    overrideFor={overrideFor}
+                    tableQ={tableQ}
+                    showHidden={showHidden}
+                    onToggleHidden={setShowHidden}
+                    showDivider={showDivider}
+                    loaded={loaded}
+                    activeSchema={activeSchema}
+                    pathname={pathname}
+                  />
                 );
               })}
           {showHidden && conn && !conn.error && (

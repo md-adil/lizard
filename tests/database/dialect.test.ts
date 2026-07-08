@@ -42,10 +42,62 @@ describe("postgres dialect", () => {
   });
 });
 
+describe("mysql dialect", () => {
+  const mysql = getDialect("mysql");
+
+  it("quotes identifiers and escapes embedded backticks", () => {
+    expect(mysql.quoteIdent("users")).toBe("`users`");
+    expect(mysql.quoteIdent("we`ird")).toBe("`we``ird`");
+  });
+
+  it("uses ? positional placeholders", () => {
+    expect(mysql.placeholder(1)).toBe("?");
+    expect(mysql.placeholder(7)).toBe("?");
+  });
+
+  it("casts and builds case-insensitive predicates the MySQL way", () => {
+    expect(mysql.castToText("`c`")).toBe("CAST(`c` AS CHAR)");
+    expect(mysql.cast("`c`", "int4")).toBe("CAST(`c` AS SIGNED)");
+    expect(mysql.caseInsensitiveLike("`c`", "?")).toBe("LOWER(CAST(`c` AS CHAR)) LIKE LOWER(?)");
+    expect(mysql.regexMatch("`c`", "?")).toBe("CAST(`c` AS CHAR) REGEXP ?");
+  });
+
+  it("declares its capabilities", () => {
+    expect(mysql.supportsReturning).toBe(false);
+    expect(mysql.supportsArrays).toBe(false);
+    expect(mysql.supportsSchemas).toBe(false);
+    expect(mysql.beginReadOnly()).toEqual([
+      "START TRANSACTION READ ONLY",
+    ]);
+  });
+
+  it("maps known MySQL error codes to friendly errors, null otherwise", () => {
+    expect(mysql.mapError({ errno: 1062, message: "Duplicate entry '1' for key 'primary'" })).toEqual({
+      status: 409,
+      message: "Duplicate value violates unique constraint: Duplicate entry '1' for key 'primary'",
+    });
+    expect(mysql.mapError({ code: "ER_NO_REFERENCED_ROW_2", message: "Cannot add or update a child row" })).toEqual({
+      status: 409,
+      message: "Referenced row does not exist: Cannot add or update a child row",
+    });
+    expect(mysql.mapError({ errno: 1048, message: "Column 'email' cannot be null" })).toEqual({
+      status: 400,
+      message: "Value is required and cannot be empty: Column 'email' cannot be null",
+    });
+    expect(mysql.mapError({ errno: 9999 })).toBeNull();
+  });
+});
+
 describe("engine registry", () => {
+  it("resolves dialect and driver for postgres and mysql", () => {
+    expect(getDialect("postgres")).toBeDefined();
+    expect(getDialect("mysql")).toBeDefined();
+    expect(getDriver("postgres")).toBeDefined();
+    expect(getDriver("mysql")).toBeDefined();
+  });
+
   it("throws EngineNotSupportedError for engines without a dialect/driver yet", () => {
-    expect(() => getDialect("mysql")).toThrow(EngineNotSupportedError);
-    expect(() => getDialect("mongo")).toThrow(EngineNotSupportedError);
-    expect(() => getDriver("postgres")).toThrow(EngineNotSupportedError);
+    expect(() => getDialect("mongo" as any)).toThrow(EngineNotSupportedError);
+    expect(() => getDriver("mongo" as any)).toThrow(EngineNotSupportedError);
   });
 });
