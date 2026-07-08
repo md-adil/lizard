@@ -5,11 +5,13 @@ import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = {
   params: Promise<{ connection: string; schema: string; table: string }>;
+  searchParams: Promise<{schema: string}>
 };
 
-export async function GET(req: Request, { params }: Params) {
+export async function GET(req: Request, { params, searchParams }: Params) {
   try {
-    const { connection, schema, table } = await params;
+    const {schema} = await searchParams;
+    const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
     const filters: FilterCondition[] = url.searchParams.get("filters")

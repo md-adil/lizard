@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ConnectionConfig,
   ConnectionInput,
+  DbEngine,
   VirtualFk,
   TableOverride,
   ColumnOverride,
@@ -53,6 +54,7 @@ function rowToConnection(r: Record<string, unknown>): ConnectionConfig {
   return {
     id: r.id as string,
     name: r.name as string,
+    engine: r.engine as DbEngine,
     host: r.host as string,
     port: r.port as number,
     database: r.database as string,
@@ -80,12 +82,13 @@ export function addConnection(input: ConnectionInput): ConnectionConfig {
   const id = randomUUID();
   getDb()
     .prepare(
-      `INSERT INTO connections (id, name, host, port, database, read_user, read_password, write_user, write_password, ssl, allowed_schemas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO connections (id, name, engine, host, port, database, read_user, read_password, write_user, write_password, ssl, allowed_schemas)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
       input.name,
+      input.engine,
       input.host,
       input.port,
       input.database,
@@ -102,13 +105,20 @@ export function addConnection(input: ConnectionInput): ConnectionConfig {
 export function updateConnection(id: string, input: Partial<ConnectionInput>): ConnectionConfig | null {
   const existing = getConnection(id);
   if (!existing) return null;
-  const merged = { ...existing, ...input };
+  // A partial update overrides only the keys actually provided. Dropping
+  // undefined keys before merging is essential: spreading `{ ...existing,
+  // ...input }` with an explicit `undefined` (e.g. writePassword left unchanged)
+  // would otherwise blow away the stored value — and node:sqlite cannot bind
+  // `undefined`, so the UPDATE would throw "cannot be bound to parameter".
+  const provided = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+  const merged = { ...existing, ...provided };
   getDb()
     .prepare(
-      `UPDATE connections SET name=?, host=?, port=?, database=?, read_user=?, read_password=?, write_user=?, write_password=?, ssl=?, allowed_schemas=? WHERE id=?`,
+      `UPDATE connections SET name=?, engine=?, host=?, port=?, database=?, read_user=?, read_password=?, write_user=?, write_password=?, ssl=?, allowed_schemas=? WHERE id=?`,
     )
     .run(
       merged.name,
+      merged.engine,
       merged.host,
       merged.port,
       merged.database,

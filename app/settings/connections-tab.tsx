@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ConnectionForm, type ConnectionRow } from "@/app/connection-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 
 interface ConnectionWithStatus extends ConnectionRow {
   status: { read: string | null; write: string | null };
@@ -45,8 +46,9 @@ export function ConnectionsTab() {
         </Button>
       </div>
       <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
-        Register each microservice&apos;s Postgres database. Paste a connection URI or fill the fields, test it, then
-        Lizard introspects every schema and makes the whole fleet browsable, editable, and queryable.
+        Register each microservice&apos;s database (Postgres, MySQL, or MongoDB). Paste a connection URI or fill the
+        fields, test it, then Lizard introspects every schema and makes the whole fleet browsable, editable, and
+        queryable.
       </p>
 
       {isLoading && <p style={{ color: "var(--muted-foreground)" }}>Loading…</p>}
@@ -56,7 +58,10 @@ export function ConnectionsTab() {
           <Card key={c.id} className="px-5 py-4 flex items-center justify-between">
             <Link href={`/browse/${c.name}`} className="flex-1 min-w-0 mr-4">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-[14px]">{c.name}</span>
+                <EngineIcon engine={c.engine} className="size-4 shrink-0" />
+                <span className="font-semibold text-[14px]" title={ENGINE_LABELS[c.engine]}>
+                  {c.name}
+                </span>
                 {c.status.read === null ? (
                   <span className="tag" style={{ color: "var(--success)" }}>
                     read ok

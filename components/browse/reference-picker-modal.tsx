@@ -10,6 +10,7 @@ import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ListResponse {
   rows: Record<string, unknown>[];
@@ -90,22 +91,16 @@ export function ReferencePickerModal({
   const visibleCols = meta?.columns.filter((c) => !c.hidden) ?? [];
 
   return (
-    <>
-      <div className="fixed inset-0 z-60" style={{ background: "var(--overlay)" }} onClick={onClose} />
-      <div
-        className="fixed z-70 inset-x-0 top-[5vh] mx-auto w-260 max-w-[95vw] panel p-5 max-h-[88vh] flex flex-col"
-        style={{ background: "var(--card)" }}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-[15px] font-semibold">Pick {title}</h3>
-          <span className="tag code">
-            {target.connection} · {target.schema}.{target.table}
-          </span>
-          <span className="flex-1" />
-          <Button variant="outline" size="sm" onClick={onClose}>
-            ✕
-          </Button>
-        </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent showCloseButton className="w-260 max-w-[95vw] sm:max-w-[95vw] max-h-[88vh] flex flex-col p-5">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 pr-8">
+            Pick {title}
+            <span className="tag code">
+              {target.connection} · {target.schema}.{target.table}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
 
         <div className="mb-3">
           <TableSearchBar
@@ -176,8 +171,8 @@ export function ReferencePickerModal({
           <span className="flex-1" />
           <span style={{ color: "var(--muted-foreground-faint)" }}>Click a row to select it</span>
         </div>
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }
 

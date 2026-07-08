@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { deleteConnection, getConnection, updateConnection } from "@/lib/metadata/store";
-import { connectionSchema, redact } from "@/lib/connections-shared";
+import { connectionBaseSchema, redact } from "@/lib/connections-shared";
 import { invalidateCatalog } from "@/lib/introspect/catalog";
 import { testConnection } from "@/lib/db/pools";
 import { requireAdmin } from "@/lib/auth/session";
@@ -14,7 +14,7 @@ export async function PATCH(req: Request, { params }: Params) {
     const { id } = await params;
     const existing = getConnection(id);
     if (!existing) return fail(new Error("Connection not found"));
-    const body = connectionSchema.partial().parse(await req.json());
+    const body = connectionBaseSchema.partial().parse(await req.json());
     const updated = updateConnection(id, {
       ...body,
       writeUser: body.writeUser === undefined ? undefined : body.writeUser || null,

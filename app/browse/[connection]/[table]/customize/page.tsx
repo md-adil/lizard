@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
+import { useSchemaParam, tableHref } from "@/components/browse/use-schema-param";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -26,11 +27,11 @@ import {
 export default function CustomizePage() {
   const params = useParams<{
     connection: string;
-    schema: string;
     table: string;
   }>();
   const qc = useQueryClient();
-  const { meta, catalog, isLoading } = useTableMeta(params.connection, params.schema, params.table);
+  const schema = useSchemaParam();
+  const { meta, catalog, isLoading } = useTableMeta(params.connection, schema, params.table);
 
   // page-level source scope — governs both the overrides and the
   // relationship editor's source side. `null` means "not yet touched by the
@@ -39,13 +40,13 @@ export default function CustomizePage() {
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
 
-  const backHref = `/browse/${params.connection}/${params.schema}/${params.table}`;
+  const backHref = tableHref(params.connection, schema, params.table);
 
   if (isLoading) return <Pad>Loading…</Pad>;
   if (!catalog || !meta)
     return (
       <Pad>
-        Table {params.schema}.{params.table} not found on “{params.connection}”.{" "}
+        Table {schema}.{params.table} not found on “{params.connection}”.{" "}
         <Link href={backHref} className="underline">
           Back
         </Link>
@@ -93,13 +94,7 @@ export default function CustomizePage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
-              {params.schema}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${meta.table.name}`} />}>
+            <BreadcrumbLink render={<Link href={tableHref(params.connection, meta.schema, meta.table.name)} />}>
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>

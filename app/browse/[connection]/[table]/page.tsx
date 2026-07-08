@@ -29,6 +29,7 @@ import {
 import { GalleryView, KanbanView, CalendarView, TreeView } from "@/components/browse/table-views";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
+import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
 import type { SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
@@ -49,15 +50,16 @@ const EMPTY_FK_LABELS: Record<string, Record<string, string>> = {};
 export default function TablePage() {
   const params = useParams<{
     connection: string;
-    schema: string;
     table: string;
   }>();
   const router = useRouter();
+  // schema is a query param now (?schema=), defaulting to "public".
+  const schema = useSchemaParam();
   const {
     meta,
     isLoading: catalogLoading,
     error: catalogError,
-  } = useTableMeta(params.connection, params.schema, params.table);
+  } = useTableMeta(params.connection, schema, params.table);
 
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
@@ -73,7 +75,7 @@ export default function TablePage() {
   const [dateField, setDateField] = useState<string | undefined>();
   // Phase 8.8 — Grafana-style auto-refresh, default off (ms; 0 = off).
   const [refreshMs, setRefreshMs] = useState(0);
-  const [columnVisibility, setColumnVisibility] = useColumnVisibility(meta?.connectionId, params.schema, params.table);
+  const [columnVisibility, setColumnVisibility] = useColumnVisibility(meta?.connectionId, schema, params.table);
   const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>([]);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const clearSelection = () => {
@@ -85,7 +87,7 @@ export default function TablePage() {
 
   const pageSize = 50;
   const { data, isLoading, isFetching, error, refetch } = useQuery<ListResponse>({
-    queryKey: ["rows", params.connection, params.schema, params.table, page, sort, sortDir, filterSet, search],
+    queryKey: ["rows", params.connection, schema, params.table, page, sort, sortDir, filterSet, search],
     queryFn: async () => {
       const qs = new URLSearchParams({
         page: String(page),
@@ -99,7 +101,7 @@ export default function TablePage() {
           : {}),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}?${qs}`);
+      const res = await fetch(`/api/data/${params.connection}/${schema}/${params.table}?${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;
@@ -118,7 +120,7 @@ export default function TablePage() {
   if (!meta)
     return (
       <PagePad>
-        Table {params.schema}.{params.table} not found on “{params.connection}”.
+        Table {schema}.{params.table} not found on “{params.connection}”.
       </PagePad>
     );
 
@@ -136,9 +138,7 @@ export default function TablePage() {
     if (meta.table.primaryKey.length === 0) return;
     const pkObj: Record<string, unknown> = {};
     for (const k of meta.table.primaryKey) pkObj[k] = row[k];
-    router.push(
-      `/browse/${params.connection}/${params.schema}/${params.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`,
-    );
+    router.push(recordHref(params.connection, schema, params.table, `pk=${encodeURIComponent(JSON.stringify(pkObj))}`));
   };
 
   // Phase 8.2 — bulk delete needs a real, writable primary key to target rows.
@@ -155,7 +155,7 @@ export default function TablePage() {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
         for (const k of meta.table.primaryKey) pk[k] = row[k];
-        await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}/row`, {
+        await fetch(`/api/data/${params.connection}/${schema}/${params.table}/row`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ pk }),
@@ -180,7 +180,7 @@ export default function TablePage() {
       : {}),
     ...(search ? { search } : {}),
   });
-  const exportHref = `/api/data/${params.connection}/${params.schema}/${params.table}/export?${exportQs}`;
+  const exportHref = `/api/data/${params.connection}/${schema}/${params.table}/export?${exportQs}`;
 
   // saved-views (Phase 8.3): capture / restore the browsing state
   const viewConfig: SavedViewConfig = {
@@ -232,12 +232,6 @@ export default function TablePage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
-              {params.schema}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
             <BreadcrumbPage>{meta.label}</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
@@ -261,7 +255,7 @@ export default function TablePage() {
         <div className="flex gap-2">
           <SavedViewsBar
             connectionId={meta.connectionId}
-            schema={params.schema}
+            schema={schema}
             table={params.table}
             currentConfig={viewConfig}
             onApply={applyView}
@@ -277,7 +271,7 @@ export default function TablePage() {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}/customize`} />}
+            render={<Link href={customizeHref(params.connection, schema, params.table)} />}
           >
             ⚙ Customize
           </Button>

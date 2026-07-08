@@ -51,6 +51,16 @@ export function invalidateCatalog(connectionId?: string): void {
 }
 
 async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
+  // Engine dispatch. MySQL/Mongo introspectors are lazy-imported so their
+  // drivers stay out of the module graph for Postgres-only deployments.
+  if (conn.engine === "mysql") {
+    const { introspectMysql } = await import("@/app/api/database/mysql/introspect");
+    return introspectMysql(conn);
+  }
+  if (conn.engine === "mongo") {
+    throw new Error("MongoDB introspection isn't available yet");
+  }
+
   const pool = getPool(conn, "read");
 
   const schemasRes = await pool.query<{ nspname: string }>(

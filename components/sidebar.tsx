@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
+import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import {
@@ -366,8 +367,9 @@ export function Sidebar() {
                     {showDivider && <SidebarGroupLabel className="mt-2">{schemaName}</SidebarGroupLabel>}
                     <SidebarMenu>
                       {visibleTables.map((t) => {
-                        const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
-                        const active = pathname === href || pathname.startsWith(href + "/");
+                        const path = `/browse/${conn.connectionName}/${encodeURIComponent(t.name)}`;
+                        const href = tableHref(conn.connectionName, schemaName, t.name);
+                        const active = pathname === path || pathname.startsWith(path + "/");
                         return (
                           <SidebarMenuItem key={t.name}>
                             <SidebarMenuButton
@@ -382,7 +384,9 @@ export function Sidebar() {
                                 <span className="sr-only">{t.label} actions</span>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" side="right">
-                                <DropdownMenuItem render={<Link href={`${href}/customize`} />}>
+                                <DropdownMenuItem
+                                  render={<Link href={customizeHref(conn.connectionName, schemaName, t.name)} />}
+                                >
                                   ⚙ Customize
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -404,8 +408,9 @@ export function Sidebar() {
                     )}
                     {showHidden &&
                       hiddenTables.map((t) => {
-                        const href = `/browse/${conn.connectionName}/${schemaName}/${t.name}`;
-                        const active = pathname === href || pathname.startsWith(href + "/");
+                        const path = `/browse/${conn.connectionName}/${encodeURIComponent(t.name)}`;
+                        const href = tableHref(conn.connectionName, schemaName, t.name);
+                        const active = pathname === path || pathname.startsWith(path + "/");
                         return (
                           <Link
                             key={t.name}

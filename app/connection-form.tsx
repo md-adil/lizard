@@ -1,16 +1,21 @@
 "use client";
 
-// Create/edit a connection. Supports pasting a full postgres:// URI (parsed
-// via new URL()), and a "Test connection" probe that runs before saving.
+// Create/edit a connection. Supports pasting a full connection URI
+// (postgres://, mysql://, mongodb://), and a "Test connection" probe that runs
+// before saving.
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { parsePostgresUri } from "@/lib/parse-uri";
+import { parseConnectionUri } from "@/lib/parse-uri";
+import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 
 export interface ConnectionRow {
   id: string;
   name: string;
+  engine: DbEngine;
   host: string;
   port: number;
   database: string;
@@ -21,6 +26,7 @@ export interface ConnectionRow {
 }
 
 interface FormState {
+  engine: DbEngine;
   name: string;
   host: string;
   port: string;
@@ -33,15 +39,23 @@ interface FormState {
 }
 
 const BLANK: FormState = {
+  engine: "postgres",
   name: "",
   host: "localhost",
-  port: "5432",
+  port: String(DEFAULT_PORTS.postgres),
   database: "",
   readUser: "",
   readPassword: "",
   writeUser: "",
   writePassword: "",
   ssl: false,
+};
+
+// URI placeholder per engine, so the field shows a relevant example.
+const URI_PLACEHOLDER: Record<DbEngine, string> = {
+  postgres: "postgres://user:password@host:5432/database?sslmode=require",
+  mysql: "mysql://user:password@host:3306/database",
+  mongo: "mongodb://user:password@host:27017/database",
 };
 
 export function ConnectionForm({
@@ -57,6 +71,7 @@ export function ConnectionForm({
   const [form, setForm] = useState<FormState>(
     initial
       ? {
+          engine: initial.engine,
           name: initial.name,
           host: initial.host,
           port: String(initial.port),
@@ -83,6 +98,17 @@ export function ConnectionForm({
       [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value,
     }));
 
+  // Switching engine swaps the port to the new engine's default when the
+  // current port is still a (any engine's) default — so a hand-typed port is
+  // never clobbered, but the common case just works.
+  const setEngine = (engine: DbEngine) => {
+    setTestResult(null);
+    setForm((f) => {
+      const portIsDefault = Object.values(DEFAULT_PORTS).some((p) => String(p) === f.port) || f.port === "";
+      return { ...f, engine, port: portIsDefault ? String(DEFAULT_PORTS[engine]) : f.port };
+    });
+  };
+
   const applyUri = (raw: string) => {
     setUri(raw);
     setTestResult(null);
@@ -90,14 +116,17 @@ export function ConnectionForm({
       setUriMsg(null);
       return;
     }
-    const p = parsePostgresUri(raw);
+    const p = parseConnectionUri(raw);
     if (!p) {
-      setUriMsg("Not a valid postgres:// URI");
+      setUriMsg("Not a valid postgres:// , mysql:// or mongodb:// URI");
       return;
     }
-    setUriMsg("Parsed ✓ — read & write credentials filled (adjust write role if it differs)");
+    setUriMsg(
+      `Parsed ✓ ${ENGINE_LABELS[p.engine]} — read & write credentials filled (adjust write role if it differs)`,
+    );
     setForm((f) => ({
       ...f,
+      engine: p.engine,
       name: f.name || p.name,
       host: p.host,
       port: String(p.port),
@@ -116,6 +145,7 @@ export function ConnectionForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          engine: form.engine,
           host: form.host,
           port: Number(form.port),
           database: form.database,
@@ -140,6 +170,7 @@ export function ConnectionForm({
   const saveMutation = useMutation({
     mutationFn: async () => {
       const base = {
+        engine: form.engine,
         name: form.name,
         host: form.host,
         port: Number(form.port),
@@ -197,23 +228,23 @@ export function ConnectionForm({
     );
 
   return (
-    <>
-      <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={onClose} />
-      <Card className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-[640px] max-w-[94vw] p-6 max-h-[90vh] overflow-y-auto scrollbar-thin">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[16px] font-semibold">
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        showCloseButton
+        className="w-160 max-w-[94vw] sm:max-w-160 max-h-[90vh] overflow-y-auto scrollbar-thin"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <EngineIcon engine={form.engine} className="size-4" />
             {mode === "create" ? "Add connection" : `Edit “${initial?.name}”`}
-          </h2>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            ✕
-          </Button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="mb-4">
+        <div>
           <label className="label">Paste a connection URI (optional)</label>
           <input
             className="input code"
-            placeholder="postgres://user:password@host:5432/database?sslmode=require"
+            placeholder={URI_PLACEHOLDER[form.engine]}
             value={uri}
             onChange={(e) => applyUri(e.target.value)}
           />
@@ -230,6 +261,22 @@ export function ConnectionForm({
         </div>
 
         <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Engine</label>
+            <Select value={form.engine} onValueChange={(v) => setEngine(v as DbEngine)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DB_ENGINES.map((e) => (
+                  <SelectItem key={e} value={e}>
+                    <EngineIcon engine={e} className="size-3.5" />
+                    {ENGINE_LABELS[e]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <label className="label">Name (identifier, e.g. users_service)</label>
             <input className="input" value={form.name} onChange={set("name")} placeholder="users_service" />
@@ -276,12 +323,12 @@ export function ConnectionForm({
           </div>
         </div>
 
-        <label className="flex items-center gap-2 mt-4 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+        <label className="flex items-center gap-2 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
         </label>
 
         {testResult && (
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2">
             {statusPill("read", testResult.read)}
             {form.writeUser && statusPill("write", testResult.write)}
             {testResult.read && (
@@ -292,12 +339,12 @@ export function ConnectionForm({
           </div>
         )}
         {error && (
-          <p className="mt-3 text-[13px]" style={{ color: "var(--destructive)" }}>
+          <p className="text-[13px]" style={{ color: "var(--destructive)" }}>
             {error}
           </p>
         )}
 
-        <div className="mt-5 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             disabled={testMutation.isPending || !form.host || !form.database || !form.readUser}
@@ -313,7 +360,7 @@ export function ConnectionForm({
             {saveMutation.isPending ? "Saving…" : mode === "create" ? "Save connection" : "Save changes"}
           </Button>
         </div>
-      </Card>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -18,6 +18,7 @@ import { RecordComments } from "@/components/browse/record-comments";
 import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
+import { useSchemaParam, tableHref, recordHref as toRecord } from "@/components/browse/use-schema-param";
 import { humanize } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
@@ -372,7 +373,7 @@ function BelongsToCard({
     enabled: value != null && !!targetMeta,
   });
 
-  const recordHref = `/browse/${target.connection}/${target.schema}/${target.table}/record?pk=${pkParam}${keyTransformsParam}`;
+  const recordHref = toRecord(target.connection, target.schema, target.table, `pk=${pkParam}${keyTransformsParam}`);
   return (
     <RelatedCard
       title={title}
@@ -384,7 +385,7 @@ function BelongsToCard({
         { label: "Open record →", href: recordHref },
         {
           label: "Open table",
-          href: `/browse/${target.connection}/${target.schema}/${target.table}`,
+          href: tableHref(target.connection, target.schema, target.table),
         },
       ]}
     >
@@ -454,7 +455,7 @@ function HasManyCard({
       menu={[
         {
           label: "Open table",
-          href: `/browse/${source.connection}/${source.schema}/${source.table}`,
+          href: tableHref(source.connection, source.schema, source.table),
         },
       ]}
     >
@@ -493,7 +494,12 @@ function HasManyCard({
               if (meta.isView) return;
               const pkObj: Record<string, unknown> = {};
               for (const k of meta.table.primaryKey) pkObj[k] = row[k];
-              window.location.href = `/browse/${source.connection}/${source.schema}/${source.table}/record?pk=${encodeURIComponent(JSON.stringify(pkObj))}`;
+              window.location.href = toRecord(
+                source.connection,
+                source.schema,
+                source.table,
+                `pk=${encodeURIComponent(JSON.stringify(pkObj))}`,
+              );
             }}
             maxHeight="calc(100vh - 400px)"
           />
@@ -512,13 +518,13 @@ function HasManyCard({
 function RecordView() {
   const params = useParams<{
     connection: string;
-    schema: string;
     table: string;
   }>();
   const search = useSearchParams();
   const router = useRouter();
   const qc = useQueryClient();
-  const { meta, catalog } = useTableMeta(params.connection, params.schema, params.table);
+  const schema = useSchemaParam();
+  const { meta, catalog } = useTableMeta(params.connection, schema, params.table);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
@@ -548,7 +554,7 @@ function RecordView() {
     queryKey: [
       "record",
       params.connection,
-      params.schema,
+      schema,
       params.table,
       JSON.stringify(pk),
       JSON.stringify(keyTransforms ?? {}),
@@ -556,7 +562,7 @@ function RecordView() {
     queryFn: async () => {
       const qs = new URLSearchParams({ pk: JSON.stringify(pk) });
       if (keyTransforms) qs.set("keyTransforms", JSON.stringify(keyTransforms));
-      const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}/row?${qs}`);
+      const res = await fetch(`/api/data/${params.connection}/${schema}/${params.table}/row?${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
       return body;
@@ -610,10 +616,10 @@ function RecordView() {
         for (const t of s.tables) {
           for (const fk of t.foreignKeys) {
             if (
-              fk.referencedSchema === params.schema &&
+              fk.referencedSchema === schema &&
               fk.referencedTable === params.table &&
               fk.columns.length === 1 &&
-              !(t.name === params.table && s.name === params.schema)
+              !(t.name === params.table && s.name === schema)
             ) {
               hasMany.push({
                 connection: conn.connectionName,
@@ -627,7 +633,7 @@ function RecordView() {
                 (f) =>
                   f !== fk &&
                   f.columns.length === 1 &&
-                  !(f.referencedSchema === params.schema && f.referencedTable === params.table),
+                  !(f.referencedSchema === schema && f.referencedTable === params.table),
               );
               if (otherFk) {
                 manyToMany.push({
@@ -649,9 +655,9 @@ function RecordView() {
     for (const v of catalog.virtualFks) {
       if (v.toConnection !== params.connection || v.toTable !== params.table) continue;
       // $schema resolves to the record's own schema; else must match literally
-      const targetSchemaMatches = v.toSchema === SAME_SCHEMA || v.toSchema === params.schema;
+      const targetSchemaMatches = v.toSchema === SAME_SCHEMA || v.toSchema === schema;
       if (!targetSchemaMatches) continue;
-      const fromSchema = v.toSchema === SAME_SCHEMA ? params.schema : v.fromSchema;
+      const fromSchema = v.toSchema === SAME_SCHEMA ? schema : v.fromSchema;
       const fkColumn = vfkDisplayColumn(v);
       // can't enumerate a concrete back-link when the source side is a pattern
       if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
@@ -699,13 +705,7 @@ function RecordView() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}`} />}>
-              {params.schema}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}/${params.schema}/${params.table}`} />}>
+            <BreadcrumbLink render={<Link href={tableHref(params.connection, meta.schema, params.table)} />}>
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -733,16 +733,16 @@ function RecordView() {
               variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
-                const res = await fetch(`/api/data/${params.connection}/${params.schema}/${params.table}/row`, {
+                const res = await fetch(`/api/data/${params.connection}/${schema}/${params.table}/row`, {
                   method: "DELETE",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ pk }),
                 });
                 if (res.ok) {
                   qc.invalidateQueries({
-                    queryKey: ["rows", params.connection, params.schema, params.table],
+                    queryKey: ["rows", params.connection, schema, params.table],
                   });
-                  router.push(`/browse/${params.connection}/${params.schema}/${params.table}`);
+                  router.push(tableHref(params.connection, meta.schema, params.table));
                 }
               }}
             >
@@ -796,7 +796,7 @@ function RecordView() {
           <div className="col-span-2">
             <RelatedCard
               title="Details"
-              subtitle={`${params.connection}.${params.schema}.${params.table}`}
+              subtitle={`${params.connection}.${schema}.${params.table}`}
               menu={
                 meta.isView
                   ? []
@@ -847,7 +847,7 @@ function RecordView() {
 
           {Object.keys(pk).length > 0 && (
             <div className="col-span-2">
-              <RecordComments connectionId={meta.connectionId} schema={params.schema} table={params.table} pk={pk} />
+              <RecordComments connectionId={meta.connectionId} schema={schema} table={params.table} pk={pk} />
             </div>
           )}
         </div>

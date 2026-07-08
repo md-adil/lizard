@@ -15,6 +15,7 @@ const { runGuardedQuery } = await import("@/lib/execute");
 beforeAll(() => {
   addConnection({
     name: "users_service",
+    engine: "postgres",
     host: "localhost",
     port: 54321,
     database: "users_service",
@@ -27,6 +28,7 @@ beforeAll(() => {
   });
   addConnection({
     name: "orders_service",
+    engine: "postgres",
     host: "localhost",
     port: 54322,
     database: "orders_service",

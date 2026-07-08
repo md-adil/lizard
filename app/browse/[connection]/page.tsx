@@ -20,9 +20,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { tableHref } from "@/components/browse/use-schema-param";
 
 function TableCard({ connection, schema, table }: { connection: string; schema: string; table: TableInfo }) {
-  const href = `/browse/${connection}/${schema}/${table.name}`;
+  const href = tableHref(connection, schema, table.name);
   return (
     <div className="panel relative group flex text-[13px] font-medium overflow-hidden">
       <Link href={href} className="flex-1 px-4 py-3 min-w-0 pr-8">
@@ -70,7 +71,7 @@ export default function ConnectionPage() {
 
   const q = search.trim().toLowerCase();
   const sortedSchemas = conn.schemas.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const singlePublicOnly = sortedSchemas.length === 1 && sortedSchemas[0].name === "public";
+  const multiSchema = sortedSchemas.length > 1;
 
   return (
     <div className="px-8 py-8 max-w-5xl">
@@ -104,41 +105,33 @@ export default function ConnectionPage() {
       <input
         className="input mb-4"
         style={{ maxWidth: 320 }}
-        placeholder={singlePublicOnly ? "Search tables…" : "Search schemas…"}
+        placeholder="Search tables…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         autoFocus
       />
 
-      {singlePublicOnly ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {sortedSchemas[0].tables
-            .filter((t) => !q || t.name.toLowerCase().includes(q))
-            .slice()
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((t) => (
-              <TableCard key={t.name} connection={connection} schema="public" table={t} />
-            ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {sortedSchemas
-            .filter((s) => !q || s.name.toLowerCase().includes(q))
-            .map((schema) => (
-              <Link
-                key={schema.name}
-                href={`/browse/${connection}/${schema.name}`}
-                className="panel px-4 py-3 text-[13px] font-medium"
-                style={{ display: "block" }}
-              >
+      {sortedSchemas.map((schema) => {
+        const tables = schema.tables
+          .filter((t) => !q || t.name.toLowerCase().includes(q))
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (tables.length === 0) return null;
+        return (
+          <div key={schema.name} className="mb-6">
+            {multiSchema && (
+              <div className="text-[12px] font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--muted-foreground-faint)" }}>
                 {schema.name}
-                <div className="text-[11px] font-normal mt-0.5" style={{ color: "var(--muted-foreground-faint)" }}>
-                  {schema.tables.length} table{schema.tables.length !== 1 ? "s" : ""}
-                </div>
-              </Link>
-            ))}
-        </div>
-      )}
+              </div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {tables.map((t) => (
+                <TableCard key={t.name} connection={connection} schema={schema.name} table={t} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

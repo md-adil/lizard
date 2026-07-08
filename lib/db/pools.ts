@@ -2,7 +2,7 @@
 // are the only pools AI/chart/list queries ever touch. Write pools exist only
 // for the CRUD service.
 import { Pool, types } from "pg";
-import type { ConnectionConfig } from "@/lib/types";
+import type { ConnectionConfig, DbEngine } from "@/lib/types";
 import { getConnection } from "@/lib/metadata/store";
 
 // Return timestamps as raw strings instead of JS Date objects so the
@@ -69,17 +69,26 @@ export function connectionUri(conn: ConnectionConfig, role: Role): string {
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass ?? "")}@${conn.host}:${conn.port}/${encodeURIComponent(conn.database)}${ssl}`;
 }
 
-// One-off connectivity probe that does NOT touch the pool cache — used by the
-// "Test connection" button before a connection is saved. Returns null on
-// success or the error message.
-export async function probeCredentials(cfg: {
+interface ProbeConfig {
+  engine: DbEngine;
   host: string;
   port: number;
   database: string;
   user: string;
   password: string;
   ssl: boolean;
-}): Promise<string | null> {
+}
+
+// One-off connectivity probe that does NOT touch the pool cache — used by the
+// "Test connection" button and the connection-list status. Returns null on
+// success or the error message. Dispatches by engine.
+export async function probeCredentials(cfg: ProbeConfig): Promise<string | null> {
+  if (cfg.engine === "mysql") return probeMysql(cfg);
+  if (cfg.engine === "mongo") return "MongoDB connectivity is not available yet";
+  return probePostgres(cfg);
+}
+
+async function probePostgres(cfg: ProbeConfig): Promise<string | null> {
   const pool = new Pool({
     host: cfg.host,
     port: cfg.port,
@@ -101,23 +110,42 @@ export async function probeCredentials(cfg: {
   }
 }
 
-export async function testConnection(conn: ConnectionConfig): Promise<{ read: string | null; write: string | null }> {
-  const result: { read: string | null; write: string | null } = {
-    read: null,
-    write: null,
-  };
+async function probeMysql(cfg: ProbeConfig): Promise<string | null> {
+  // Lazy-load the driver so the module graph only pulls in mysql2 when a MySQL
+  // connection is actually probed.
+  const mysql = await import("mysql2/promise");
+  let conn: Awaited<ReturnType<typeof mysql.createConnection>> | null = null;
   try {
-    const r = await getPool(conn, "read").query("SELECT 1");
-    if (r.rowCount !== 1) result.read = "unexpected response";
+    conn = await mysql.createConnection({
+      host: cfg.host,
+      port: cfg.port,
+      database: cfg.database,
+      user: cfg.user,
+      password: cfg.password,
+      ssl: cfg.ssl ? { rejectUnauthorized: false } : undefined,
+      connectTimeout: 7_000,
+    });
+    await conn.query("SELECT 1");
+    return null;
   } catch (e) {
-    result.read = e instanceof Error ? e.message : String(e);
+    return e instanceof Error ? e.message : String(e);
+  } finally {
+    if (conn) await conn.end().catch(() => {});
   }
+}
+
+export async function testConnection(conn: ConnectionConfig): Promise<{ read: string | null; write: string | null }> {
+  const base = {
+    engine: conn.engine,
+    host: conn.host,
+    port: conn.port,
+    database: conn.database,
+    ssl: conn.ssl,
+  };
+  const read = await probeCredentials({ ...base, user: conn.readUser, password: conn.readPassword });
+  let write: string | null = null;
   if (conn.writeUser) {
-    try {
-      await getPool(conn, "write").query("SELECT 1");
-    } catch (e) {
-      result.write = e instanceof Error ? e.message : String(e);
-    }
+    write = await probeCredentials({ ...base, user: conn.writeUser, password: conn.writePassword ?? "" });
   }
-  return result;
+  return { read, write };
 }
