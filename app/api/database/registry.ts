@@ -4,8 +4,8 @@
 // single edit here plus its implementation folder.
 import type { DbEngine } from "@/lib/types";
 import { EngineNotSupportedError, type Dialect, type Driver } from "@/app/api/database/driver";
-import { postgresDialect } from "@/app/api/database/dialect/postgres";
-import { mysqlDialect } from "@/app/api/database/dialect/mysql";
+import { postgresDialect } from "@/app/api/database/postgres/dialect";
+import { mysqlDialect } from "@/app/api/database/mysql/dialect";
 
 // Relational SQL-text primitives per engine.
 const DIALECTS: Partial<Record<DbEngine, Dialect>> = {
