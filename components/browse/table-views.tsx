@@ -7,6 +7,7 @@
 import { useState } from "react";
 import type { TableMeta } from "./useTableMeta";
 import { formatCell } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { kanbanGroupColumns } from "./view-types";
 import { Card } from "@/components/ui/card";
 
@@ -153,8 +154,7 @@ export function KanbanView({
     if (!canWrite) return;
     const value = toKey === NULL_KEY ? null : toKey;
     if (groupOf(row) === toKey) return;
-    const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
-    await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
+    await fetch(dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "row", schema: meta.schema }), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pk: rowPk(meta, row), data: { [groupBy]: value } }),

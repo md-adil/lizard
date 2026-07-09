@@ -506,7 +506,7 @@ function pkWhere(
     throw new CrudError("Table has no primary key; editing is not supported");
   const parts = table.primaryKey.map((col) => {
     if (!(col in pk)) throw new CrudError(`Missing primary key part: ${col}`);
-    values.push(String(pk[col]));
+    values.push((pk[col]));
     return `${dialect.castToText(dialect.quoteIdent(col))} = ${dialect.placeholder(values.length)}`;
   });
   return parts.join(" AND ");

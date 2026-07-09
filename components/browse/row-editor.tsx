@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
@@ -45,14 +46,19 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const ref = cm.ref!;
 
-  const schemaParam = ref.schema ? `schema=${encodeURIComponent(ref.schema)}&` : "";
+  const refsUrl = (q: string) =>
+    dataApiUrl({
+      connection: ref.connection,
+      table: ref.table,
+      path: "refs",
+      schema: ref.schema,
+      params: { column: ref.column, q },
+    });
 
   const { data: options } = useQuery<{ id: string; label: string }[]>({
     queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/data/${ref.connection}/${ref.table}/refs?${schemaParam}column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
-      );
+      const res = await fetch(refsUrl(search));
       if (!res.ok) throw new Error("refs failed");
       return res.json();
     },
@@ -63,9 +69,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
   useQuery<{ id: string; label: string }[]>({
     queryKey: ["ref-label", ref.connection, ref.schema, ref.table, ref.column, value],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/data/${ref.connection}/${ref.table}/refs?${schemaParam}column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(value)}`,
-      );
+      const res = await fetch(refsUrl(value));
       const body = await res.json();
       if (res.ok) {
         const hit = (body as { id: string; label: string }[]).find((o) => o.id === value);
@@ -303,15 +307,15 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     mutationFn: async () => {
       const data = buildPayload();
       if (!data) throw new Error("Fix the highlighted fields");
-      const base = `/api/data/${meta.connection}/${meta.table.name}`;
-      const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
+      const url = (path?: string) =>
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path, schema: meta.schema });
       const res = isCreate
-        ? await fetch(`${base}${query}`, {
+        ? await fetch(url(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
           })
-        : await fetch(`${base}/row${query}`, {
+        : await fetch(url("row"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -337,12 +341,14 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
   const del = useMutation({
     mutationFn: async () => {
-      const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
-      const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pk }),
-      });
+      const res = await fetch(
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "row", schema: meta.schema }),
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pk }),
+        },
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Delete failed");
     },

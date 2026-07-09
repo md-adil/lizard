@@ -49,7 +49,8 @@ export function vfkTargetColumn(v: VirtualFk): string | undefined {
 
 // Normalize a source value in JS to mirror the SQL transform on the target,
 // so tuple keys computed on both sides line up.
-export function applyTransform(value: unknown, t: VfkTransform = "none"): string {
+export function applyTransform(value: unknown, t: VfkTransform = "none"): string | number {
+  if (!Number.isNaN(value)) return value as number;
   const s = String(value);
   switch (t) {
     case "lower":

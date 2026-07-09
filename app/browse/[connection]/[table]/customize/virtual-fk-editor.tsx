@@ -5,12 +5,17 @@
 // asks for the target and the join. Composite keys, value transforms and
 // constant filters are always available.
 import { useState } from "react";
-import { supportsSchemas, type VfkTransform, type VfkPair, type VfkConstant } from "@/lib/types";
+import type { VfkTransform, VfkPair, VfkConstant } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useSchemaMeta, type TableMeta, type CatalogResponse } from "@/components/browse/useTableMeta";
+import {
+  useSchemaMeta,
+  connectionSupportsSchemas,
+  type TableMeta,
+  type CatalogResponse,
+} from "@/components/browse/useTableMeta";
 
 const TRANSFORMS: { value: VfkTransform; label: string }[] = [
   { value: "none", label: "exact" },
@@ -51,14 +56,15 @@ export function VirtualFkEditor({
   const [saving, setSaving] = useState(false);
 
   const toConn = catalog.connections.find((c) => c.connectionName === toConnection);
-  // Schema selection is a Postgres concept — MySQL/Mongo connections have
-  // exactly one synthetic schema, so the target schema select is hidden and
-  // the schema is picked for the user (see the target-connection handler).
-  const toConnIsPostgres = !!toConn && supportsSchemas(toConn.engine);
-  // $schema has no single concrete schema — introspect the current schema's
-  // shape in the target connection as a stand-in.
-  const repSchemaName = toSchema === SAME_SCHEMA ? meta.schema : toSchema;
-  const { schemaMeta: targetSchemaMeta } = useSchemaMeta(toConnection || undefined, repSchemaName || undefined);
+  // The target is user-picked, so it may be a different connection (and
+  // engine) than the source — its schema eligibility has to be looked up.
+  // When it has none, the schema select is hidden and the server resolves the
+  // connection's single schema for us.
+  const toConnHasSchema = !!toConnection && connectionSupportsSchemas(catalog, toConnection);
+  // $schema has no single concrete schema — introspect the source table's own
+  // schema in the target connection as a stand-in.
+  const repSchemaName = !toConnHasSchema ? undefined : toSchema === SAME_SCHEMA ? meta.resolvedSchema : toSchema;
+  const { schemaMeta: targetSchemaMeta } = useSchemaMeta(toConnection || undefined, repSchemaName);
   const targetTable = targetSchemaMeta?.tables.find((t) => t.name === toTable);
   const targetColumns = targetTable?.columns ?? [];
 
@@ -188,7 +194,7 @@ export function VirtualFkEditor({
           </p>
 
           <div
-            className={`grid gap-3 ${showTargetScope ? (toConnIsPostgres ? "grid-cols-3" : "grid-cols-2") : "grid-cols-1"}`}
+            className={`grid gap-3 ${showTargetScope ? (toConnHasSchema ? "grid-cols-3" : "grid-cols-2") : "grid-cols-1"}`}
           >
             {showTargetScope && (
               <>
@@ -199,12 +205,13 @@ export function VirtualFkEditor({
                     value={toConnection}
                     onChange={(e) => {
                       const name = e.target.value;
-                      const picked = catalog.connections.find((c) => c.connectionName === name);
                       setToConnection(name);
                       setToTable("");
-                      // Non-Postgres connections have exactly one schema — pick it
-                      // for the user since there's no schema select to do it.
-                      setToSchema(picked && !supportsSchemas(picked.engine) ? (picked.schemas[0]?.name ?? "") : "");
+                      // A connection without schemas has exactly one — pick it for
+                      // the user, since there's no schema select to do it.
+                      const picked = catalog.connections.find((c) => c.connectionName === name);
+                      const hasSchema = !!name && connectionSupportsSchemas(catalog, name);
+                      setToSchema(!picked || hasSchema ? "" : (picked.schemas[0]?.name ?? ""));
                     }}
                   >
                     <option value="">— select —</option>
@@ -215,7 +222,7 @@ export function VirtualFkEditor({
                     ))}
                   </select>
                 </div>
-                {toConnIsPostgres && (
+                {toConnHasSchema && (
                   <div>
                     <label className="label">Target schema</label>
                     <select

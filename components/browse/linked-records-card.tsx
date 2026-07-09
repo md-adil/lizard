@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
@@ -40,20 +41,27 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     String(selfValue),
   ];
 
-  const schemaParam = target.junctionSchema ? `schema=${encodeURIComponent(target.junctionSchema)}&` : "";
+  // every call here targets the junction table on the junction's connection
+  const junctionUrl = (path?: string, params?: Record<string, string | undefined>) =>
+    dataApiUrl({
+      connection: target.connection,
+      table: target.junctionTable,
+      path,
+      schema: target.junctionSchema,
+      params,
+    });
 
   const { data } = useQuery<{ rows: Record<string, unknown>[] }>({
     queryKey: key,
     queryFn: async () => {
-      const qs = new URLSearchParams({
-        selfFkColumn: target.selfFkColumn,
-        otherFkColumn: target.otherFkColumn,
-        ...(target.otherSchema ? { otherSchema: target.otherSchema } : {}),
-        otherTable: target.otherTable,
-        selfValue: String(selfValue),
-      });
       const res = await fetch(
-        `/api/data/${target.connection}/${target.junctionTable}/linked?${schemaParam}${qs}`,
+        junctionUrl("linked", {
+          selfFkColumn: target.selfFkColumn,
+          otherFkColumn: target.otherFkColumn,
+          otherSchema: target.otherSchema,
+          otherTable: target.otherTable,
+          selfValue: String(selfValue),
+        }),
       );
       if (!res.ok) throw new Error("failed to load linked records");
       return res.json();
@@ -65,8 +73,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     if (!junctionMeta) return;
     const pk: Record<string, unknown> = {};
     for (const k of junctionMeta.table.primaryKey) pk[k] = junctionRow[k];
-    const query = target.junctionSchema ? `?schema=${encodeURIComponent(target.junctionSchema)}` : "";
-    await fetch(`/api/data/${target.connection}/${target.junctionTable}/row${query}`, {
+    await fetch(junctionUrl("row"), {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pk }),
@@ -75,8 +82,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
   }
 
   async function link(otherId: string) {
-    const query = target.junctionSchema ? `?schema=${encodeURIComponent(target.junctionSchema)}` : "";
-    await fetch(`/api/data/${target.connection}/${target.junctionTable}${query}`, {
+    await fetch(junctionUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

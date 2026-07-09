@@ -4,14 +4,12 @@
 // relationships. Source scope (this schema, or a schema pattern like org_*
 // that applies the whole page to every matching tenant schema) is owned here
 // since it governs both halves of the page.
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
-import { supportsSchemas } from "@/lib/types";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
@@ -63,19 +61,14 @@ export default function CustomizePage() {
     meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ??
     null;
 
-  // Schema patterns (multi-tenant "org_*" style overrides) are a Postgres
-  // concept — MySQL/Mongo connections have exactly one synthetic schema, so
-  // there's nothing to pick a pattern across.
-  const isPostgres = supportsSchemas(meta.connectionEngine);
-  const scope = isPostgres ? (explicitScope ?? (detectedPattern ? "pattern" : "schema")) : "schema";
-  const pattern = isPostgres ? (explicitPattern ?? detectedPattern ?? "") : "";
+  // Schema patterns (multi-tenant "org_*" style overrides) only mean something
+  // where schemas do — MySQL/Mongo have exactly one, so there's nothing to
+  // match a pattern across. `meta.schema` being set is that test.
+  const hasSchema = meta.schema !== undefined;
+  const scope = hasSchema ? (explicitScope ?? (detectedPattern ? "pattern" : "schema")) : "schema";
+  const pattern = hasSchema ? (explicitPattern ?? detectedPattern ?? "") : "";
 
-  // meta.schema is undefined for non-Postgres (nothing to show/link) but
-  // overrides still need a concrete schema to store against and look up —
-  // schemaMeta.name is that resolved value (the database name, for MySQL)
-  // regardless.
-  const concreteSchema = meta.schema ?? schemaMeta.name;
-  const saveSchema = scope === "pattern" && pattern ? pattern : concreteSchema;
+  const saveSchema = scope === "pattern" && pattern ? pattern : meta.resolvedSchema;
   const matchedSchemas =
     scope === "pattern" && pattern
       ? (catalog.connections
@@ -119,7 +112,7 @@ export default function CustomizePage() {
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-      {isPostgres && (
+      {hasSchema && (
         <>
           <Tabs value={scope} onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")} className="mb-4">
             <TabsList variant="line">
@@ -148,7 +141,6 @@ export default function CustomizePage() {
       <div className="grid lg:grid-cols-2 gap-8 items-start">
         <TableOverridesEditor
           meta={meta}
-          schema={concreteSchema}
           columnOverrides={schemaMeta.columnOverrides}
           saveSchema={saveSchema}
           onSaved={invalidate}
@@ -164,7 +156,7 @@ export default function CustomizePage() {
             catalog={catalog}
             fromSchema={saveSchema}
             fromTable={meta.table.name}
-            defaultToSchema={scope === "pattern" ? SAME_SCHEMA : (meta.schema ?? schemaMeta.name)}
+            defaultToSchema={scope === "pattern" ? SAME_SCHEMA : meta.resolvedSchema}
             onSaved={invalidate}
           />
         </div>

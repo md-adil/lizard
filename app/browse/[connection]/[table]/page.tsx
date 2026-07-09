@@ -30,6 +30,7 @@ import { GalleryView, KanbanView, CalendarView, TreeView } from "@/components/br
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
 import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
+import { dataApiUrl } from "@/components/browse/data-api";
 import type { SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
@@ -53,14 +54,9 @@ export default function TablePage() {
     table: string;
   }>();
   const router = useRouter();
-  // schema is a query param now (?schema=), defaulting to "public".
+  // schema is a query param now (?schema=) — absent for engines without schemas.
   const schema = useSchemaParam();
-  const {
-    meta,
-    schemaMeta,
-    isLoading: catalogLoading,
-    error: catalogError,
-  } = useTableMeta(params.connection, schema, params.table);
+  const { meta, isLoading: catalogLoading, error: catalogError } = useTableMeta(params.connection, schema, params.table);
 
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
@@ -78,7 +74,7 @@ export default function TablePage() {
   const [refreshMs, setRefreshMs] = useState(0);
   const [columnVisibility, setColumnVisibility] = useColumnVisibility(
     meta?.connectionId,
-    meta?.schema ?? schemaMeta?.name,
+    meta?.resolvedSchema,
     params.table,
   );
   const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>([]);
@@ -106,8 +102,14 @@ export default function TablePage() {
           : {}),
         ...(search ? { search } : {}),
       });
-      const schemaParam = meta!.schema ? `schema=${encodeURIComponent(meta!.schema)}&` : "";
-      const res = await fetch(`/api/data/${params.connection}/${params.table}?${schemaParam}${qs}`);
+      const res = await fetch(
+        dataApiUrl({
+          connection: params.connection,
+          table: params.table,
+          schema: meta!.schema,
+          params: Object.fromEntries(qs),
+        }),
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;
@@ -163,8 +165,7 @@ export default function TablePage() {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
         for (const k of meta.table.primaryKey) pk[k] = row[k];
-        const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
-        await fetch(`/api/data/${params.connection}/${params.table}/row${query}`, {
+        await fetch(dataApiUrl({ connection: params.connection, table: params.table, path: "row", schema: meta.schema }), {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ pk }),
@@ -189,8 +190,13 @@ export default function TablePage() {
       : {}),
     ...(search ? { search } : {}),
   });
-  const exportSchemaParam = meta.schema ? `schema=${encodeURIComponent(meta.schema)}&` : "";
-  const exportHref = `/api/data/${params.connection}/${params.table}/export?${exportSchemaParam}${exportQs}`;
+  const exportHref = dataApiUrl({
+    connection: params.connection,
+    table: params.table,
+    path: "export",
+    schema: meta.schema,
+    params: Object.fromEntries(exportQs),
+  });
 
   // saved-views (Phase 8.3): capture / restore the browsing state
   const viewConfig: SavedViewConfig = {
@@ -265,7 +271,7 @@ export default function TablePage() {
         <div className="flex gap-2">
           <SavedViewsBar
             connectionId={meta.connectionId}
-            schema={meta.schema ?? schemaMeta!.name}
+            schema={meta.resolvedSchema}
             table={params.table}
             currentConfig={viewConfig}
             onApply={applyView}

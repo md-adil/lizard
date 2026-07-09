@@ -12,7 +12,6 @@ import type {
   VfkTransform,
   CatalogResponse,
   SchemaDetail,
-  DbEngine,
 } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -39,6 +38,15 @@ export function useCatalog() {
       return res.json();
     },
   });
+}
+
+// Does the named connection expose a real schema namespace? A virtual FK can
+// point at a different connection (with a different engine) than its source
+// table, so eligibility can't be inferred from the source's engine — it has
+// to be looked up per target connection.
+export function connectionSupportsSchemas(catalog: CatalogResponse, connectionName: string): boolean {
+  const engine = catalog.connections.find((c) => c.connectionName === connectionName)?.engine;
+  return !!engine && supportsSchemas(engine);
 }
 
 export interface ColumnMeta {
@@ -69,13 +77,17 @@ export interface ColumnMeta {
 export interface TableMeta {
   connection: string;
   connectionId: string;
-  connectionEngine: DbEngine;
-  // Only Postgres connections have a real schema — undefined for MySQL/Mongo,
-  // where a connection maps to exactly one database and there's nothing to
-  // name or carry around (see supportsSchemas). Internal matching against
-  // stored overrides/virtual-FKs still uses the resolved schema name — see
-  // buildTableMeta — but nothing outside it should need to know that.
+  // The schema as the user sees it: a real Postgres schema, or undefined for
+  // MySQL/Mongo, where a connection maps to exactly one database and there's
+  // nothing worth naming (see supportsSchemas). Use this for URLs, `?schema=`
+  // query params, and anything displayed. `schema === undefined` is also the
+  // canonical "this engine has no schemas" test — don't re-check the engine.
   schema: string | undefined;
+  // The same schema, always concrete: Postgres's real schema, or the synthetic
+  // one introspection reports for MySQL (the database name). This is the
+  // identifier overrides/saved-views/column-prefs/comments are keyed by and
+  // that SQL quotes — never show it, never put it in a URL.
+  resolvedSchema: string;
   table: TableInfo;
   label: string;
   isView: boolean;
@@ -105,19 +117,7 @@ export function buildTableMeta(
   const cOverrides = resolveColumnOverrides(schemaMeta.columnOverrides, conn.connectionId, schema, tableName);
   const vfks = schemaMeta.virtualFks.filter((v) => vfkMatchesSource(v, connection, schema, tableName));
 
-  // A virtual FK can point at a different connection (with a different
-  // engine) than the source table, so its eligibility can't be inferred from
-  // conn.engine — look it up per target connection, once.
-  const connSupportsSchemas = new Map<string, boolean>();
-  function targetSupportsSchemas(connectionName: string): boolean {
-    let v = connSupportsSchemas.get(connectionName);
-    if (v === undefined) {
-      const engine = catalog.connections.find((c) => c.connectionName === connectionName)?.engine;
-      v = !!engine && supportsSchemas(engine);
-      connSupportsSchemas.set(connectionName, v);
-    }
-    return v;
-  }
+  const hasSchema = connectionSupportsSchemas(catalog, connection);
 
   const columns: ColumnMeta[] = table.columns.map((col) => {
     const o = cOverrides.find((x) => x.column === col.name);
@@ -130,7 +130,7 @@ export function buildTableMeta(
           // real FKs never cross connections, so the target shares this
           // table's engine.
           connection,
-          schema: targetSupportsSchemas(connection) ? realFk.referencedSchema : undefined,
+          schema: hasSchema ? realFk.referencedSchema : undefined,
           table: realFk.referencedTable,
           column: realFk.referencedColumns[0],
           transform: "none" as VfkTransform,
@@ -138,7 +138,7 @@ export function buildTableMeta(
       : vfk
         ? {
             connection: vfk.toConnection,
-            schema: targetSupportsSchemas(vfk.toConnection) ? resolveToSchema(vfk, schema) : undefined,
+            schema: connectionSupportsSchemas(catalog, vfk.toConnection) ? resolveToSchema(vfk, schema) : undefined,
             table: vfk.toTable,
             column: vfkTargetColumn(vfk)!,
             transform: vfk.pairs[0]?.transform ?? "none",
@@ -168,8 +168,8 @@ export function buildTableMeta(
   return {
     connection,
     connectionId: conn.connectionId,
-    connectionEngine: conn.engine,
-    schema: supportsSchemas(conn.engine) ? schema : undefined,
+    schema: hasSchema ? schema : undefined,
+    resolvedSchema: schema,
     table,
     label: tOverride?.label || humanize(tableName),
     isView: table.kind === "view",

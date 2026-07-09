@@ -4,7 +4,8 @@ import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTableMeta, formatCell, type TableMeta } from "@/components/browse/useTableMeta";
+import { useTableMeta, connectionSupportsSchemas, formatCell, type TableMeta } from "@/components/browse/useTableMeta";
+import { dataApiUrl } from "@/components/browse/data-api";
 import type { VfkTransform } from "@/lib/types";
 import { RowEditor } from "@/components/browse/row-editor";
 import { RedactedValue } from "@/components/browse/redacted-value";
@@ -15,7 +16,6 @@ import { JsonView } from "@/components/browse/json-view";
 import { useSchemaParam, tableHref, recordHref } from "@/components/browse/use-schema-param";
 import { humanize } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
-import { supportsSchemas } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -234,12 +234,14 @@ function JsonCard({
           throw new Error("Invalid JSON");
         }
       }
-      const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
-      const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pk, data: { [column]: parsed } }),
-      });
+      const res = await fetch(
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "row", schema: meta.schema }),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pk, data: { [column]: parsed } }),
+        },
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Save failed");
     },
@@ -351,10 +353,14 @@ function BelongsToCard({
   }>({
     queryKey: ["record", target.connection, target.schema, target.table, String(value)],
     queryFn: async () => {
-      const schemaParam = target.schema ? `schema=${encodeURIComponent(target.schema)}&` : "";
-      const keyTransformsParam = keyTransformsJson ? `&keyTransforms=${encodeURIComponent(keyTransformsJson)}` : "";
       const res = await fetch(
-        `/api/data/${target.connection}/${target.table}/row?${schemaParam}pk=${encodeURIComponent(pkJson)}${keyTransformsParam}`,
+        dataApiUrl({
+          connection: target.connection,
+          table: target.table,
+          path: "row",
+          schema: target.schema,
+          params: { pk: pkJson, keyTransforms: keyTransformsJson },
+        }),
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
@@ -427,9 +433,13 @@ function HasManyCard({
     queryKey: ["related", source.connection, source.schema, source.table, fkColumn, String(value)],
     queryFn: async () => {
       const filters = JSON.stringify([{ column: fkColumn, op: "eq", value: String(value) }]);
-      const schemaParam = source.schema ? `schema=${encodeURIComponent(source.schema)}&` : "";
       const res = await fetch(
-        `/api/data/${source.connection}/${source.table}?${schemaParam}page=0&pageSize=8&filters=${encodeURIComponent(filters)}`,
+        dataApiUrl({
+          connection: source.connection,
+          table: source.table,
+          schema: source.schema,
+          params: { page: "0", pageSize: "8", filters },
+        }),
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "failed");
@@ -563,10 +573,18 @@ function RecordView() {
       JSON.stringify(keyTransforms ?? {}),
     ],
     queryFn: async () => {
-      const qs = new URLSearchParams({ pk: JSON.stringify(pk) });
-      if (keyTransforms) qs.set("keyTransforms", JSON.stringify(keyTransforms));
-      const schemaParam = meta?.schema ? `schema=${encodeURIComponent(meta.schema)}&` : "";
-      const res = await fetch(`/api/data/${params.connection}/${params.table}/row?${schemaParam}${qs}`);
+      const res = await fetch(
+        dataApiUrl({
+          connection: params.connection,
+          table: params.table,
+          path: "row",
+          schema: meta?.schema,
+          params: {
+            pk: JSON.stringify(pk),
+            keyTransforms: keyTransforms ? JSON.stringify(keyTransforms) : undefined,
+          },
+        }),
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
       return body;
@@ -597,22 +615,11 @@ function RecordView() {
           otherTable: string;
         }[],
       };
-    // The real, always-resolved schema (schemaMeta.name) is what introspected
-    // FKs/virtual-FKs are actually matched against, regardless of whether
-    // it's worth exposing — same split as buildTableMeta.
-    const concreteSchema = schemaMeta.name;
-    const connections = catalog.connections;
-    const connSupportsSchemas = new Map<string, boolean>();
-    function targetSupportsSchemas(connectionName: string): boolean {
-      let v = connSupportsSchemas.get(connectionName);
-      if (v === undefined) {
-        const engine = connections.find((c) => c.connectionName === connectionName)?.engine;
-        v = !!engine && supportsSchemas(engine);
-        connSupportsSchemas.set(connectionName, v);
-      }
-      return v;
-    }
-    const currentSchema = targetSupportsSchemas(params.connection) ? concreteSchema : undefined;
+    // Introspected FKs/virtual-FKs are matched against the always-resolved
+    // schema; what we hand to the cards is the display one (undefined when
+    // this engine has none) — same split as buildTableMeta.
+    const concreteSchema = meta.resolvedSchema;
+    const currentSchema = meta.schema;
 
     const belongsTo = meta.columns
       .filter((c) => c.ref)
@@ -683,7 +690,7 @@ function RecordView() {
       if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
       hasMany.push({
         connection: v.fromConnection,
-        schema: targetSupportsSchemas(v.fromConnection) ? fromSchema : undefined,
+        schema: connectionSupportsSchemas(catalog, v.fromConnection) ? fromSchema : undefined,
         table: v.fromTable,
         fkColumn,
       });
@@ -755,12 +762,14 @@ function RecordView() {
               variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
-                const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
-                const res = await fetch(`/api/data/${params.connection}/${params.table}/row${query}`, {
-                  method: "DELETE",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ pk }),
-                });
+                const res = await fetch(
+                  dataApiUrl({ connection: params.connection, table: params.table, path: "row", schema: meta.schema }),
+                  {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pk }),
+                  },
+                );
                 if (res.ok) {
                   qc.invalidateQueries({
                     queryKey: ["rows", params.connection, schema, params.table],
@@ -869,7 +878,12 @@ function RecordView() {
 
           {Object.keys(pk).length > 0 && (
             <div className="col-span-2">
-              <RecordComments connectionId={meta.connectionId} schema={schemaMeta.name} table={params.table} pk={pk} />
+              <RecordComments
+                connectionId={meta.connectionId}
+                schema={meta.resolvedSchema}
+                table={params.table}
+                pk={pk}
+              />
             </div>
           )}
         </div>

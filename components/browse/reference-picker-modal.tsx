@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
@@ -42,24 +43,25 @@ export function ReferencePickerModal({
   const [search, setSearch] = useState("");
   const pageSize = 25;
 
-  const schemaParam = target.schema ? `schema=${encodeURIComponent(target.schema)}&` : "";
-
   const { data, isLoading, isFetching } = useQuery<ListResponse>({
     queryKey: ["refpick", target.connection, target.schema, target.table, page, sort, sortDir, filterSet, search],
     queryFn: async () => {
-      const qs = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        ...(sort ? { sort, sortDir } : {}),
-        ...(filterSet.conditions.length
-          ? {
-              filters: JSON.stringify(filterSet.conditions),
-              combinator: filterSet.combinator,
-            }
-          : {}),
-        ...(search ? { search } : {}),
-      });
-      const res = await fetch(`/api/data/${target.connection}/${target.table}?${schemaParam}${qs}`);
+      const res = await fetch(
+        dataApiUrl({
+          connection: target.connection,
+          table: target.table,
+          schema: target.schema,
+          params: {
+            page: String(page),
+            pageSize: String(pageSize),
+            ...(sort ? { sort, sortDir } : {}),
+            ...(filterSet.conditions.length
+              ? { filters: JSON.stringify(filterSet.conditions), combinator: filterSet.combinator }
+              : {}),
+            ...(search ? { search } : {}),
+          },
+        }),
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;

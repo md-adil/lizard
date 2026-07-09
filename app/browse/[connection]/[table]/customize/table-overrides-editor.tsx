@@ -33,21 +33,18 @@ const WIDGETS = [
 
 export function TableOverridesEditor({
   meta,
-  schema,
   columnOverrides,
   saveSchema,
   onSaved,
 }: {
   meta: TableMeta;
-  // Concrete, always-defined schema for the table being viewed (unlike
-  // meta.schema, which is undefined for non-Postgres) — used to look up the
-  // overrides currently in effect, as opposed to saveSchema (what to write).
-  schema: string;
   columnOverrides: ColumnOverride[];
+  // Where to write overrides: the table's own schema, or a glob pattern when
+  // the page is scoped to one. Reads always resolve against meta.resolvedSchema.
   saveSchema: string;
   onSaved: () => void;
 }) {
-  const colOv = resolveColumnOverrides(columnOverrides, meta.connectionId, schema, meta.table.name);
+  const colOv = resolveColumnOverrides(columnOverrides, meta.connectionId, meta.resolvedSchema, meta.table.name);
   const findOv = (name: string) => colOv.find((o) => o.column === name);
 
   const [tableLabel, setTableLabel] = useState(meta.tableOverride?.label ?? "");

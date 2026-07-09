@@ -6,6 +6,7 @@
 import { useState } from "react";
 import Papa from "papaparse";
 import type { TableMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -72,12 +73,14 @@ export function ImportCsvDialog({
     setImporting(true);
     setError(null);
     try {
-      const schemaQs = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
-      const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/import${schemaQs}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: mapped }),
-      });
+      const res = await fetch(
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "import", schema: meta.schema }),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: mapped }),
+        },
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Import failed");
       setResult(body);
