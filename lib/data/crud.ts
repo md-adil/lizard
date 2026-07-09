@@ -363,7 +363,7 @@ interface LabelJob {
   schema: string; // concrete target schema (after $schema resolution)
   table: string;
   pairs: { from: string; to: string; transform: VfkTransform }[];
-  constants: { toColumn: string; value: string }[];
+  constants: { toColumn: string; side?: "source" | "target"; value: string }[];
 }
 
 // For each single-column real FK and each matching virtual FK (composite,
@@ -427,6 +427,12 @@ async function fetchFkLabels(
         const tuples: string[][] = [];
         const rawByKey = new Map<string, string>();
         for (const r of rows) {
+          // If a constant predicate is defined on the source table, the row must match it.
+          const matchesSourceConstants = job.constants
+            .filter((c) => c.side === "source")
+            .every((c) => String(r[c.toColumn] ?? "") === c.value);
+          if (!matchesSourceConstants) continue;
+
           const vals = job.pairs.map((p) => r[p.from]);
           if (vals.some((v) => v === null || v === undefined)) continue;
           const norm = job.pairs.map((p, i) => applyTransform(vals[i], p.transform));
@@ -446,8 +452,13 @@ async function fetchFkLabels(
         if (!targetTable) return;
         for (const p of job.pairs)
           if (!targetTable.columns.some((c) => c.name === p.to)) return;
-        for (const c of job.constants)
-          if (!targetTable.columns.some((col) => col.name === c.toColumn)) return;
+        for (const c of job.constants) {
+          if (c.side === "source") {
+            if (!table.columns.some((col) => col.name === c.toColumn)) return;
+          } else {
+            if (!targetTable.columns.some((col) => col.name === c.toColumn)) return;
+          }
+        }
 
         const display = displayColumnFor(job.targetConn, targetTable);
         if (!display) return;
@@ -476,7 +487,8 @@ async function fetchFkLabels(
         const selectKeys = job.pairs.map(
           (p, i) => `${targetExpr(p.to, p.transform)} AS k${i}`,
         );
-        const constClause = job.constants.map((c) => {
+        const targetConstants = job.constants.filter((c) => !c.side || c.side === "target");
+        const constClause = targetConstants.map((c) => {
           params.push(c.value);
           return `${targetDialect.castToText(`t.${targetDialect.quoteIdent(c.toColumn)}`)} = ${targetDialect.placeholder(params.length)}`;
         });

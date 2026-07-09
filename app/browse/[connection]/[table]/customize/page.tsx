@@ -45,7 +45,7 @@ export default function CustomizePage() {
   if (!catalog || !meta || !schemaMeta)
     return (
       <Pad>
-        Table {schema}.{params.table} not found on “{params.connection}”.{" "}
+        Table {schema ? `${schema}.` : ""}{params.table} not found on “{params.connection}”.{" "}
         <Link href={backHref} className="underline">
           Back
         </Link>
