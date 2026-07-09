@@ -30,6 +30,7 @@ import {
   SidebarInput,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSchemaMeta } from "@/components/browse/useTableMeta";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { supportsSchemas, type CatalogResponse } from "@/lib/types";
@@ -62,6 +63,24 @@ function ThemeToggle() {
   );
 }
 
+// Placeholder rows sized like the table links they stand in for, so the
+// sidebar keeps its shape while a schema's tables load instead of collapsing
+// to nothing (switching connection refetches, which used to blank the list).
+//
+// Skeleton's default `bg-muted` is all but identical to `--sidebar`, so it
+// vanishes here — tint from the foreground instead, which stays legible in
+// both themes.
+function TableListSkeleton({ rows = 7 }: { rows?: number }) {
+  const widths = [72, 54, 83, 61, 76, 48, 68, 58, 79, 52];
+  return (
+    <div className="px-2.5 py-1 space-y-2" aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} className="h-3.5 bg-foreground/10" style={{ width: `${widths[i % widths.length]}%` }} />
+      ))}
+    </div>
+  );
+}
+
 function SchemaSection({
   connectionId,
   connectionName,
@@ -71,8 +90,6 @@ function SchemaSection({
   showHidden,
   onToggleHidden,
   showDivider,
-  loaded,
-  activeSchema,
   pathname,
 }: {
   connectionId: string;
@@ -83,18 +100,26 @@ function SchemaSection({
   showHidden: boolean;
   onToggleHidden: (v: boolean) => void;
   showDivider: boolean;
-  loaded: string[];
-  activeSchema: string | null;
   pathname: string;
 }) {
-  const { schemaMeta: schemaData, isLoading } = useSchemaMeta(connectionName, schemaName);
+  const { schemaMeta: schemaData, isLoading, error } = useSchemaMeta(connectionName, schemaName);
 
-  if (isLoading) {
-    return showDivider ? (
-      <div className="px-2.5 py-1 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
-        {schemaName} — loading…
+  if (error) {
+    return (
+      <div className="px-2.5 py-1 text-[12px]" style={{ color: "var(--destructive)" }}>
+        {schemaName} — failed to load
       </div>
-    ) : null;
+    );
+  }
+  // Only a genuinely pending fetch shows the skeleton. Once it settles, an
+  // empty schema is an empty state — not a loader that never resolves.
+  if (isLoading) {
+    return (
+      <div className="mb-1">
+        {showDivider && <SidebarGroupLabel className="mt-2">{schemaName}</SidebarGroupLabel>}
+        <TableListSkeleton />
+      </div>
+    );
   }
   if (!schemaData) return null;
 
@@ -102,12 +127,24 @@ function SchemaSection({
     const o = resolveTableOverride(schemaData.tableOverrides, connectionId, schemaName, t.name);
     return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false };
   });
+  if (allTables.length === 0) {
+    return (
+      <div className="mb-1">
+        {showDivider && <SidebarGroupLabel className="mt-2">{schemaName}</SidebarGroupLabel>}
+        <p className="px-2.5 py-1 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
+          No tables.
+        </p>
+      </div>
+    );
+  }
+
   const visibleTables = allTables
     .filter((t) => !t.hidden)
     .filter((t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ));
   const hiddenTables = allTables
     .filter((t) => t.hidden)
     .filter((t) => !tableQ || t.label.toLowerCase().includes(tableQ) || t.name.toLowerCase().includes(tableQ));
+  // everything filtered out by the search box — the toolbar already says so
   if (visibleTables.length === 0 && hiddenTables.length === 0) return null;
 
   return (
@@ -264,6 +301,13 @@ export function Sidebar() {
   };
 
   const remaining = allSchemas.filter((s) => !loaded.includes(s));
+
+  // Guard against the render where `selected` has moved to a new connection but
+  // the effect restoring `loaded` hasn't run yet: only schemas the current
+  // connection actually has are safe to fetch.
+  const shownSchemas = loaded
+    .filter((s) => allSchemas.includes(s))
+    .filter((s) => !activeSchema || s === activeSchema);
 
   const tableQ = tableSearch.trim().toLowerCase();
 
@@ -430,29 +474,32 @@ export function Sidebar() {
         {/* tables of loaded schemas — the one scrollable region; everything
             above (nav, database, schema selector, filter) stays fixed */}
         <SidebarGroup className="flex-1 min-h-0 pt-0 overflow-y-auto scrollbar-thin">
+          {/* Introspection drops schemas that hold no tables, so a connection can
+              legitimately have none — that is an empty state, not a pending one.
+              Only `loaded` lagging behind a connection switch means "still
+              settling", and that is what the skeleton is for. */}
+          {conn && !conn.error && allSchemas.length === 0 && (
+            <p className="px-2.5 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
+              No tables in this database.
+            </p>
+          )}
+          {conn && !conn.error && allSchemas.length > 0 && shownSchemas.length === 0 && <TableListSkeleton />}
           {conn &&
             !conn.error &&
-            loaded
-              .filter((s) => !activeSchema || s === activeSchema)
-              .map((schemaName) => {
-                const showDivider = loaded.length > 1 && !activeSchema;
-                return (
-                  <SchemaSection
-                    key={schemaName}
-                    connectionId={conn.connectionId}
-                    connectionName={conn.connectionName}
-                    schemaName={schemaName}
-                    includeSchemaInUrl={supportsSchemas(conn.engine)}
-                    tableQ={tableQ}
-                    showHidden={showHidden}
-                    onToggleHidden={setShowHidden}
-                    showDivider={showDivider}
-                    loaded={loaded}
-                    activeSchema={activeSchema}
-                    pathname={pathname}
-                  />
-                );
-              })}
+            shownSchemas.map((schemaName) => (
+              <SchemaSection
+                key={schemaName}
+                connectionId={conn.connectionId}
+                connectionName={conn.connectionName}
+                schemaName={schemaName}
+                includeSchemaInUrl={supportsSchemas(conn.engine)}
+                tableQ={tableQ}
+                showHidden={showHidden}
+                onToggleHidden={setShowHidden}
+                showDivider={shownSchemas.length > 1}
+                pathname={pathname}
+              />
+            ))}
           {showHidden && conn && !conn.error && (
             <Button
               variant="ghost"

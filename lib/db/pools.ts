@@ -4,6 +4,7 @@
 import { Pool, types } from "pg";
 import type { ConnectionConfig, DbEngine } from "@/lib/types";
 import { getConnection } from "@/lib/metadata/store";
+import { logQuery, type QueryLogContext } from "@/lib/logger";
 
 // Return timestamps as raw strings instead of JS Date objects so the
 // machine's local timezone never shifts the value during parsing.
@@ -68,60 +69,88 @@ export interface DbClient {
   rollback(): Promise<void>;
 }
 
+// Every statement this app runs against a target database goes through
+// DbClient.query, so timing/tracing belongs here rather than at each call
+// site. See lib/logger.ts for the env switches.
+function instrument(client: DbClient, ctx: QueryLogContext): DbClient {
+  return {
+    ...client,
+    async query(sql, params) {
+      const startedAt = performance.now();
+      try {
+        const res = await client.query(sql, params);
+        logQuery(ctx, sql, params, performance.now() - startedAt, { rowCount: res.rowCount });
+        return res;
+      } catch (e) {
+        logQuery(ctx, sql, params, performance.now() - startedAt, { error: e });
+        throw e;
+      }
+    },
+  };
+}
+
 export async function getClient(conn: ConnectionConfig, role: Role): Promise<DbClient> {
+  const ctx: QueryLogContext = { connection: conn.name, engine: conn.engine, role };
+
   if (conn.engine === "postgres") {
     const pool = getPool(conn, role);
     const client = await pool.connect();
-    return {
-      async query(sql, params) {
-        const res = await client.query(sql, params);
-        return {
-          rows: res.rows,
-          rowCount: res.rowCount ?? 0,
-          fields: res.fields.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
-        };
+    return instrument(
+      {
+        async query(sql, params) {
+          const res = await client.query(sql, params);
+          return {
+            rows: res.rows,
+            rowCount: res.rowCount ?? 0,
+            fields: res.fields.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
+          };
+        },
+        release() {
+          client.release();
+        },
+        async beginTransaction() {
+          await client.query("BEGIN");
+        },
+        async commit() {
+          await client.query("COMMIT");
+        },
+        async rollback() {
+          await client.query("ROLLBACK");
+        },
       },
-      release() {
-        client.release();
-      },
-      async beginTransaction() {
-        await client.query("BEGIN");
-      },
-      async commit() {
-        await client.query("COMMIT");
-      },
-      async rollback() {
-        await client.query("ROLLBACK");
-      },
-    };
+      ctx,
+    );
   } else if (conn.engine === "mysql") {
     const { getMysqlPool } = await import("@/app/api/database/mysql/pool");
     const pool = getMysqlPool(conn, role);
     const connection = await pool.getConnection();
-    return {
-      async query(sql, params) {
-        const [results, fields] = await connection.query(sql, params);
-        const isHeader = results && !Array.isArray(results);
-        return {
-          rows: isHeader ? [] : (results as any[]),
-          rowCount: isHeader ? (results as any).affectedRows : (results as any[]).length,
-          fields: (fields || []).map((f) => ({ name: f.name, columnType: f.columnType })),
-          insertId: isHeader ? (results as any).insertId : undefined,
-        };
+    return instrument(
+      {
+        async query(sql, params) {
+          const [results, fields] = await connection.query(sql, params);
+          const isHeader = results && !Array.isArray(results);
+          return {
+            rows: isHeader ? [] : (results as any[]),
+            rowCount: isHeader ? (results as any).affectedRows : (results as any[]).length,
+            fields: (fields || []).map((f) => ({ name: f.name, columnType: f.columnType })),
+            insertId: isHeader ? (results as any).insertId : undefined,
+          };
+        },
+        release() {
+          connection.release();
+        },
+        async beginTransaction() {
+          await connection.beginTransaction();
+        },
+        async commit() {
+          await connection.commit();
+        },
+        async rollback() {
+          await connection.rollback();
+        },
       },
-      release() {
-        connection.release();
-      },
-      async beginTransaction() {
-        await connection.beginTransaction();
-      },
-      async commit() {
-        await connection.commit();
-      },
-      async rollback() {
-        await connection.rollback();
-      },
-    };
+      ctx,
+    );
   } else {
     throw new Error(`Engine "${conn.engine}" is not supported yet`);
   }

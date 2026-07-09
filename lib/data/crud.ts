@@ -297,11 +297,14 @@ export async function listLinkedRows(
       ? `${dialect.quoteIdent(resolvedOtherSchema)}.${dialect.quoteIdent(otherTableName)}`
       : dialect.quoteIdent(otherTableName);
 
+    // Only the projected values are cast to text (the client renders them as
+    // labels). The join and the filter compare bare columns so both sides can
+    // use their indexes — an FK and the PK it references already share a type.
     const selectDisplay = dialect.castToText(`o.${dialect.quoteIdent(display)}`);
     const selectOtherPk = dialect.castToText(`o.${dialect.quoteIdent(otherPk)}`);
-    const joinOnOther = dialect.castToText(`o.${dialect.quoteIdent(otherPk)}`);
-    const joinOnJunction = dialect.castToText(`j.${dialect.quoteIdent(otherFkColumn)}`);
-    const whereSelf = dialect.castToText(`j.${dialect.quoteIdent(selfFkColumn)}`);
+    const joinOnOther = `o.${dialect.quoteIdent(otherPk)}`;
+    const joinOnJunction = `j.${dialect.quoteIdent(otherFkColumn)}`;
+    const whereSelf = `j.${dialect.quoteIdent(selfFkColumn)}`;
 
     const sql = `SELECT j.*, ${selectDisplay} AS __label, ${selectOtherPk} AS __other_id
                  FROM ${fqJunction} j
@@ -309,7 +312,7 @@ export async function listLinkedRows(
                    ON ${joinOnOther} = ${joinOnJunction}
                  WHERE ${whereSelf} = ${dialect.placeholder(1)}`;
 
-    const res = await client.query(sql, [String(selfValue)]);
+    const res = await client.query(sql, [selfValue]);
     return res.rows;
   } finally {
     client.release();
@@ -327,6 +330,31 @@ function transformSql(expr: string, t: VfkTransform): string {
     default:
       return expr;
   }
+}
+
+// Equality against a bound parameter, without wrapping the column in a cast.
+// `CAST(id AS CHAR) = ?` (MySQL) and `id::text = $1` (Postgres) are not
+// sargable — the planner can't use the column's index and the lookup degrades
+// to a full table scan, which is fatal on a large table. Bind the raw value
+// instead and let the engine coerce the *parameter* to the column's type.
+//
+// A transform (case-insensitive / trimmed virtual-FK joins) does force text
+// semantics, and with them the scan — that's inherent to the comparison, not
+// something we can avoid. Omit `transform` when there is none.
+function equalsParam(
+  columnExpr: string,
+  placeholder: string,
+  dialect: Dialect,
+  transform?: VfkTransform,
+): string {
+  const expr = isTransform(transform) ? transformSql(dialect.castToText(columnExpr), transform) : columnExpr;
+  return `${expr} = ${placeholder}`;
+}
+
+// "none" and `undefined` both mean "compare the value as-is"; VfkPair.transform
+// is optional and defaults to "none", so every caller has to tolerate both.
+function isTransform(t: VfkTransform | undefined): t is Exclude<VfkTransform, "none"> {
+  return t !== undefined && t !== "none";
 }
 
 interface LabelJob {
@@ -506,8 +534,8 @@ function pkWhere(
     throw new CrudError("Table has no primary key; editing is not supported");
   const parts = table.primaryKey.map((col) => {
     if (!(col in pk)) throw new CrudError(`Missing primary key part: ${col}`);
-    values.push((pk[col]));
-    return `${dialect.castToText(dialect.quoteIdent(col))} = ${dialect.placeholder(values.length)}`;
+    values.push(pk[col]);
+    return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length), dialect);
   });
   return parts.join(" AND ");
 }
@@ -534,10 +562,12 @@ function lookupWhere(
   if (cols.length === 0) throw new CrudError("No lookup key provided");
   const parts = cols.map((col) => {
     assertColumn(table, col);
-    const t = keyTransforms[col] ?? "none";
-    values.push(applyTransform(key[col], t));
-    const expr = dialect.castToText(dialect.quoteIdent(col));
-    return `${transformSql(expr, t)} = ${dialect.placeholder(values.length)}`;
+    const t = keyTransforms[col];
+    // Untransformed lookups are the overwhelmingly common case (opening a
+    // record by its primary key) — bind the value as-is so the column's index
+    // is usable. Only a transformed key forces the textual comparison.
+    values.push(isTransform(t) ? applyTransform(key[col], t) : key[col]);
+    return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length), dialect, t);
   });
   return parts.join(" AND ");
 }
@@ -588,11 +618,15 @@ export async function referenceOptions(
     const params: unknown[] = [];
     let where = "";
     if (search) {
-      params.push(`%${search}%`);
       const dispExpr = dialect.castToText(dialect.quoteIdent(display));
       const refExpr = dialect.castToText(dialect.quoteIdent(refColumn));
-      const matchDisp = dialect.caseInsensitiveLike(dispExpr, dialect.placeholder(1));
-      const matchRef = dialect.caseInsensitiveLike(refExpr, dialect.placeholder(1));
+      // Bind the term once per placeholder. MySQL's `?` is positional, so
+      // reusing placeholder(1) for both predicates would leave the second one
+      // unbound (Postgres's `$1` can repeat, MySQL's cannot).
+      params.push(`%${search}%`);
+      const matchDisp = dialect.caseInsensitiveLike(dispExpr, dialect.placeholder(params.length));
+      params.push(`%${search}%`);
+      const matchRef = dialect.caseInsensitiveLike(refExpr, dialect.placeholder(params.length));
       where = `WHERE ${matchDisp} OR ${matchRef}`;
     }
     const fqtn = dialect.supportsSchemas

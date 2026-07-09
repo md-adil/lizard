@@ -235,7 +235,7 @@ export function ConnectionForm({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <EngineIcon engine={form.engine} className="size-4" />
+            <EngineIcon engine={form.engine} className="size-5" />
             {mode === "create" ? "Add connection" : `Edit “${initial?.name}”`}
           </DialogTitle>
         </DialogHeader>
@@ -270,7 +270,7 @@ export function ConnectionForm({
               <SelectContent>
                 {DB_ENGINES.map((e) => (
                   <SelectItem key={e} value={e}>
-                    <EngineIcon engine={e} className="size-3.5" />
+                    <EngineIcon engine={e} className="size-4" />
                     {ENGINE_LABELS[e]}
                   </SelectItem>
                 ))}

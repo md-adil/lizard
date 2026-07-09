@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { tableHref } from "@/components/browse/use-schema-param";
 
 function TableCard({ connection, schema, table }: { connection: string; schema?: string; table: TableInfo }) {
@@ -69,23 +70,48 @@ function SchemaGrid({
   multiSchema: boolean;
   includeSchemaInUrl: boolean;
 }) {
-  const { schemaMeta: schemaData, isLoading } = useSchemaMeta(connection, schemaName);
+  const { schemaMeta: schemaData, isLoading, error } = useSchemaMeta(connection, schemaName);
   const q = search.trim().toLowerCase();
 
-  if (isLoading) {
+  const heading = multiSchema && (
+    <div
+      className="text-[12px] font-semibold mb-2 uppercase tracking-wide"
+      style={{ color: "var(--muted-foreground-faint)" }}
+    >
+      {schemaName}
+    </div>
+  );
+
+  if (error) {
     return (
       <div className="mb-6">
-        {multiSchema && (
-          <div className="text-[12px] font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--muted-foreground-faint)" }}>
-            {schemaName}
-          </div>
-        )}
-        <p className="text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>Loading tables…</p>
+        {heading}
+        <p className="text-[12.5px]" style={{ color: "var(--destructive)" }}>
+          Failed to load tables for {schemaName}.
+        </p>
       </div>
     );
   }
 
-  const tables = (schemaData?.tables ?? [])
+  // Placeholder cards matching the real grid, so the page doesn't reflow when
+  // the tables land.
+  if (isLoading || !schemaData) {
+    return (
+      <div className="mb-6">
+        {heading}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2" aria-hidden>
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="panel px-4 py-3">
+              <Skeleton className="h-3.5" style={{ width: `${[70, 55, 82, 61][i % 4]}%` }} />
+              <Skeleton className="h-2.5 mt-2" style={{ width: "40%" }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const tables = schemaData.tables
     .filter((t) => !q || t.name.toLowerCase().includes(q))
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -94,11 +120,7 @@ function SchemaGrid({
 
   return (
     <div className="mb-6">
-      {multiSchema && (
-        <div className="text-[12px] font-semibold mb-2 uppercase tracking-wide" style={{ color: "var(--muted-foreground-faint)" }}>
-          {schemaName}
-        </div>
-      )}
+      {heading}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
         {tables.map((t) => (
           <TableCard

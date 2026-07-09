@@ -111,12 +111,16 @@ export function buildFilterClause(
       case "endswith":
         parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}`)));
         break;
+      // Cast the *parameter* to the column's type, never the column: wrapping
+      // the column (`col::text = $1`) is not sargable, so the planner ignores
+      // its index and scans the table. Casting a bound constant is free — the
+      // planner folds it. Same shape as the gt/lt/between cases below.
       case "eq":
-        parts.push(`${dialect.castToText(col)} = ${push(f.value!)}`);
+        parts.push(`${col} = ${dialect.cast(dialect.castToText(push(f.value!)), cast)}`);
         break;
       case "neq":
         // rows where the column is null count as "not equal"
-        parts.push(`(${col} IS NULL OR ${dialect.castToText(col)} <> ${push(f.value!)})`);
+        parts.push(`(${col} IS NULL OR ${col} <> ${dialect.cast(dialect.castToText(push(f.value!)), cast)})`);
         break;
       case "gt":
       case "gte":
@@ -139,9 +143,12 @@ export function buildFilterClause(
       case "in": {
         const arr = (f.values ?? []).map(String);
         if (dialect.supportsArrays) {
-          parts.push(`${dialect.castToText(col)} = ANY(${push(arr)})`);
+          // `col = ANY($1::int4[])` — the array literal is cast, not the column.
+          parts.push(`${col} = ANY(${dialect.cast(push(arr), `${cast}[]`)})`);
         } else {
-          parts.push(`${dialect.castToText(col)} IN (${arr.map((val) => push(val)).join(", ")})`);
+          parts.push(
+            `${col} IN (${arr.map((val) => dialect.cast(dialect.castToText(push(val)), cast)).join(", ")})`,
+          );
         }
         break;
       }
