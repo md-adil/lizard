@@ -20,10 +20,11 @@ export async function runFederated(
   const db = await instance.connect();
   try {
     await db.run("INSTALL postgres; LOAD postgres;");
+    await db.run("INSTALL mysql; LOAD mysql;");
     for (const conn of connections) {
-      // alias = connection name (validated as an identifier at registration)
+      const type = conn.engine === "mysql" ? "mysql" : "postgres";
       await db.run(
-        `ATTACH '${connectionUri(conn, "read").replace(/'/g, "''")}' AS ${conn.name} (TYPE postgres, READ_ONLY)`,
+        `ATTACH '${connectionUri(conn, "read").replace(/'/g, "''")}' AS ${conn.name} (TYPE ${type}, READ_ONLY)`,
       );
     }
     // lock the sandbox: no filesystem, no further configuration changes

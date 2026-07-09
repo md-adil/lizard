@@ -4,8 +4,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
+import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -45,12 +47,19 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const ref = cm.ref!;
 
+  const refsUrl = (q: string) =>
+    dataApiUrl({
+      connection: ref.connection,
+      table: ref.table,
+      path: "refs",
+      schema: ref.schema,
+      params: { column: ref.column, q },
+    });
+
   const { data: options } = useQuery<{ id: string; label: string }[]>({
     queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
-      );
+      const res = await fetch(refsUrl(search));
       if (!res.ok) throw new Error("refs failed");
       return res.json();
     },
@@ -61,9 +70,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
   useQuery<{ id: string; label: string }[]>({
     queryKey: ["ref-label", ref.connection, ref.schema, ref.table, ref.column, value],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(value)}`,
-      );
+      const res = await fetch(refsUrl(value));
       const body = await res.json();
       if (res.ok) {
         const hit = (body as { id: string; label: string }[]).find((o) => o.id === value);
@@ -301,14 +308,15 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     mutationFn: async () => {
       const data = buildPayload();
       if (!data) throw new Error("Fix the highlighted fields");
-      const base = `/api/data/${meta.connection}/${meta.schema}/${meta.table.name}`;
+      const url = (path?: string) =>
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path, schema: meta.schema });
       const res = isCreate
-        ? await fetch(base, {
+        ? await fetch(url(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
           })
-        : await fetch(`${base}/row`, {
+        : await fetch(url("row"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -334,11 +342,14 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
   const del = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/data/${meta.connection}/${meta.schema}/${meta.table.name}/row`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pk }),
-      });
+      const res = await fetch(
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "row", schema: meta.schema }),
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pk }),
+        },
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Delete failed");
     },
@@ -436,13 +447,23 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       binary — not editable here
                     </span>
                   </div>
-                ) : cm.widget === "textarea" || cm.widget === "json" ? (
+                ) : cm.widget === "textarea" || cm.widget === "json" || cm.widget === "html" ? (
                   <textarea
-                    className={`input ${cm.widget === "json" ? "code" : ""}`}
-                    rows={cm.widget === "json" ? 5 : 3}
+                    className={`input ${cm.widget === "json" || cm.widget === "html" ? "code" : ""}`}
+                    rows={cm.widget === "textarea" ? 3 : cm.widget === "html" ? 8 : 5}
                     value={v}
                     onChange={(e) => setVal(name, e.target.value)}
                   />
+                ) : cm.widget === "image" || cm.widget === "video" || cm.widget === "audio" ? (
+                  <div>
+                    <input
+                      className="input"
+                      placeholder="URL"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                    {v && <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />}
+                  </div>
                 ) : (
                   <input
                     className="input"

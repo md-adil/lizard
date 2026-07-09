@@ -7,16 +7,21 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
+// junctionSchema/otherSchema are undefined when this connection has no real
+// schema (see supportsSchemas) — junction and "other" are always the same
+// connection for an M2M relationship, so both share that one resolution,
+// already decided by the caller (record page's `relations` construction).
 interface Target {
   connection: string;
-  junctionSchema: string;
+  junctionSchema: string | undefined;
   junctionTable: string;
   selfFkColumn: string;
   otherFkColumn: string;
-  otherSchema: string;
+  otherSchema: string | undefined;
   otherTable: string;
 }
 
@@ -36,18 +41,27 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     String(selfValue),
   ];
 
+  // every call here targets the junction table on the junction's connection
+  const junctionUrl = (path?: string, params?: Record<string, string | undefined>) =>
+    dataApiUrl({
+      connection: target.connection,
+      table: target.junctionTable,
+      path,
+      schema: target.junctionSchema,
+      params,
+    });
+
   const { data } = useQuery<{ rows: Record<string, unknown>[] }>({
     queryKey: key,
     queryFn: async () => {
-      const qs = new URLSearchParams({
-        selfFkColumn: target.selfFkColumn,
-        otherFkColumn: target.otherFkColumn,
-        otherSchema: target.otherSchema,
-        otherTable: target.otherTable,
-        selfValue: String(selfValue),
-      });
       const res = await fetch(
-        `/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}/linked?${qs}`,
+        junctionUrl("linked", {
+          selfFkColumn: target.selfFkColumn,
+          otherFkColumn: target.otherFkColumn,
+          otherSchema: target.otherSchema,
+          otherTable: target.otherTable,
+          selfValue: String(selfValue),
+        }),
       );
       if (!res.ok) throw new Error("failed to load linked records");
       return res.json();
@@ -59,7 +73,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     if (!junctionMeta) return;
     const pk: Record<string, unknown> = {};
     for (const k of junctionMeta.table.primaryKey) pk[k] = junctionRow[k];
-    await fetch(`/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}/row`, {
+    await fetch(junctionUrl("row"), {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pk }),
@@ -68,7 +82,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
   }
 
   async function link(otherId: string) {
-    await fetch(`/api/data/${target.connection}/${target.junctionSchema}/${target.junctionTable}`, {
+    await fetch(junctionUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

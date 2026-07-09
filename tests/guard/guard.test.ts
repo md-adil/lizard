@@ -4,11 +4,11 @@
 import { describe, it, expect } from "vitest";
 import { guardSql, GuardError, MAX_ROWS } from "@/lib/guard/guard";
 
-function blocked(sql: string, dialect: "postgres" | "duckdb" = "postgres") {
+function blocked(sql: string, dialect: "postgres" | "duckdb" | "mysql" = "postgres") {
   expect(() => guardSql(sql, dialect), sql).toThrow(GuardError);
 }
 
-function allowed(sql: string, dialect: "postgres" | "duckdb" = "postgres") {
+function allowed(sql: string, dialect: "postgres" | "duckdb" | "mysql" = "postgres") {
   expect(() => guardSql(sql, dialect), sql).not.toThrow();
 }
 
@@ -193,6 +193,19 @@ describe("SQL Guard — DuckDB federation path extras", () => {
   it("postgres passthrough execution", () => {
     blocked("SELECT postgres_execute('users_service', 'DROP TABLE customers')", "duckdb");
     blocked("SELECT * FROM postgres_query('users_service', 'SELECT pg_sleep(99)')", "duckdb");
+  });
+});
+
+describe("SQL Guard — MySQL path extras", () => {
+  it("blocks dangerous functions", () => {
+    blocked("SELECT sleep(10)", "mysql");
+    blocked("SELECT benchmark(1000000, encode('hello', 'goodbye'))", "mysql");
+    blocked("SELECT load_file('/etc/passwd')", "mysql");
+  });
+
+  it("legitimate MySQL queries pass", () => {
+    allowed("SELECT * FROM users", "mysql");
+    allowed("SELECT id, name FROM users WHERE id = 1 LIMIT 10", "mysql");
   });
 });
 

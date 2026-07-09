@@ -9,7 +9,11 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VisibilityState, Updater } from "@tanstack/react-table";
 
-export function useColumnVisibility(connectionId: string | undefined, schema: string, table: string) {
+// `schema` should be the resolved, always-concrete schema (e.g. TableMeta's
+// internal schemaMeta.name, not the possibly-undefined public meta.schema) —
+// this is a storage key, not something shown in a URL, so every engine needs
+// a real value here.
+export function useColumnVisibility(connectionId: string | undefined, schema: string | undefined, table: string) {
   const qc = useQueryClient();
   const enabled = !!connectionId && !!schema && !!table;
   const key = ["column-prefs", connectionId, schema, table];
@@ -19,7 +23,7 @@ export function useColumnVisibility(connectionId: string | undefined, schema: st
     queryFn: async () => {
       const qs = new URLSearchParams({
         connectionId: connectionId!,
-        schema,
+        schema: schema!,
         table,
       });
       const res = await fetch(`/api/column-prefs?${qs}`);

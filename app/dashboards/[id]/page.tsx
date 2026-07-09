@@ -10,6 +10,7 @@ import { ChartRenderer } from "@/components/charts/chart-renderer";
 import { SpecControls } from "@/components/charts/spec-controls";
 import { ResultGrid } from "@/components/ai/result-grid";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const REFRESH_OPTIONS = [
   { label: "off", value: null },
@@ -239,32 +240,26 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={onClose} />
-      <div
-        className="fixed z-50 inset-x-0 top-[5vh] mx-auto w-235 max-w-[95vw] bg-card border border-border rounded-xl p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
-        style={{ background: "var(--card)" }}
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        showCloseButton
+        className="w-235 max-w-[95vw] sm:max-w-[95vw] p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
       >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-1">
-            <button
-              className="tag"
-              style={tab === "ai" ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-              onClick={() => setTab("ai")}
-            >
-              ✦ Describe it
-            </button>
-            <button
-              className="tag"
-              style={tab === "sql" ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-              onClick={() => setTab("sql")}
-            >
-              From SQL
-            </button>
-          </div>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            ✕
-          </Button>
+        <div className="flex items-center gap-1 mb-4 pr-8">
+          <button
+            className="tag"
+            style={tab === "ai" ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
+            onClick={() => setTab("ai")}
+          >
+            ✦ Describe it
+          </button>
+          <button
+            className="tag"
+            style={tab === "sql" ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
+            onClick={() => setTab("sql")}
+          >
+            From SQL
+          </button>
         </div>
 
         {tab === "ai" ? (
@@ -398,8 +393,8 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
             )}
           </div>
         )}
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }
 

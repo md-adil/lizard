@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { probeCredentials } from "@/lib/db/pools";
-import { parsePostgresUri } from "@/lib/parse-uri";
+import { parseConnectionUri } from "@/lib/parse-uri";
+import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { requireAdmin } from "@/lib/auth/session";
 
 // Probe connectivity without saving. Accepts either explicit fields or a `uri`.
 const schema = z.object({
   uri: z.string().optional(),
+  engine: z.enum(DB_ENGINES as [DbEngine, ...DbEngine[]]).optional(),
   host: z.string().optional(),
   port: z.coerce.number().optional(),
   database: z.string().optional(),
@@ -21,16 +23,18 @@ export async function POST(req: Request) {
   try {
     await requireAdmin();
     const b = schema.parse(await req.json());
+    let engine: DbEngine = b.engine ?? "postgres";
     let host = b.host;
-    let port = b.port ?? 5432;
+    let port = b.port ?? DEFAULT_PORTS[engine];
     let database = b.database;
     let readUser = b.readUser;
     let readPassword = b.readPassword ?? "";
     let ssl = b.ssl ?? false;
 
     if (b.uri) {
-      const p = parsePostgresUri(b.uri);
+      const p = parseConnectionUri(b.uri);
       if (!p) return fail(new Error("Could not parse that connection URI"));
+      engine = p.engine;
       host = p.host;
       port = p.port;
       database = p.database;
@@ -38,14 +42,23 @@ export async function POST(req: Request) {
       readPassword = p.password;
       ssl = p.ssl;
     }
+
     if (!host || !database || !readUser) {
       return fail(new Error("host, database and read user are required to test"));
     }
 
-    const read = await probeCredentials({ host, port, database, user: readUser, password: readPassword, ssl });
+    const read = await probeCredentials({ engine, host, port, database, user: readUser, password: readPassword, ssl });
     let write: string | null = null;
     if (b.writeUser) {
-      write = await probeCredentials({ host, port, database, user: b.writeUser, password: b.writePassword ?? "", ssl });
+      write = await probeCredentials({
+        engine,
+        host,
+        port,
+        database,
+        user: b.writeUser,
+        password: b.writePassword ?? "",
+        ssl,
+      });
     }
     return ok({ read, write });
   } catch (e) {

@@ -17,7 +17,11 @@ export type Widget =
   | "network"
   | "interval"
   | "uuid"
-  | "bytea";
+  | "bytea"
+  | "html"
+  | "image"
+  | "video"
+  | "audio";
 
 const NUMERIC_UDTS = new Set(["int2", "int4", "int8", "float4", "float8", "numeric", "money", "oid"]);
 const RANGE_UDTS = new Set([

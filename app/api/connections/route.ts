@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     }
     const conn = addConnection({
       name: body.name,
+      engine: body.engine,
       host: body.host,
       port: body.port,
       database: body.database,

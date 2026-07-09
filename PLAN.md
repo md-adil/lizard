@@ -24,7 +24,7 @@ This document is written to be handed to a strong coding model. It defines the c
 **Non-goals (v1):**
 - Not a low-code app builder (no drag-and-drop page composer).
 - Not a BI warehouse tool (no ETL, no materialized-view pipelines).
-- Not multi-database-*engine* at first — **Postgres only**. "Multi-database" here means many *Postgres* databases, not MySQL/SQLite. Abstract the introspection + federation layer so other engines can come later, but do not build for them yet.
+- Not multi-database-*engine* at first — **Postgres only**. "Multi-database" here means many *Postgres* databases, not MySQL/SQLite. Abstract the introspection + federation layer so other engines can come later, but do not build for them yet. *(Lifted in **Phase 9** — MySQL then MongoDB behind a driver abstraction.)*
 - No **cross-database writes / distributed transactions** in v1. Writes always target exactly one connection (the service that owns the row). Federation is read-only.
 
 ---
@@ -353,8 +353,70 @@ type (table/kanban/gallery/calendar), and is saved as part of a saved view.
 widgets for every common Postgres type, save named views, import/export CSV, watch a live
 grid, and comment on records — all with zero config and no DDL on their database.
 
+### Phase 9 — Multi-engine support (MySQL, then MongoDB) 🧩
+
+Until now "multi-database" meant many *Postgres* databases (§1 non-goals). Phase 9
+lifts that: Lizard becomes multi-*engine*. This is two projects of very different
+shape — do not conflate them.
+
+- **MySQL is a driver-abstraction effort.** The relational model still holds; it is
+  broad but mechanical. Every SQL fragment differs (backtick idents, `?` params,
+  `LIKE`/`REGEXP`, no arrays, no `RETURNING`, `CAST()` not `::`, different
+  `information_schema`, inline enums, different error codes) but the *shape* of
+  introspect/list/CRUD/filter is shared with Postgres.
+- **MongoDB is a second query paradigm.** No SQL, no schema, no fixed columns. The
+  catalog must be inferred by sampling documents; the guard, executor, filters, and
+  the entire text-to-SQL AI path stop being SQL. Federation with Mongo is weak
+  (DuckDB has no first-class Mongo attach). Several Phase-8 features are partial.
+
+**Locked decisions (drive the code):**
+1. **One backend home.** All backend/domain code lives under `app/api/` (Next.js
+   colocation — non-route modules under `app/api/` are never routed). No second
+   top-level `api/` dir. `lib/` shrinks to a shared kernel (types, utils, zod,
+   auth). Route handlers (`app/api/**/route.ts`) become thin HTTP adapters.
+2. **Domain-primary, driver as a strategy axis.** The new home is
+   `app/api/database/`: a `Dialect`/`Driver` interface (`driver.ts`), a shared
+   relational base (`sql/`) that Postgres + MySQL extend via dialect hooks, and
+   per-engine implementations under `dialect/` / `drivers/`. Mongo is a fully
+   separate implementation, not an extension of the relational base. Cross-driver
+   domains (guard, ai, federation, introspect, crud) call through the interface,
+   never a driver folder directly.
+3. **Schema stays internal & always-present.** The `connection → schema → table`
+   namespace is preserved everywhere in the data model. Non-Postgres engines report
+   a **synthetic schema** (MySQL: the database name; Mongo: `default`) so
+   introspection/CRUD/AI stay uniform.
+4. **Schema is optional sugar in the browse URL only.** `/browse/<connection>/<table>?schema=public`
+   — the browse UI resolves an omitted schema (single-schema connection → that one;
+   Postgres → `public`; otherwise 404 asking to disambiguate) and calls the API with
+   the resolved schema. **The API path stays fully qualified** (`/api/data/[connection]/[schema]/[table]`) —
+   sugar at the edge, precision in the core.
+5. **MySQL connection = one database** (schema omitted in the UI). A MySQL server
+   with several databases registers as several connections; an intra-server
+   cross-database join therefore routes through federation. Accepted trade for a
+   simpler URL/mental model.
+6. **`engine` on every connection** (`postgres | mysql | mongo`, default `postgres`).
+   Existing connections migrate to `postgres` transparently.
+
+**Phasing (build in order, keep the build green at each step):**
+- **9A — Extract the driver interface (no behavior change).** Add `engine` to the
+  connection model. Stand up `app/api/database/` with the `Dialect`/`Driver`
+  interface and the **Postgres** implementation that mirrors today's behavior. Move
+  `lib/{db,introspect,guard,federation,ai,data,metadata}` into `app/api/` behind the
+  interface incrementally (mechanical import churn; guard with the adversarial suite).
+- **9B — MySQL, single-connection.** MySQL dialect + driver (introspect via its
+  `information_schema`, backtick/`?`/`CAST`/`LIKE`/error-map, type→widget). Browse,
+  CRUD, filters, single-DB AI. Ship without federation.
+- **9C — MySQL federation.** DuckDB `mysql` extension → cross-engine PG↔MySQL
+  joins/charts through the existing federation path.
+- **9D — MongoDB, browse + CRUD only.** Sampling-based introspection, document grid,
+  single-doc CRUD, a Mongo query language + its own read-only guard (block
+  `$out`/`$merge`/`$function`/`$where`/cross-db `$lookup`). Federation and
+  prompt-to-chart-across-Mongo are **out of scope** for Mongo v1.
+- **9E — (stretch) Mongo in AI/federation**, to whatever degree DuckDB's Mongo
+  story allows.
+
 ### Later / stretch
-- Additional engines (MySQL, SQLite) behind the introspection abstraction.
+- SQLite behind the same driver abstraction (relational, easiest engine after MySQL).
 - Embeddings-based schema retrieval for very large schemas.
 - Saved AI "workflows," scheduled reports.
 - Plugin system for custom widgets/panels.
@@ -365,26 +427,35 @@ grid, and comment on records — all with zero config and no DDL on their databa
 
 ## 9. Repository structure (suggested)
 
+All backend/domain code lives under `app/api/` (one backend home — Next.js
+colocation means non-route `.ts` modules there are never routed). `lib/` is a
+shared kernel only. Route handlers (`app/api/**/route.ts`) are thin HTTP adapters.
+
 ```
 lizard/
 ├─ app/                    # Next.js App Router
-│  ├─ (browser)/           # table browser + CRUD UI
+│  ├─ browse/              # table browser + CRUD UI  (/browse/<conn>/<table>?schema=)
 │  ├─ ai/                  # AI query console
 │  ├─ dashboards/          # charts & dashboards
-│  └─ api/                 # route handlers (or use server actions)
-├─ lib/
-│  ├─ db/                  # pg pool, kysely, roles
-│  ├─ introspect/          # schema model + heuristics
-│  ├─ guard/               # SQL Guard (parse, validate, limit)
-│  ├─ ai/                  # Anthropic client, prompts, tool schemas
-│  ├─ charts/              # chart-spec types + suggestion engine
-│  └─ metadata/            # overrides, saved queries, dashboards
+│  └─ api/                 # ── the backend home ──
+│     ├─ **/route.ts       #    thin HTTP adapters (parse req → call domain → shape resp)
+│     └─ database/         #    engine layer
+│        ├─ driver.ts      #      Dialect + Driver interfaces (the seam)
+│        ├─ registry.ts    #      engine → driver/dialect resolver
+│        ├─ dialect/       #      postgres.ts, mysql.ts (relational SQL primitives)
+│        ├─ sql/           #      shared relational introspect/list/CRUD (PG + MySQL)
+│        └─ drivers/       #      mongo.ts (document store — separate builder)
+├─ lib/                    # shared kernel: types, utils, zod, auth  (no engine logic)
 ├─ components/             # shadcn/ui + shared UI
-├─ metadata-migrations/    # _lizard schema migrations
+├─ migrations/             # _lizard (SQLite) metadata-store migrations
 ├─ tests/
 │  └─ guard/               # adversarial SQL-injection / prompt-injection suite
 └─ docker-compose.yml
 ```
+
+> During Phase 9A the current `lib/{db,introspect,guard,federation,ai,data,metadata}`
+> modules migrate under `app/api/` incrementally; until a module has moved, treat its
+> `lib/` location as the temporary home. New engine code is born under `app/api/database/`.
 
 ---
 

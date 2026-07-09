@@ -13,6 +13,7 @@ import type { ColumnMeta } from "./useTableMeta";
 import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/data/filters";
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
+import { dataApiUrl } from "./data-api";
 import { Button } from "@/components/ui/button";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
@@ -95,7 +96,13 @@ function useRefSearch(cm: ColumnMeta, search: string, enabled: boolean) {
     queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
       const res = await fetch(
-        `/api/data/${ref.connection}/${ref.schema}/${ref.table}/refs?column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
+        dataApiUrl({
+          connection: ref.connection,
+          table: ref.table,
+          path: "refs",
+          schema: ref.schema,
+          params: { column: ref.column, q: search },
+        }),
       );
       if (!res.ok) throw new Error("refs failed");
       return res.json();

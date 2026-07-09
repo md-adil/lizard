@@ -6,10 +6,12 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "./useTableMeta";
+import { dataApiUrl } from "./data-api";
 import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ListResponse {
   rows: Record<string, unknown>[];
@@ -24,7 +26,7 @@ export function ReferencePickerModal({
   onPick,
   onClose,
 }: {
-  target: { connection: string; schema: string; table: string; column: string };
+  target: { connection: string; schema: string | undefined; table: string; column: string };
   title: string;
   onPick: (value: string, label: string | null) => void;
   onClose: () => void;
@@ -44,19 +46,22 @@ export function ReferencePickerModal({
   const { data, isLoading, isFetching } = useQuery<ListResponse>({
     queryKey: ["refpick", target.connection, target.schema, target.table, page, sort, sortDir, filterSet, search],
     queryFn: async () => {
-      const qs = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        ...(sort ? { sort, sortDir } : {}),
-        ...(filterSet.conditions.length
-          ? {
-              filters: JSON.stringify(filterSet.conditions),
-              combinator: filterSet.combinator,
-            }
-          : {}),
-        ...(search ? { search } : {}),
-      });
-      const res = await fetch(`/api/data/${target.connection}/${target.schema}/${target.table}?${qs}`);
+      const res = await fetch(
+        dataApiUrl({
+          connection: target.connection,
+          table: target.table,
+          schema: target.schema,
+          params: {
+            page: String(page),
+            pageSize: String(pageSize),
+            ...(sort ? { sort, sortDir } : {}),
+            ...(filterSet.conditions.length
+              ? { filters: JSON.stringify(filterSet.conditions), combinator: filterSet.combinator }
+              : {}),
+            ...(search ? { search } : {}),
+          },
+        }),
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to load rows");
       return body;
@@ -90,22 +95,16 @@ export function ReferencePickerModal({
   const visibleCols = meta?.columns.filter((c) => !c.hidden) ?? [];
 
   return (
-    <>
-      <div className="fixed inset-0 z-60" style={{ background: "var(--overlay)" }} onClick={onClose} />
-      <div
-        className="fixed z-70 inset-x-0 top-[5vh] mx-auto w-260 max-w-[95vw] panel p-5 max-h-[88vh] flex flex-col"
-        style={{ background: "var(--card)" }}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-[15px] font-semibold">Pick {title}</h3>
-          <span className="tag code">
-            {target.connection} · {target.schema}.{target.table}
-          </span>
-          <span className="flex-1" />
-          <Button variant="outline" size="sm" onClick={onClose}>
-            ✕
-          </Button>
-        </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent showCloseButton className="w-260 max-w-[95vw] sm:max-w-[95vw] max-h-[88vh] flex flex-col p-5">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 pr-8">
+            Pick {title}
+            <span className="tag code">
+              {target.connection} · {[target.schema, target.table].filter(Boolean).join(".")}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
 
         <div className="mb-3">
           <TableSearchBar
@@ -176,8 +175,8 @@ export function ReferencePickerModal({
           <span className="flex-1" />
           <span style={{ color: "var(--muted-foreground-faint)" }}>Click a row to select it</span>
         </div>
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }
 

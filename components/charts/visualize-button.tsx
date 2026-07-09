@@ -10,6 +10,7 @@ import { suggestCharts } from "@/lib/charts/suggest";
 import { ChartRenderer } from "./chart-renderer";
 import { SpecControls } from "./spec-controls";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function VisualizeButton({ result, source }: { result: QueryResult; source: QueryRequest }) {
   const [open, setOpen] = useState(false);
@@ -78,18 +79,11 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
         📊 Visualize
       </Button>
       {open && spec && (
-        <>
-          <div className="fixed inset-0 z-40" style={{ background: "var(--overlay)" }} onClick={() => setOpen(false)} />
-          <div
-            className="fixed z-50 inset-x-0 top-[6vh] mx-auto w-[880px] max-w-[94vw] panel p-5"
-            style={{ background: "var(--card)" }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[15px] font-semibold">Visualize result</h3>
-              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
-                ✕
-              </Button>
-            </div>
+        <Dialog open onOpenChange={setOpen}>
+          <DialogContent showCloseButton className="w-220 max-w-[94vw] sm:max-w-[94vw] p-5">
+            <DialogHeader>
+              <DialogTitle>Visualize result</DialogTitle>
+            </DialogHeader>
             <div className="flex gap-5">
               <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--background)" }}>
                 <div className="text-[13px] font-medium mb-2">{spec.title}</div>
@@ -127,8 +121,8 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
                 </div>
               </div>
             </div>
-          </div>
-        </>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

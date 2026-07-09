@@ -49,6 +49,13 @@ export function vfkTargetColumn(v: VirtualFk): string | undefined {
 
 // Normalize a source value in JS to mirror the SQL transform on the target,
 // so tuple keys computed on both sides line up.
+//
+// Always returns text, and that is the point: lower/upper/trim are text
+// operations, and the target side is compared as text to match. Callers on an
+// indexed path (a plain, untransformed key lookup) must NOT route values
+// through here — stringifying an integer key would defeat its index. Guard
+// with a `transform && transform !== "none"` check and bind the raw value
+// otherwise.
 export function applyTransform(value: unknown, t: VfkTransform = "none"): string {
   const s = String(value);
   switch (t) {

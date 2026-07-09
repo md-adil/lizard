@@ -4,8 +4,9 @@
 import type { QueryRequest, QueryResult } from "@/lib/types";
 import { guardSql, GuardError, MAX_ROWS } from "@/lib/guard/guard";
 import { getConnection, logAudit } from "@/lib/metadata/store";
-import { getPool } from "@/lib/db/pools";
+import { getClient } from "@/lib/db/pools";
 import { runFederated } from "@/lib/federation/duckdb";
+import { getDialect } from "@/app/api/database/registry";
 
 // minimal OID → type-name map for result column labels
 const OID_TYPES: Record<number, string> = {
@@ -26,6 +27,24 @@ const OID_TYPES: Record<number, string> = {
   3802: "jsonb",
 };
 
+const MYSQL_TYPES: Record<number, string> = {
+  1: "tinyint",
+  2: "smallint",
+  3: "integer",
+  4: "float",
+  5: "double",
+  8: "bigint",
+  9: "mediumint",
+  10: "date",
+  11: "time",
+  12: "datetime",
+  13: "year",
+  245: "json",
+  246: "decimal",
+  253: "varchar",
+  254: "char",
+};
+
 export { GuardError };
 
 export async function runGuardedQuery(req: QueryRequest, actor = "admin"): Promise<QueryResult> {
@@ -40,8 +59,8 @@ export async function runGuardedQuery(req: QueryRequest, actor = "admin"): Promi
   if (req.target === "single" && conns.length !== 1) {
     throw new GuardError("Single-target queries must name exactly one connection");
   }
-  if (req.target === "single" && req.dialect !== "postgres") {
-    throw new GuardError("Single-target queries must use the postgres dialect");
+  if (req.target === "single" && req.dialect !== conns[0].engine) {
+    throw new GuardError(`Single-target queries must use the connection's engine dialect: ${conns[0].engine}`);
   }
   if (req.target === "federated" && req.dialect !== "duckdb") {
     throw new GuardError("Federated queries must use the duckdb dialect");
@@ -82,17 +101,24 @@ async function runSingle(
   originalSql: string,
 ): Promise<QueryResult> {
   const started = Date.now();
-  const pool = getPool(conn, "read");
-  const client = await pool.connect();
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
   try {
-    // belt-and-suspenders on top of the read-only role
-    await client.query("BEGIN TRANSACTION READ ONLY");
+    const statements = dialect.beginReadOnly();
+    for (const stmt of statements) {
+      await client.query(stmt);
+    }
     const res = await client.query(wrappedSql);
-    await client.query("COMMIT");
+    await client.commit();
     const truncated = res.rows.length > MAX_ROWS;
     const rows = truncated ? res.rows.slice(0, MAX_ROWS) : res.rows;
     return {
-      columns: res.fields.map((f) => ({ name: f.name, type: OID_TYPES[f.dataTypeID] ?? `oid:${f.dataTypeID}` })),
+      columns: res.fields.map((f) => {
+        if (conn.engine === "mysql") {
+          return { name: f.name, type: MYSQL_TYPES[f.columnType ?? 0] ?? `type:${f.columnType}` };
+        }
+        return { name: f.name, type: OID_TYPES[f.dataTypeID ?? 0] ?? `oid:${f.dataTypeID}` };
+      }),
       rows,
       rowCount: rows.length,
       truncated,
@@ -101,11 +127,7 @@ async function runSingle(
       sql: originalSql,
     };
   } catch (e) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {
-      /* connection may be dead */
-    }
+    await client.rollback().catch(() => {});
     throw e;
   } finally {
     client.release();

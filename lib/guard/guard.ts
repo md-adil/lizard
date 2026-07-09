@@ -124,6 +124,12 @@ const DUCKDB_DENYLIST = [
   "enable_external_access",
 ];
 
+const MYSQL_DENYLIST = [
+  "sleep",
+  "benchmark",
+  "load_file",
+];
+
 // Strip string literals (single-quoted, dollar-quoted) so keyword scans can't
 // be fooled by words inside strings, then reject any comment syntax outright.
 function stripStrings(sql: string): string {
@@ -202,6 +208,11 @@ function lexicalChecks(sql: string, dialect: SqlDialect): string {
     // any function that reads files by name, e.g. read_something('...')
     if (/\bread_[a-z_]*\s*\(/.test(lower)) {
       throw new GuardError("File-reading functions are not allowed");
+    }
+  }
+  if (dialect === "mysql") {
+    for (const kw of MYSQL_DENYLIST) {
+      if (hasWord(kw)) throw new GuardError(`Forbidden on the MySQL path: ${kw}`);
     }
   }
   return trimmed;

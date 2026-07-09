@@ -1,0 +1,42 @@
+// Target database engine. Postgres is the original; MySQL is a relational
+// sibling (Phase 9B); Mongo is a document store (Phase 9D). The `schema`
+// level is always present internally — non-Postgres engines report a synthetic
+// schema (MySQL: the database name; Mongo: "default").
+export type DbEngine = "postgres" | "mysql" | "mongo";
+
+export const DB_ENGINES: DbEngine[] = ["postgres", "mysql", "mongo"];
+
+// Only Postgres exposes a real, independently-named schema namespace; MySQL
+// reports the database name and Mongo "default" as a single synthetic
+// schema. Mirrors Dialect.supportsSchemas (app/api/database/driver.ts) —
+// that one lives server-side per SQL dialect, this is the same fact as a
+// plain function of DbEngine so client code can use it without pulling in
+// driver/dialect implementations.
+export function supportsSchemas(engine: DbEngine): boolean {
+  return engine === "postgres";
+}
+
+// Default TCP port per engine, used when a connection omits one.
+export const DEFAULT_PORTS: Record<DbEngine, number> = {
+  postgres: 5432,
+  mysql: 3306,
+  mongo: 27017,
+};
+
+export interface ConnectionConfig {
+  id: string;
+  name: string; // unique slug-ish label, used as the federation alias
+  engine: DbEngine;
+  host: string;
+  port: number;
+  database: string;
+  readUser: string;
+  readPassword: string;
+  writeUser: string | null;
+  writePassword: string | null;
+  ssl: boolean;
+  allowedSchemas: string[] | null; // null = all non-system schemas
+  createdAt: string;
+}
+
+export type ConnectionInput = Omit<ConnectionConfig, "id" | "createdAt">;
