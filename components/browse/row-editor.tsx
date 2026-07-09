@@ -7,6 +7,7 @@ import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
+import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -446,13 +447,23 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       binary — not editable here
                     </span>
                   </div>
-                ) : cm.widget === "textarea" || cm.widget === "json" ? (
+                ) : cm.widget === "textarea" || cm.widget === "json" || cm.widget === "html" ? (
                   <textarea
-                    className={`input ${cm.widget === "json" ? "code" : ""}`}
-                    rows={cm.widget === "json" ? 5 : 3}
+                    className={`input ${cm.widget === "json" || cm.widget === "html" ? "code" : ""}`}
+                    rows={cm.widget === "textarea" ? 3 : cm.widget === "html" ? 8 : 5}
                     value={v}
                     onChange={(e) => setVal(name, e.target.value)}
                   />
+                ) : cm.widget === "image" || cm.widget === "video" || cm.widget === "audio" ? (
+                  <div>
+                    <input
+                      className="input"
+                      placeholder="URL"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                    {v && <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />}
+                  </div>
                 ) : (
                   <input
                     className="input"

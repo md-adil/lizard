@@ -471,7 +471,7 @@ async function fetchFkLabels(
 
         const keyCols = job.pairs.map((_, i) => `k${i}`);
         const onClause = job.pairs
-          .map((p, i) => `${targetExpr(p.to, p.transform)} = keys.k${i}`)
+          .map((p, i) => `${targetExpr(p.to, p.transform)} = vfk_keys.k${i}`)
           .join(" AND ");
         const selectKeys = job.pairs.map(
           (p, i) => `${targetExpr(p.to, p.transform)} AS k${i}`,
@@ -495,7 +495,7 @@ async function fetchFkLabels(
           const res = await client.query(
             `SELECT ${selectKeys.join(", ")}, ${selectDisplay} AS label
              FROM ${fqTable} t
-             JOIN ${keysSubquery} keys
+             JOIN ${keysSubquery} vfk_keys
                ON ${onClause}
              ${where}`,
             params,

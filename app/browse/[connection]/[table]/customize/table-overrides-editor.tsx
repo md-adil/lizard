@@ -29,6 +29,10 @@ const WIDGETS = [
   "interval",
   "uuid",
   "bytea",
+  "html",
+  "image",
+  "video",
+  "audio",
 ];
 
 export function TableOverridesEditor({

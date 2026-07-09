@@ -13,6 +13,8 @@ import { RecordComments } from "@/components/browse/record-comments";
 import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
+import { MediaPreview, type MediaKind } from "@/components/browse/media-preview";
+import { ShadowDom } from "@/components/ui/shadow-dom";
 import { useSchemaParam, tableHref, recordHref } from "@/components/browse/use-schema-param";
 import { humanize } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
@@ -149,13 +151,17 @@ function FieldList({
   row: Record<string, unknown>;
   fkLabels: Record<string, Record<string, string>>;
 }) {
-  const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "json");
+  const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "json" && c.widget !== "html");
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
       {cols.map((cm) => {
         const v = row[cm.col.name];
         const label = cm.ref && v != null ? fkLabels[cm.col.name]?.[String(v)] : undefined;
         const f = formatCell(v);
+        const isMedia =
+          (cm.widget === "image" || cm.widget === "video" || cm.widget === "audio") &&
+          typeof v === "string" &&
+          v !== "";
         return (
           <div key={cm.col.name} className="min-w-0">
             <div
@@ -164,30 +170,142 @@ function FieldList({
             >
               {cm.label}
             </div>
-            <div
-              className="text-[13px] truncate"
-              style={{
-                color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)",
-              }}
-              title={cm.redacted ? undefined : f.text}
-            >
-              {cm.redacted ? (
-                <RedactedValue value={v} />
-              ) : label ? (
-                <>
-                  {label}{" "}
-                  <span className="tag code" style={{ fontSize: 10 }}>
-                    {String(v)}
-                  </span>
-                </>
-              ) : (
-                f.text
-              )}
-            </div>
+            {isMedia ? (
+              <MediaPreview
+                kind={cm.widget as MediaKind}
+                value={v as string}
+                className={cm.widget === "audio" ? "w-full" : "h-16 rounded border object-cover"}
+              />
+            ) : (
+              <div
+                className="text-[13px] truncate"
+                style={{
+                  color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)",
+                }}
+                title={cm.redacted ? undefined : f.text}
+              >
+                {cm.redacted ? (
+                  <RedactedValue value={v} />
+                ) : label ? (
+                  <>
+                    {label}{" "}
+                    <span className="tag code" style={{ fontSize: 10 }}>
+                      {String(v)}
+                    </span>
+                  </>
+                ) : (
+                  f.text
+                )}
+              </div>
+            )}
           </div>
         );
       })}
     </div>
+  );
+}
+
+// dedicated full-width card per HTML column — renders the markup in a Shadow
+// DOM (isolates its styles from the app) with inline source editing.
+function HtmlCard({
+  meta,
+  row,
+  pk,
+  column,
+}: {
+  meta: TableMeta;
+  row: Record<string, unknown>;
+  pk: Record<string, unknown>;
+  column: string;
+}) {
+  const qc = useQueryClient();
+  const stored = row[column];
+  const value = typeof stored === "string" ? stored : stored == null ? "" : String(stored);
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState(false);
+  const [text, setText] = useState(value);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(
+        dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "row", schema: meta.schema }),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pk, data: { [column]: text === "" ? null : text } }),
+        },
+      );
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Save failed");
+    },
+    onSuccess: () => {
+      setEditing(false);
+      setErr(null);
+      qc.invalidateQueries({ queryKey: ["record"] });
+      qc.invalidateQueries({
+        queryKey: ["rows", meta.connection, meta.schema, meta.table.name],
+      });
+    },
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  const cm = meta.columns.find((c) => c.col.name === column);
+  return (
+    <RelatedCard
+      title={cm?.label ?? humanize(column)}
+      subtitle="html"
+      menu={[
+        ...(value ? [{ label: raw ? "Show rendered" : "Show HTML source", onClick: () => setRaw((r) => !r) }] : []),
+        ...(meta.isView
+          ? []
+          : [
+              editing
+                ? {
+                    label: "Cancel editing",
+                    onClick: () => {
+                      setEditing(false);
+                      setText(value);
+                      setErr(null);
+                    },
+                  }
+                : {
+                    label: "✎ Edit HTML",
+                    onClick: () => {
+                      setText(value);
+                      setEditing(true);
+                    },
+                  },
+            ]),
+      ]}
+    >
+      {editing ? (
+        <>
+          <textarea className="input code w-full" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
+          {err && (
+            <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
+              {err}
+            </p>
+          )}
+          <Button size="sm" className="mt-2" disabled={save.isPending} onClick={() => save.mutate()}>
+            {save.isPending ? "Saving…" : "Save HTML"}
+          </Button>
+        </>
+      ) : !value ? (
+        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
+          ∅ null
+        </p>
+      ) : raw ? (
+        <pre
+          className="code text-[12px] whitespace-pre-wrap max-h-96 overflow-auto scrollbar-thin"
+          style={{ color: "var(--foreground)" }}
+        >
+          {value}
+        </pre>
+      ) : (
+        <ShadowDom html={value} className="block max-h-96 overflow-auto scrollbar-thin" />
+      )}
+    </RelatedCard>
   );
 }
 
@@ -713,6 +831,7 @@ function RecordView() {
 
   const row = data?.row;
   const jsonColumns = meta.columns.filter((c) => c.widget === "json" && !c.hidden);
+  const htmlColumns = meta.columns.filter((c) => c.widget === "html" && !c.hidden);
   const pkText = Object.entries(pk)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
@@ -847,6 +966,12 @@ function RecordView() {
               <FieldList meta={meta} row={row} fkLabels={data!.fkLabels} />
             </RelatedCard>
           </div>
+
+          {htmlColumns.map((c) => (
+            <div key={c.col.name} className="col-span-2">
+              <HtmlCard meta={meta} row={row} pk={pk} column={c.col.name} />
+            </div>
+          ))}
 
           {jsonColumns.map((c) => (
             <JsonCard key={c.col.name} meta={meta} row={row} pk={pk} column={c.col.name} />
