@@ -534,7 +534,12 @@ function HasManyCard({
   fkColumn,
   value,
 }: {
-  source: { connection: string; schema: string | undefined; table: string };
+  source: {
+    connection: string;
+    schema: string | undefined;
+    table: string;
+    sourceConstants?: { toColumn: string; value: string }[];
+  };
   fkColumn: string;
   value: unknown;
 }) {
@@ -548,9 +553,24 @@ function HasManyCard({
     total: number | null;
     fkLabels: Record<string, Record<string, string>>;
   }>({
-    queryKey: ["related", source.connection, source.schema, source.table, fkColumn, String(value)],
+    queryKey: [
+      "related",
+      source.connection,
+      source.schema,
+      source.table,
+      fkColumn,
+      String(value),
+      JSON.stringify(source.sourceConstants || []),
+    ],
     queryFn: async () => {
-      const filters = JSON.stringify([{ column: fkColumn, op: "eq", value: String(value) }]);
+      const filters = JSON.stringify([
+        { column: fkColumn, op: "eq", value: String(value) },
+        ...(source.sourceConstants || []).map((c) => ({
+          column: c.toColumn,
+          op: "eq",
+          value: c.value,
+        })),
+      ]);
       const res = await fetch(
         dataApiUrl({
           connection: source.connection,
@@ -722,6 +742,7 @@ function RecordView() {
           schema: string | undefined;
           table: string;
           fkColumn: string;
+          sourceConstants?: { toColumn: string; value: string }[];
         }[],
         manyToMany: [] as {
           connection: string;
@@ -756,6 +777,7 @@ function RecordView() {
       schema: string | undefined;
       table: string;
       fkColumn: string;
+      sourceConstants?: { toColumn: string; side?: "source" | "target"; value: string }[];
     }[] = [];
     // reverse real FKs — scan tables in the same schema (loaded on demand)
     if (schemaMeta?.tables) {
@@ -811,6 +833,7 @@ function RecordView() {
         schema: connectionSupportsSchemas(catalog, v.fromConnection) ? fromSchema : undefined,
         table: v.fromTable,
         fkColumn,
+        sourceConstants: v.constants.filter((c) => c.side === "source"),
       });
     }
     return { belongsTo, hasMany, manyToMany };
@@ -947,7 +970,7 @@ function RecordView() {
           <div className="col-span-2">
             <RelatedCard
               title="Details"
-              subtitle={`${params.connection}.${schema}.${params.table}`}
+              subtitle={[params.connection, schema, params.table].filter(Boolean).join(".")}
               menu={
                 meta.isView
                   ? []

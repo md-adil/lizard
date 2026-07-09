@@ -11,6 +11,7 @@ export interface VfkPair {
 // Constant predicate on the target side, e.g. target.type = 'user'.
 export interface VfkConstant {
   toColumn: string;
+  side: "source" | "target";
   value: string; // compared as text
 }
 

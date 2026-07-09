@@ -96,9 +96,9 @@ export default function TablePage() {
         ...(sort ? { sort, sortDir } : {}),
         ...(filterSet.conditions.length
           ? {
-              filters: JSON.stringify(filterSet.conditions),
-              combinator: filterSet.combinator,
-            }
+            filters: JSON.stringify(filterSet.conditions),
+            combinator: filterSet.combinator,
+          }
           : {}),
         ...(search ? { search } : {}),
       });
@@ -128,7 +128,7 @@ export default function TablePage() {
   if (!meta)
     return (
       <PagePad>
-        Table {schema}.{params.table} not found on “{params.connection}”.
+        Table {schema ? `${schema}.` : ""}{params.table} not found on “{params.connection}”.
       </PagePad>
     );
 
@@ -184,9 +184,9 @@ export default function TablePage() {
     ...(sort ? { sort, sortDir } : {}),
     ...(filterSet.conditions.length
       ? {
-          filters: JSON.stringify(filterSet.conditions),
-          combinator: filterSet.combinator,
-        }
+        filters: JSON.stringify(filterSet.conditions),
+        combinator: filterSet.combinator,
+      }
       : {}),
     ...(search ? { search } : {}),
   });

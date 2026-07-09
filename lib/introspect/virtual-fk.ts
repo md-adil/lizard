@@ -75,7 +75,12 @@ export function vfkSummary(v: VirtualFk): string {
   const pairs = v.pairs
     .map((p) => `${p.from} = ${p.to}${p.transform && p.transform !== "none" ? ` [${p.transform}]` : ""}`)
     .join(", ");
-  const consts = v.constants.map((c) => `${c.toColumn}='${c.value}'`).join(", ");
+  const consts = v.constants
+    .map((c) => {
+      const tbl = c.side === "source" ? v.fromTable : v.toTable;
+      return `${tbl}.${c.toColumn}='${c.value}'`;
+    })
+    .join(", ");
   const target = `${v.toConnection}.${v.toSchema}.${v.toTable}`;
   return [`${target} ON ${pairs}`, consts ? `WHERE ${consts}` : "", v.joinHint ? `HINT: ${v.joinHint}` : ""]
     .filter(Boolean)

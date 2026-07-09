@@ -16,6 +16,29 @@ import {
   type TableMeta,
   type CatalogResponse,
 } from "@/components/browse/useTableMeta";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxGroup,
+  ComboboxLabel,
+  ComboboxSeparator,
+  ComboboxEmpty,
+  ComboboxCollection,
+} from "@/components/ui/combobox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const TRANSFORMS: { value: VfkTransform; label: string }[] = [
   { value: "none", label: "exact" },
@@ -54,6 +77,7 @@ export function VirtualFkEditor({
   const [joinHint, setJoinHint] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const toConn = catalog.connections.find((c) => c.connectionName === toConnection);
   // The target is user-picked, so it may be a different connection (and
@@ -147,25 +171,67 @@ export function VirtualFkEditor({
   }
 
   async function remove(id: string) {
-    await fetch(`/api/virtual-fks/${id}`, { method: "DELETE" });
-    onSaved();
+    setDeletingId(id);
+    try {
+      await fetch(`/api/virtual-fks/${id}`, { method: "DELETE" });
+      onSaved();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
     <div>
       {meta.virtualFks.map((v) => (
-        <Card key={v.id} size="sm" className="px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2">
+        <Card
+          key={v.id}
+          size="sm"
+          className={`px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2 transition-opacity ${
+            deletingId === v.id ? "opacity-50 pointer-events-none" : ""
+          }`}
+        >
           <div className="min-w-0">
             {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
             <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
               {v.fromSchema}.{v.fromTable} → {vfkSummary(v)}
             </span>
           </div>
-          <Button variant="outline" size="icon-sm" className="shrink-0" onClick={() => remove(v.id)}>
-            ✕
-          </Button>
+          {deletingId === v.id ? (
+            <span className="text-[12px] text-muted-foreground animate-pulse shrink-0 self-center">Deleting…</span>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger render={
+                <Button variant="outline" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
+                  ✕
+                </Button>
+              } />
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Relationship</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete this relationship? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={() => remove(v.id)}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </Card>
       ))}
+
+      {saving && (
+        <Card size="sm" className="px-3 py-2.5 mb-2 opacity-50 animate-pulse flex-row items-center gap-2">
+          <div className="flex-1 space-y-1">
+            <div className="h-4 bg-muted rounded w-1/4" />
+            <div className="h-3 bg-muted rounded w-3/4" />
+          </div>
+        </Card>
+      )}
 
       {!adding ? (
         <Button variant="outline" className="mt-1" onClick={() => setAdding(true)}>
@@ -248,19 +314,26 @@ export function VirtualFkEditor({
             )}
             <div>
               <label className="label">{showTargetScope ? "Target table" : "References table"}</label>
-              <select
-                className="input"
+              <Combobox
+                items={targetSchemaMeta?.tables.map((t) => t.name) ?? []}
                 value={toTable}
+                onValueChange={(val) => {
+                  if (val) pickTable(val);
+                }}
                 disabled={!toSchema}
-                onChange={(e) => pickTable(e.target.value)}
               >
-                <option value="">— select —</option>
-                {targetSchemaMeta?.tables.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+                <ComboboxInput placeholder="— select table —" className="w-full" disabled={!toSchema} />
+                <ComboboxContent>
+                  <ComboboxEmpty>No tables found</ComboboxEmpty>
+                  <ComboboxList>
+                    {(t) => (
+                      <ComboboxItem key={t} value={t}>
+                        {t}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </div>
           </div>
 
@@ -269,32 +342,46 @@ export function VirtualFkEditor({
             <div className="space-y-2">
               {pairs.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select className="input" value={p.from} onChange={(e) => setPair(i, { from: e.target.value })}>
-                    <option value="">— this column —</option>
-                    {meta.table.columns.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Combobox
+                    items={meta.table.columns.map((c) => c.name)}
+                    value={p.from}
+                    onValueChange={(val) => setPair(i, { from: val || "" })}
+                  >
+                    <ComboboxInput className="flex-1" placeholder="— this column —" />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No columns found</ComboboxEmpty>
+                      <ComboboxList>
+                        {(col) => (
+                          <ComboboxItem key={col} value={col}>
+                            {col}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                   <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
                     =
                   </span>
-                  <select
-                    className="input"
+                  <Combobox
+                    items={targetColumns.map((c) => c.name)}
                     value={p.to}
+                    onValueChange={(val) => setPair(i, { to: val || "" })}
                     disabled={!targetTable}
-                    onChange={(e) => setPair(i, { to: e.target.value })}
                   >
-                    <option value="">— target column —</option>
-                    {targetColumns.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    <ComboboxInput placeholder="— target column —" className="flex-1" disabled={!targetTable} />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No columns found</ComboboxEmpty>
+                      <ComboboxList>
+                        {(col) => (
+                          <ComboboxItem key={col} value={col}>
+                            {col}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                   <select
-                    className="input"
+                    className="input flex-1"
                     value={p.transform ?? "none"}
                     onChange={(e) => setPair(i, { transform: e.target.value as VfkTransform })}
                     title="Value transform applied to both sides"
@@ -329,44 +416,88 @@ export function VirtualFkEditor({
           <div>
             <label className="label">Constant filters (optional)</label>
             <div className="space-y-2">
-              {constants.map((c, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    className="input"
-                    value={c.toColumn}
-                    disabled={!targetTable}
-                    onChange={(e) => setConst(i, { toColumn: e.target.value })}
-                  >
-                    <option value="">— target column —</option>
-                    {targetColumns.map((tc) => (
-                      <option key={tc.name} value={tc.name}>
-                        {tc.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
-                    =
-                  </span>
-                  <input
-                    className="input"
-                    placeholder="value, e.g. user"
-                    value={c.value}
-                    onChange={(e) => setConst(i, { value: e.target.value })}
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    className="shrink-0"
-                    onClick={() => setConstants((s) => s.filter((_, idx) => idx !== i))}
-                  >
-                    ✕
-                  </Button>
-                </div>
-              ))}
+              {constants.map((c, i) => {
+                const sourceColItems = meta.table.columns.map((sc) => ({
+                  id: `source::${sc.name}`,
+                  label: sc.name,
+                }));
+                const targetColItems = targetColumns.map((tc) => ({
+                  id: `target::${tc.name}`,
+                  label: tc.name,
+                }));
+                const allConstantItems = [...sourceColItems, ...targetColItems];
+
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <Combobox
+                      items={allConstantItems}
+                      value={c.toColumn ? `${c.side || "target"}::${c.toColumn}` : ""}
+                      onValueChange={(val: any) => {
+                        if (!val) {
+                          setConst(i, { toColumn: "", side: "target" });
+                        } else {
+                          const [side, col] = val.split("::");
+                          setConst(i, { toColumn: col, side: side as "source" | "target" });
+                        }
+                      }}
+                      disabled={!targetTable}
+                    >
+                      <ComboboxInput placeholder="— select column —" className="flex-1" disabled={!targetTable} />
+                      <ComboboxContent>
+                        <ComboboxEmpty>No columns found</ComboboxEmpty>
+                        <ComboboxList>
+                          <ComboboxGroup items={sourceColItems}>
+                            <ComboboxLabel>Source: {fromTable}</ComboboxLabel>
+                            <ComboboxCollection>
+                              {(item: any) => (
+                                <ComboboxItem key={item.id} value={item.id}>
+                                  {item.label}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxCollection>
+                          </ComboboxGroup>
+                          {targetTable && (
+                            <>
+                              <ComboboxSeparator />
+                              <ComboboxGroup items={targetColItems}>
+                                <ComboboxLabel>Target: {toTable}</ComboboxLabel>
+                                <ComboboxCollection>
+                                  {(item: any) => (
+                                    <ComboboxItem key={item.id} value={item.id}>
+                                      {item.label}
+                                    </ComboboxItem>
+                                  )}
+                                </ComboboxCollection>
+                              </ComboboxGroup>
+                            </>
+                          )}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
+                    <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
+                      =
+                    </span>
+                    <input
+                      className="input flex-1"
+                      placeholder="value, e.g. user"
+                      value={c.value}
+                      onChange={(e) => setConst(i, { value: e.target.value })}
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      className="shrink-0"
+                      onClick={() => setConstants((s) => s.filter((_, idx) => idx !== i))}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                );
+              })}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setConstants((s) => [...s, { toColumn: "", value: "" }])}
+                onClick={() => setConstants((s) => [...s, { toColumn: "", side: "target", value: "" }])}
               >
                 + Add constant filter
               </Button>

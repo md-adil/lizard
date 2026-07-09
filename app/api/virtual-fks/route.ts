@@ -11,6 +11,7 @@ const pairSchema = z.object({
 
 const constantSchema = z.object({
   toColumn: z.string().min(1),
+  side: z.enum(["source", "target"]),
   value: z.string(),
 });
 
