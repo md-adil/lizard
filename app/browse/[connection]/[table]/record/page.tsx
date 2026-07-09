@@ -4,14 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  useTableMeta,
-  useSchemaMeta,
-  buildTableMeta,
-  formatCell,
-  type TableMeta,
-  type CatalogResponse,
-} from "@/components/browse/useTableMeta";
+import { useTableMeta, formatCell, type TableMeta } from "@/components/browse/useTableMeta";
 import type { VfkTransform } from "@/lib/types";
 import { RowEditor } from "@/components/browse/row-editor";
 import { RedactedValue } from "@/components/browse/redacted-value";
@@ -19,9 +12,10 @@ import { RecordComments } from "@/components/browse/record-comments";
 import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
-import { useSchemaParam, tableHref, recordHref as toRecord } from "@/components/browse/use-schema-param";
+import { useSchemaParam, tableHref, recordHref } from "@/components/browse/use-schema-param";
 import { humanize } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
+import { supportsSchemas } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -240,7 +234,7 @@ function JsonCard({
           throw new Error("Invalid JSON");
         }
       }
-      const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+      const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
       const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -330,16 +324,14 @@ function JsonCard({
 
 // parent record card (this row's FK → referenced row), incl. cross-database
 function BelongsToCard({
-  catalog,
   title,
   target,
   value,
 }: {
-  catalog: CatalogResponse;
   title: string;
   target: {
     connection: string;
-    schema: string;
+    schema: string | undefined;
     table: string;
     column: string;
     transform: VfkTransform;
@@ -348,25 +340,21 @@ function BelongsToCard({
 }) {
   const { meta: targetMeta } = useTableMeta(target.connection, target.schema, target.table);
   const [editing, setEditing] = useState(false);
-  const pkParam = encodeURIComponent(JSON.stringify({ [target.column]: value }));
+  const pkJson = JSON.stringify({ [target.column]: value });
   // only the reference column can carry a transform (e.g. case-insensitive),
   // so this key is a single-entry map — but keyTransforms is shaped to
   // support composite keys if that's ever needed here too.
-  const keyTransformsParam =
-    target.transform !== "none"
-      ? `&keyTransforms=${encodeURIComponent(JSON.stringify({ [target.column]: target.transform }))}`
-      : "";
+  const keyTransformsJson = target.transform !== "none" ? JSON.stringify({ [target.column]: target.transform }) : undefined;
   const { data, error } = useQuery<{
     row: Record<string, unknown>;
     fkLabels: Record<string, Record<string, string>>;
   }>({
     queryKey: ["record", target.connection, target.schema, target.table, String(value)],
     queryFn: async () => {
-      const conn = catalog.connections.find((c) => c.connectionName === target.connection);
-      const isMysql = conn?.engine === "mysql";
-      const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(target.schema)}&`;
+      const schemaParam = target.schema ? `schema=${encodeURIComponent(target.schema)}&` : "";
+      const keyTransformsParam = keyTransformsJson ? `&keyTransforms=${encodeURIComponent(keyTransformsJson)}` : "";
       const res = await fetch(
-        `/api/data/${target.connection}/${target.table}/row?${schemaParam}pk=${pkParam}${keyTransformsParam}`,
+        `/api/data/${target.connection}/${target.table}/row?${schemaParam}pk=${encodeURIComponent(pkJson)}${keyTransformsParam}`,
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
@@ -375,19 +363,24 @@ function BelongsToCard({
     enabled: value != null && !!targetMeta,
   });
 
-  const recordHref = toRecord(target.connection, target.schema, target.table, `pk=${pkParam}${keyTransformsParam}`);
+  const href = recordHref({
+    connection: target.connection,
+    schema: target.schema,
+    table: target.table,
+    params: { pk: pkJson, ...(keyTransformsJson ? { keyTransforms: keyTransformsJson } : {}) },
+  });
   return (
     <RelatedCard
       title={title}
-      subtitle={`${target.connection}.${target.schema}.${target.table}`}
+      subtitle={[target.connection, target.schema, target.table].filter(Boolean).join(".")}
       menu={[
         ...(data && targetMeta && !targetMeta.isView
           ? [{ label: "✎ Edit record", onClick: () => setEditing(true) }]
           : []),
-        { label: "Open record →", href: recordHref },
+        { label: "Open record →", href },
         {
           label: "Open table",
-          href: tableHref(target.connection, target.schema, target.table),
+          href: tableHref({ connection: target.connection, schema: target.schema, table: target.table }),
         },
       ]}
     >
@@ -413,17 +406,16 @@ function BelongsToCard({
 
 // child rows card (other table's FK → this row), incl. cross-database
 function HasManyCard({
-  catalog,
   source,
   fkColumn,
   value,
 }: {
-  catalog: CatalogResponse;
-  source: { connection: string; schema: string; table: string };
+  source: { connection: string; schema: string | undefined; table: string };
   fkColumn: string;
   value: unknown;
 }) {
   const { meta } = useTableMeta(source.connection, source.schema, source.table);
+  const router = useRouter();
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [sort, setSort] = useState<string | undefined>();
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -435,8 +427,9 @@ function HasManyCard({
     queryKey: ["related", source.connection, source.schema, source.table, fkColumn, String(value)],
     queryFn: async () => {
       const filters = JSON.stringify([{ column: fkColumn, op: "eq", value: String(value) }]);
+      const schemaParam = source.schema ? `schema=${encodeURIComponent(source.schema)}&` : "";
       const res = await fetch(
-        `/api/data/${source.connection}/${source.table}?schema=${encodeURIComponent(source.schema)}&page=0&pageSize=8&filters=${encodeURIComponent(filters)}`,
+        `/api/data/${source.connection}/${source.table}?${schemaParam}page=0&pageSize=8&filters=${encodeURIComponent(filters)}`,
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "failed");
@@ -450,11 +443,11 @@ function HasManyCard({
   return (
     <RelatedCard
       title={meta.label}
-      subtitle={`${source.connection}.${source.schema}.${source.table} · via ${fkColumn}`}
+      subtitle={`${[source.connection, source.schema, source.table].filter(Boolean).join(".")} · via ${fkColumn}`}
       menu={[
         {
           label: "Open table",
-          href: tableHref(source.connection, source.schema, source.table),
+          href: tableHref({ connection: source.connection, schema: source.schema, table: source.table }),
         },
       ]}
     >
@@ -493,11 +486,13 @@ function HasManyCard({
               if (meta.isView) return;
               const pkObj: Record<string, unknown> = {};
               for (const k of meta.table.primaryKey) pkObj[k] = row[k];
-              window.location.href = toRecord(
-                source.connection,
-                source.schema,
-                source.table,
-                `pk=${encodeURIComponent(JSON.stringify(pkObj))}`,
+              router.push(
+                recordHref({
+                  connection: source.connection,
+                  schema: source.schema,
+                  table: source.table,
+                  params: { pk: JSON.stringify(pkObj) },
+                }),
               );
             }}
             maxHeight="calc(100vh - 400px)"
@@ -523,9 +518,7 @@ function RecordView() {
   const router = useRouter();
   const qc = useQueryClient();
   const schema = useSchemaParam();
-  const { meta, catalog } = useTableMeta(params.connection, schema, params.table);
-  const resolvedSchema = meta?.schema ?? schema ?? "public";
-  const { schemaMeta } = useSchemaMeta(params.connection, resolvedSchema);
+  const { meta, catalog, schemaMeta } = useTableMeta(params.connection, schema, params.table);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
@@ -572,7 +565,7 @@ function RecordView() {
     queryFn: async () => {
       const qs = new URLSearchParams({ pk: JSON.stringify(pk) });
       if (keyTransforms) qs.set("keyTransforms", JSON.stringify(keyTransforms));
-      const schemaParam = meta?.connectionEngine === "mysql" ? "" : `schema=${encodeURIComponent(meta?.schema ?? "public")}&`;
+      const schemaParam = meta?.schema ? `schema=${encodeURIComponent(meta.schema)}&` : "";
       const res = await fetch(`/api/data/${params.connection}/${params.table}/row?${schemaParam}${qs}`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "not found");
@@ -581,43 +574,61 @@ function RecordView() {
     enabled: !!meta && Object.keys(pk).length > 0,
   });
 
-  // relations to render as cards
+  // relations to render as cards. `schema` on each entry is already resolved
+  // to string|undefined here (undefined when that entry's connection has no
+  // real schema) — consumers (HasManyCard etc.) just use it, no engine checks.
   const relations = useMemo(() => {
-    if (!catalog || !meta)
+    if (!catalog || !meta || !schemaMeta)
       return {
         belongsTo: [],
         hasMany: [] as {
           connection: string;
-          schema: string;
+          schema: string | undefined;
           table: string;
           fkColumn: string;
         }[],
         manyToMany: [] as {
           connection: string;
-          junctionSchema: string;
+          junctionSchema: string | undefined;
           junctionTable: string;
           selfFkColumn: string;
           otherFkColumn: string;
-          otherSchema: string;
+          otherSchema: string | undefined;
           otherTable: string;
         }[],
       };
-    const schema = meta.schema;
+    // The real, always-resolved schema (schemaMeta.name) is what introspected
+    // FKs/virtual-FKs are actually matched against, regardless of whether
+    // it's worth exposing — same split as buildTableMeta.
+    const concreteSchema = schemaMeta.name;
+    const connections = catalog.connections;
+    const connSupportsSchemas = new Map<string, boolean>();
+    function targetSupportsSchemas(connectionName: string): boolean {
+      let v = connSupportsSchemas.get(connectionName);
+      if (v === undefined) {
+        const engine = connections.find((c) => c.connectionName === connectionName)?.engine;
+        v = !!engine && supportsSchemas(engine);
+        connSupportsSchemas.set(connectionName, v);
+      }
+      return v;
+    }
+    const currentSchema = targetSupportsSchemas(params.connection) ? concreteSchema : undefined;
+
     const belongsTo = meta.columns
       .filter((c) => c.ref)
       .map((c) => ({ title: c.label, column: c.col.name, target: c.ref! }));
     const manyToMany: {
       connection: string;
-      junctionSchema: string;
+      junctionSchema: string | undefined;
       junctionTable: string;
       selfFkColumn: string;
       otherFkColumn: string;
-      otherSchema: string;
+      otherSchema: string | undefined;
       otherTable: string;
     }[] = [];
     const hasMany: {
       connection: string;
-      schema: string;
+      schema: string | undefined;
       table: string;
       fkColumn: string;
     }[] = [];
@@ -626,14 +637,14 @@ function RecordView() {
       for (const t of schemaMeta.tables) {
         for (const fk of t.foreignKeys) {
           if (
-            fk.referencedSchema === schema &&
+            fk.referencedSchema === concreteSchema &&
             fk.referencedTable === params.table &&
             fk.columns.length === 1 &&
             !(t.name === params.table)
           ) {
             hasMany.push({
               connection: params.connection,
-              schema,
+              schema: currentSchema,
               table: t.name,
               fkColumn: fk.columns[0],
             });
@@ -643,16 +654,16 @@ function RecordView() {
               (f) =>
                 f !== fk &&
                 f.columns.length === 1 &&
-                !(f.referencedSchema === schema && f.referencedTable === params.table),
+                !(f.referencedSchema === concreteSchema && f.referencedTable === params.table),
             );
             if (otherFk) {
               manyToMany.push({
                 connection: params.connection,
-                junctionSchema: schema,
+                junctionSchema: currentSchema,
                 junctionTable: t.name,
                 selfFkColumn: fk.columns[0],
                 otherFkColumn: otherFk.columns[0],
-                otherSchema: otherFk.referencedSchema,
+                otherSchema: currentSchema,
                 otherTable: otherFk.referencedTable,
               });
             }
@@ -661,18 +672,18 @@ function RecordView() {
       }
     }
     // reverse virtual FKs (any connection → this table)
-    for (const v of catalog.virtualFks) {
+    for (const v of schemaMeta.virtualFks) {
       if (v.toConnection !== params.connection || v.toTable !== params.table) continue;
       // $schema resolves to the record's own schema; else must match literally
-      const targetSchemaMatches = v.toSchema === SAME_SCHEMA || v.toSchema === schema;
+      const targetSchemaMatches = v.toSchema === SAME_SCHEMA || v.toSchema === concreteSchema;
       if (!targetSchemaMatches) continue;
-      const fromSchema = v.toSchema === SAME_SCHEMA ? schema : v.fromSchema;
+      const fromSchema = v.toSchema === SAME_SCHEMA ? concreteSchema : v.fromSchema;
       const fkColumn = vfkDisplayColumn(v);
       // can't enumerate a concrete back-link when the source side is a pattern
       if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
       hasMany.push({
         connection: v.fromConnection,
-        schema: fromSchema,
+        schema: targetSupportsSchemas(v.fromConnection) ? fromSchema : undefined,
         table: v.fromTable,
         fkColumn,
       });
@@ -680,7 +691,7 @@ function RecordView() {
     return { belongsTo, hasMany, manyToMany };
   }, [catalog, meta, schemaMeta, params]);
 
-  if (!catalog || !meta)
+  if (!catalog || !meta || !schemaMeta)
     return (
       <div className="px-8 py-10 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
         Loading…
@@ -714,7 +725,9 @@ function RecordView() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={tableHref(params.connection, meta.schema, params.table)} />}>
+            <BreadcrumbLink
+              render={<Link href={tableHref({ connection: params.connection, schema: meta.schema, table: params.table })} />}
+            >
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -742,7 +755,7 @@ function RecordView() {
               variant="destructive"
               onClick={async () => {
                 if (!confirm("Delete this record?")) return;
-                const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+                const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
                 const res = await fetch(`/api/data/${params.connection}/${params.table}/row${query}`, {
                   method: "DELETE",
                   headers: { "Content-Type": "application/json" },
@@ -752,7 +765,7 @@ function RecordView() {
                   qc.invalidateQueries({
                     queryKey: ["rows", params.connection, schema, params.table],
                   });
-                  router.push(tableHref(params.connection, meta.schema, params.table));
+                  router.push(tableHref({ connection: params.connection, schema: meta.schema, table: params.table }));
                 }
               }}
             >
@@ -831,14 +844,13 @@ function RecordView() {
           ))}
 
           {relations.belongsTo.map((b) => (
-            <BelongsToCard key={b.column} catalog={catalog} title={b.title} target={b.target} value={row[b.column]} />
+            <BelongsToCard key={b.column} title={b.title} target={b.target} value={row[b.column]} />
           ))}
 
           {pkValue != null &&
             relations.hasMany.map((h) => (
               <HasManyCard
                 key={`${h.connection}.${h.schema}.${h.table}.${h.fkColumn}`}
-                catalog={catalog}
                 source={h}
                 fkColumn={h.fkColumn}
                 value={pkValue}
@@ -857,7 +869,7 @@ function RecordView() {
 
           {Object.keys(pk).length > 0 && (
             <div className="col-span-2">
-              <RecordComments connectionId={meta.connectionId} schema={meta.schema} table={params.table} pk={pk} />
+              <RecordComments connectionId={meta.connectionId} schema={schemaMeta.name} table={params.table} pk={pk} />
             </div>
           )}
         </div>

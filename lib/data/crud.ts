@@ -2,7 +2,7 @@
 // must exist in the introspected catalog before it is quoted into SQL, and all
 // values are parameterized. Writes go through the connection's write role
 // inside a transaction and always target exactly one connection.
-import type { ConnectionConfig, TableInfo, VfkTransform } from "@/lib/types";
+import { supportsSchemas, type ConnectionConfig, type TableInfo, type VfkTransform } from "@/lib/types";
 import {
   vfkMatchesSource,
   resolveToSchema,
@@ -46,7 +46,7 @@ export type Filter = FilterCondition;
 
 export interface ListParams {
   connection: string;
-  schema: string;
+  schema: string | undefined;
   table: string;
   page: number;
   pageSize: number;
@@ -69,7 +69,7 @@ const SEARCH_ROW_LIMIT = 500_000;
 
 async function resolveTable(
   connectionName: string,
-  schema: string,
+  schema: string | undefined,
   table: string,
 ) {
   const conn = getConnection(connectionName);
@@ -77,7 +77,7 @@ async function resolveTable(
   const catalog = await getConnectionCatalog(conn);
   if (catalog.error)
     throw new CrudError(`Connection error: ${catalog.error}`, 502);
-  const targetSchema = conn.engine === "mysql" ? (schema || conn.database) : schema;
+  const targetSchema = schema || (supportsSchemas(conn.engine) ? "public" : conn.database);
   const sch = catalog.schemas.find((s) => s.name === targetSchema);
   const tbl = sch?.tables.find((t) => t.name === table);
   if (!tbl) throw new CrudError(`Unknown table: ${targetSchema}.${table}`, 404);
@@ -261,11 +261,11 @@ export async function exportRows(
 // with a display label so the client doesn't need the other table's metadata.
 export async function listLinkedRows(
   connection: string,
-  junctionSchema: string,
+  junctionSchema: string | undefined,
   junctionTable: string,
   selfFkColumn: string,
   otherFkColumn: string,
-  otherSchema: string,
+  otherSchema: string | undefined,
   otherTableName: string,
   selfValue: unknown,
 ): Promise<Record<string, unknown>[]> {
@@ -278,8 +278,9 @@ export async function listLinkedRows(
   assertColumn(junction, otherFkColumn);
 
   const catalog = await getConnectionCatalog(conn);
+  const resolvedOtherSchema = otherSchema || (supportsSchemas(conn.engine) ? "public" : conn.database);
   const otherTable = catalog.schemas
-    .find((s) => s.name === otherSchema)
+    .find((s) => s.name === resolvedOtherSchema)
     ?.tables.find((t) => t.name === otherTableName);
   if (!otherTable) throw new CrudError("Unknown target table", 404);
   const otherPk = otherTable.primaryKey[0];
@@ -290,10 +291,10 @@ export async function listLinkedRows(
   const client = await getClient(conn, "read");
   try {
     const fqJunction = dialect.supportsSchemas
-      ? `${dialect.quoteIdent(junctionSchema)}.${dialect.quoteIdent(junctionTable)}`
+      ? `${dialect.quoteIdent(junction.schema)}.${dialect.quoteIdent(junctionTable)}`
       : dialect.quoteIdent(junctionTable);
     const fqOther = dialect.supportsSchemas
-      ? `${dialect.quoteIdent(otherSchema)}.${dialect.quoteIdent(otherTableName)}`
+      ? `${dialect.quoteIdent(resolvedOtherSchema)}.${dialect.quoteIdent(otherTableName)}`
       : dialect.quoteIdent(otherTableName);
 
     const selectDisplay = dialect.castToText(`o.${dialect.quoteIdent(display)}`);
@@ -543,7 +544,7 @@ function lookupWhere(
 
 export async function getRow(
   connection: string,
-  schema: string,
+  schema: string | undefined,
   tableName: string,
   pk: Record<string, unknown>,
   keyTransforms?: Record<string, VfkTransform>,
@@ -555,7 +556,7 @@ export async function getRow(
   const client = await getClient(conn, "read");
   try {
     const fqtn = dialect.supportsSchemas
-      ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
       : dialect.quoteIdent(tableName);
     const res = await client.query(
       `SELECT * FROM ${fqtn} WHERE ${where}`,
@@ -573,7 +574,7 @@ export async function getRow(
 // Options for a reference picker: search the referenced table by its display column.
 export async function referenceOptions(
   connection: string,
-  schema: string,
+  schema: string | undefined,
   tableName: string,
   refColumn: string,
   search: string,
@@ -595,7 +596,7 @@ export async function referenceOptions(
       where = `WHERE ${matchDisp} OR ${matchRef}`;
     }
     const fqtn = dialect.supportsSchemas
-      ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
       : dialect.quoteIdent(tableName);
 
     const selectId = dialect.castToText(dialect.quoteIdent(refColumn));
@@ -670,7 +671,7 @@ function jsonOverrideColumns(
 
 export async function createRow(
   connection: string,
-  schema: string,
+  schema: string | undefined,
   tableName: string,
   data: Record<string, unknown>,
 ) {
@@ -679,11 +680,11 @@ export async function createRow(
   const dialect = getDialect(conn.engine);
   const cols = writableColumns(table, data);
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
-  const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
+  const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
   const values = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
   const placeholders = cols.map((_, i) => dialect.placeholder(i + 1));
   const fqtn = dialect.supportsSchemas
-    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
     : dialect.quoteIdent(tableName);
 
   const returningClause = dialect.supportsReturning ? " RETURNING *" : "";
@@ -696,7 +697,7 @@ export async function createRow(
     await client.commit();
     logAudit({
       action: "create",
-      sql: `INSERT INTO ${schema}.${tableName}`,
+      sql: `INSERT INTO ${table.schema}.${tableName}`,
       connections: [conn.name],
       rowCount: 1,
     });
@@ -730,7 +731,7 @@ const IMPORT_ROW_LIMIT = 5000;
 // import what's valid, report exactly which rows and why weren't.
 export async function bulkInsertRows(
   connection: string,
-  schema: string,
+  schema: string | undefined,
   tableName: string,
   rows: Record<string, unknown>[],
 ): Promise<{ inserted: number; errors: { row: number; message: string }[] }> {
@@ -742,10 +743,10 @@ export async function bulkInsertRows(
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const dialect = getDialect(conn.engine);
   const fqtn = dialect.supportsSchemas
-    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
     : dialect.quoteIdent(tableName);
 
-  const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
+  const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
   const client = await getClient(conn, "write");
   let inserted = 0;
   const errors: { row: number; message: string }[] = [];
@@ -775,7 +776,7 @@ export async function bulkInsertRows(
     await client.commit();
     logAudit({
       action: "import",
-      sql: `INSERT INTO ${schema}.${tableName} (bulk, ${inserted} rows)`,
+      sql: `INSERT INTO ${table.schema}.${tableName} (bulk, ${inserted} rows)`,
       connections: [conn.name],
       rowCount: inserted,
     });
@@ -790,7 +791,7 @@ export async function bulkInsertRows(
 
 export async function updateRow(
   connection: string,
-  schema: string,
+  schema: string | undefined,
   tableName: string,
   pk: Record<string, unknown>,
   data: Record<string, unknown>,
@@ -803,7 +804,7 @@ export async function updateRow(
     (c) => !table.primaryKey.includes(c),
   );
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
-  const jsonCols = jsonOverrideColumns(conn.id, schema, tableName);
+  const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
   const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
   const sets = cols.map((c, i) => `${dialect.quoteIdent(c)} = ${dialect.placeholder(i + 1)}`);
   let where = pkWhere(table, pk, values, dialect);
@@ -818,7 +819,7 @@ export async function updateRow(
     }
   }
   const fqtn = dialect.supportsSchemas
-    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
     : dialect.quoteIdent(tableName);
 
   const returningClause = dialect.supportsReturning ? " RETURNING *" : "";
@@ -838,7 +839,7 @@ export async function updateRow(
     }
     logAudit({
       action: "update",
-      sql: `UPDATE ${schema}.${tableName}`,
+      sql: `UPDATE ${table.schema}.${tableName}`,
       connections: [conn.name],
       rowCount: 1,
     });
@@ -859,7 +860,7 @@ export async function updateRow(
 
 export async function deleteRow(
   connection: string,
-  schema: string,
+  schema: string | undefined,
   tableName: string,
   pk: Record<string, unknown>,
 ) {
@@ -869,7 +870,7 @@ export async function deleteRow(
   const values: unknown[] = [];
   const where = pkWhere(table, pk, values, dialect);
   const fqtn = dialect.supportsSchemas
-    ? `${dialect.quoteIdent(schema)}.${dialect.quoteIdent(tableName)}`
+    ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
     : dialect.quoteIdent(tableName);
 
   const sql = `DELETE FROM ${fqtn} WHERE ${where}`;
@@ -881,7 +882,7 @@ export async function deleteRow(
     if (res.rowCount === 0) throw new CrudError("Row not found", 404);
     logAudit({
       action: "delete",
-      sql: `DELETE FROM ${schema}.${tableName}`,
+      sql: `DELETE FROM ${table.schema}.${tableName}`,
       connections: [conn.name],
       rowCount: res.rowCount,
     });

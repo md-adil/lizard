@@ -10,7 +10,7 @@ export async function GET(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const column = url.searchParams.get("column");
     if (!column) return fail(new Error("column query param is required"));
     const options = await referenceOptions(connection, schema, table, column, url.searchParams.get("q") ?? "");

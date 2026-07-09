@@ -30,36 +30,9 @@ import {
   SidebarInput,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-
-interface CatalogTable {
-  name: string;
-}
-interface CatalogSchema {
-  name: string;
-}
-interface CatalogConnection {
-  connectionId: string;
-  connectionName: string;
-  database: string;
-  engine: string;
-  schemas: CatalogSchema[];
-  error?: string;
-}
-interface TableOverride {
-  connectionId: string;
-  schema: string;
-  table: string;
-  hidden: boolean;
-  label: string | null;
-}
-interface CatalogResponse {
-  connections: CatalogConnection[];
-  tableOverrides: TableOverride[];
-}
-interface SchemaData {
-  name: string;
-  tables: CatalogTable[];
-}
+import { useSchemaMeta } from "@/components/browse/useTableMeta";
+import { resolveTableOverride } from "@/lib/introspect/overrides";
+import { supportsSchemas, type CatalogResponse } from "@/lib/types";
 
 const NAV = [
   { href: "/", label: "Home", icon: "⌂" },
@@ -89,22 +62,11 @@ function ThemeToggle() {
   );
 }
 
-function useSchemaData(connection: string, schemaName: string) {
-  return useQuery<SchemaData>({
-    queryKey: ["schema-tables", connection, schemaName],
-    queryFn: async () => {
-      const res = await fetch(`/api/catalog/${encodeURIComponent(connection)}/${encodeURIComponent(schemaName)}`);
-      if (!res.ok) throw new Error("failed to load schema");
-      return res.json();
-    },
-    staleTime: 60_000,
-  });
-}
-
 function SchemaSection({
+  connectionId,
   connectionName,
   schemaName,
-  overrideFor,
+  includeSchemaInUrl,
   tableQ,
   showHidden,
   onToggleHidden,
@@ -113,9 +75,10 @@ function SchemaSection({
   activeSchema,
   pathname,
 }: {
+  connectionId: string;
   connectionName: string;
   schemaName: string;
-  overrideFor: (schema: string, table: string) => TableOverride | undefined;
+  includeSchemaInUrl: boolean;
   tableQ: string;
   showHidden: boolean;
   onToggleHidden: (v: boolean) => void;
@@ -124,7 +87,7 @@ function SchemaSection({
   activeSchema: string | null;
   pathname: string;
 }) {
-  const { data: schemaData, isLoading } = useSchemaData(connectionName, schemaName);
+  const { schemaMeta: schemaData, isLoading } = useSchemaMeta(connectionName, schemaName);
 
   if (isLoading) {
     return showDivider ? (
@@ -136,7 +99,7 @@ function SchemaSection({
   if (!schemaData) return null;
 
   const allTables = schemaData.tables.map((t) => {
-    const o = overrideFor(schemaName, t.name);
+    const o = resolveTableOverride(schemaData.tableOverrides, connectionId, schemaName, t.name);
     return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false };
   });
   const visibleTables = allTables
@@ -153,7 +116,8 @@ function SchemaSection({
       <SidebarMenu>
         {visibleTables.map((t) => {
           const path = `/browse/${connectionName}/${encodeURIComponent(t.name)}`;
-          const href = tableHref(connectionName, schemaName, t.name);
+          const urlSchema = includeSchemaInUrl ? schemaName : undefined;
+          const href = tableHref({ connection: connectionName, schema: urlSchema, table: t.name });
           const active = pathname === path || pathname.startsWith(path + "/");
           return (
             <SidebarMenuItem key={t.name}>
@@ -169,7 +133,11 @@ function SchemaSection({
                   <span className="sr-only">{t.label} actions</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right">
-                  <DropdownMenuItem render={<Link href={customizeHref(connectionName, schemaName, t.name)} />}>
+                  <DropdownMenuItem
+                    render={
+                      <Link href={customizeHref({ connection: connectionName, schema: urlSchema, table: t.name })} />
+                    }
+                  >
                     ⚙ Customize
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -192,7 +160,11 @@ function SchemaSection({
       {showHidden &&
         hiddenTables.map((t) => {
           const path = `/browse/${connectionName}/${encodeURIComponent(t.name)}`;
-          const href = tableHref(connectionName, schemaName, t.name);
+          const href = tableHref({
+            connection: connectionName,
+            schema: includeSchemaInUrl ? schemaName : undefined,
+            table: t.name,
+          });
           const active = pathname === path || pathname.startsWith(path + "/");
           return (
             <Link
@@ -229,7 +201,6 @@ export function Sidebar() {
   });
 
   const connections = useMemo(() => data?.connections ?? [], [data]);
-  const overrides = useMemo(() => data?.tableOverrides ?? [], [data]);
   const [selected, setSelected] = useState<string>("");
   const [loaded, setLoaded] = useState<string[]>([]);
   const [addingSchema, setAddingSchema] = useState(false);
@@ -293,10 +264,6 @@ export function Sidebar() {
   };
 
   const remaining = allSchemas.filter((s) => !loaded.includes(s));
-
-  // override lookup: connectionId.schema.table → { hidden, label }
-  const overrideFor = (schema: string, table: string) =>
-    overrides.find((o) => o.connectionId === conn?.connectionId && o.schema === schema && o.table === table);
 
   const tableQ = tableSearch.trim().toLowerCase();
 
@@ -472,9 +439,10 @@ export function Sidebar() {
                 return (
                   <SchemaSection
                     key={schemaName}
+                    connectionId={conn.connectionId}
                     connectionName={conn.connectionName}
                     schemaName={schemaName}
-                    overrideFor={overrideFor}
+                    includeSchemaInUrl={supportsSchemas(conn.engine)}
                     tableQ={tableQ}
                     showHidden={showHidden}
                     onToggleHidden={setShowHidden}

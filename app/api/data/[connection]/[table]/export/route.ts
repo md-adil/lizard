@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const filters: FilterCondition[] = url.searchParams.get("filters")
       ? JSON.parse(url.searchParams.get("filters")!)
       : [];
@@ -51,7 +51,7 @@ export async function GET(req: Request, { params }: Params) {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${schema}.${table}.csv"`,
+        "Content-Disposition": `attachment; filename="${schema ? `${schema}.` : ""}${table}.csv"`,
         ...(truncated ? { "X-Export-Truncated": "true" } : {}),
       },
     });

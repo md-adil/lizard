@@ -94,8 +94,9 @@ function useRefSearch(cm: ColumnMeta, search: string, enabled: boolean) {
   return useQuery<{ id: string; label: string }[]>({
     queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
     queryFn: async () => {
+      const schemaParam = ref.schema ? `schema=${encodeURIComponent(ref.schema)}&` : "";
       const res = await fetch(
-        `/api/data/${ref.connection}/${ref.table}/refs?schema=${encodeURIComponent(ref.schema)}&column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
+        `/api/data/${ref.connection}/${ref.table}/refs?${schemaParam}column=${encodeURIComponent(ref.column)}&q=${encodeURIComponent(search)}`,
       );
       if (!res.ok) throw new Error("refs failed");
       return res.json();

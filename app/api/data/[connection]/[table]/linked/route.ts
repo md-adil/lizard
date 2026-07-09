@@ -13,18 +13,14 @@ export async function GET(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const selfFkColumn = url.searchParams.get("selfFkColumn") ?? "";
     const otherFkColumn = url.searchParams.get("otherFkColumn") ?? "";
-    const otherSchema = url.searchParams.get("otherSchema") ?? "";
+    const otherSchema = url.searchParams.get("otherSchema") ?? undefined;
     const otherTable = url.searchParams.get("otherTable") ?? "";
     const selfValue = url.searchParams.get("selfValue") ?? "";
-    if (!selfFkColumn || !otherFkColumn || !otherSchema || !otherTable) {
-      return fail(
-        new Error(
-          "selfFkColumn, otherFkColumn, otherSchema and otherTable are required",
-        ),
-      );
+    if (!selfFkColumn || !otherFkColumn || !otherTable) {
+      return fail(new Error("selfFkColumn, otherFkColumn and otherTable are required"));
     }
     const rows = await listLinkedRows(
       connection,

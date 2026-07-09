@@ -153,7 +153,7 @@ export function KanbanView({
     if (!canWrite) return;
     const value = toKey === NULL_KEY ? null : toKey;
     if (groupOf(row) === toKey) return;
-    const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+    const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
     await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const pk = JSON.parse(url.searchParams.get("pk") ?? "{}");
     const keyTransforms = url.searchParams.get("keyTransforms")
       ? JSON.parse(url.searchParams.get("keyTransforms")!)
@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "write");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const body = await req.json();
     const row = await updateRow(connection, schema, table, body.pk, body.data, body.expectedUpdatedAt);
     return ok({ row });
@@ -44,7 +44,7 @@ export async function DELETE(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "write");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const body = await req.json();
     const result = await deleteRow(connection, schema, table, body.pk);
     return ok(result);

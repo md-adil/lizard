@@ -5,7 +5,7 @@
 // filterable, sortable, paginated grid. Clicking a row selects it.
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { useTableMeta, useCatalog } from "./useTableMeta";
+import { useTableMeta } from "./useTableMeta";
 import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
@@ -25,7 +25,7 @@ export function ReferencePickerModal({
   onPick,
   onClose,
 }: {
-  target: { connection: string; schema: string; table: string; column: string };
+  target: { connection: string; schema: string | undefined; table: string; column: string };
   title: string;
   onPick: (value: string, label: string | null) => void;
   onClose: () => void;
@@ -42,10 +42,7 @@ export function ReferencePickerModal({
   const [search, setSearch] = useState("");
   const pageSize = 25;
 
-  const { data: catalog } = useCatalog();
-  const conn = catalog?.connections.find((c) => c.connectionName === target.connection);
-  const isMysql = conn?.engine === "mysql";
-  const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(target.schema)}&`;
+  const schemaParam = target.schema ? `schema=${encodeURIComponent(target.schema)}&` : "";
 
   const { data, isLoading, isFetching } = useQuery<ListResponse>({
     queryKey: ["refpick", target.connection, target.schema, target.table, page, sort, sortDir, filterSet, search],
@@ -102,7 +99,7 @@ export function ReferencePickerModal({
           <DialogTitle className="flex items-center gap-2 pr-8">
             Pick {title}
             <span className="tag code">
-              {target.connection} · {target.schema}.{target.table}
+              {target.connection} · {[target.schema, target.table].filter(Boolean).join(".")}
             </span>
           </DialogTitle>
         </DialogHeader>

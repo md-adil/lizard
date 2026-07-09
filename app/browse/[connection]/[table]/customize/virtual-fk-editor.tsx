@@ -5,12 +5,12 @@
 // asks for the target and the join. Composite keys, value transforms and
 // constant filters are always available.
 import { useState } from "react";
-import type { VfkTransform, VfkPair, VfkConstant } from "@/lib/types";
+import { supportsSchemas, type VfkTransform, type VfkPair, type VfkConstant } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { TableMeta, CatalogResponse } from "@/components/browse/useTableMeta";
+import { useSchemaMeta, type TableMeta, type CatalogResponse } from "@/components/browse/useTableMeta";
 
 const TRANSFORMS: { value: VfkTransform; label: string }[] = [
   { value: "none", label: "exact" },
@@ -51,13 +51,15 @@ export function VirtualFkEditor({
   const [saving, setSaving] = useState(false);
 
   const toConn = catalog.connections.find((c) => c.connectionName === toConnection);
+  // Schema selection is a Postgres concept — MySQL/Mongo connections have
+  // exactly one synthetic schema, so the target schema select is hidden and
+  // the schema is picked for the user (see the target-connection handler).
+  const toConnIsPostgres = !!toConn && supportsSchemas(toConn.engine);
   // $schema has no single concrete schema — introspect the current schema's
-  // shape in the target connection, or any schema holding the chosen table.
+  // shape in the target connection as a stand-in.
   const repSchemaName = toSchema === SAME_SCHEMA ? meta.schema : toSchema;
-  const tablesSchema =
-    toConn?.schemas.find((s) => s.name === repSchemaName) ??
-    toConn?.schemas.find((s) => s.tables.some((t) => t.name === toTable));
-  const targetTable = tablesSchema?.tables.find((t) => t.name === toTable);
+  const { schemaMeta: targetSchemaMeta } = useSchemaMeta(toConnection || undefined, repSchemaName || undefined);
+  const targetTable = targetSchemaMeta?.tables.find((t) => t.name === toTable);
   const targetColumns = targetTable?.columns ?? [];
 
   const pairsFilled = pairs.length > 0 && pairs.every((p) => p.from && p.to);
@@ -96,7 +98,7 @@ export function VirtualFkEditor({
   // When a target table is picked, guess a sensible first pair.
   function pickTable(t: string) {
     setToTable(t);
-    const target = tablesSchema?.tables.find((x) => x.name === t);
+    const target = targetSchemaMeta?.tables.find((x) => x.name === t);
     if (!target) return;
     const pk = target.primaryKey[0] ?? target.columns[0]?.name ?? "";
     const guessFrom =
@@ -185,7 +187,9 @@ export function VirtualFkEditor({
             to a target table. Source scope follows this page.
           </p>
 
-          <div className={`grid gap-3 ${showTargetScope ? "grid-cols-3" : "grid-cols-1"}`}>
+          <div
+            className={`grid gap-3 ${showTargetScope ? (toConnIsPostgres ? "grid-cols-3" : "grid-cols-2") : "grid-cols-1"}`}
+          >
             {showTargetScope && (
               <>
                 <div>
@@ -194,8 +198,13 @@ export function VirtualFkEditor({
                     className="input"
                     value={toConnection}
                     onChange={(e) => {
-                      setToConnection(e.target.value);
+                      const name = e.target.value;
+                      const picked = catalog.connections.find((c) => c.connectionName === name);
+                      setToConnection(name);
                       setToTable("");
+                      // Non-Postgres connections have exactly one schema — pick it
+                      // for the user since there's no schema select to do it.
+                      setToSchema(picked && !supportsSchemas(picked.engine) ? (picked.schemas[0]?.name ?? "") : "");
                     }}
                   >
                     <option value="">— select —</option>
@@ -206,26 +215,28 @@ export function VirtualFkEditor({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="label">Target schema</label>
-                  <select
-                    className="input"
-                    value={toSchema}
-                    disabled={!toConn}
-                    onChange={(e) => {
-                      setToSchema(e.target.value);
-                      setToTable("");
-                    }}
-                  >
-                    <option value="">— select —</option>
-                    <option value={SAME_SCHEMA}>Same schema as row</option>
-                    {toConn?.schemas.map((s) => (
-                      <option key={s.name} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {toConnIsPostgres && (
+                  <div>
+                    <label className="label">Target schema</label>
+                    <select
+                      className="input"
+                      value={toSchema}
+                      disabled={!toConn}
+                      onChange={(e) => {
+                        setToSchema(e.target.value);
+                        setToTable("");
+                      }}
+                    >
+                      <option value="">— select —</option>
+                      <option value={SAME_SCHEMA}>Same schema as row</option>
+                      {toConn?.schemas.map((s) => (
+                        <option key={s.name} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </>
             )}
             <div>
@@ -237,7 +248,7 @@ export function VirtualFkEditor({
                 onChange={(e) => pickTable(e.target.value)}
               >
                 <option value="">— select —</option>
-                {tablesSchema?.tables.map((t) => (
+                {targetSchemaMeta?.tables.map((t) => (
                   <option key={t.name} value={t.name}>
                     {t.name}
                   </option>

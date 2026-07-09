@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
+import { supportsSchemas } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TableOverridesEditor } from "./table-overrides-editor";
@@ -31,7 +32,7 @@ export default function CustomizePage() {
   }>();
   const qc = useQueryClient();
   const schema = useSchemaParam();
-  const { meta, catalog, isLoading } = useTableMeta(params.connection, schema, params.table);
+  const { meta, catalog, schemaMeta, isLoading } = useTableMeta(params.connection, schema, params.table);
 
   // page-level source scope — governs both the overrides and the
   // relationship editor's source side. `null` means "not yet touched by the
@@ -40,10 +41,10 @@ export default function CustomizePage() {
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
 
-  const backHref = tableHref(params.connection, meta?.schema || schema || "public", params.table);
+  const backHref = tableHref({ connection: params.connection, schema: meta?.schema ?? schema, table: params.table });
 
   if (isLoading) return <Pad>Loading…</Pad>;
-  if (!catalog || !meta)
+  if (!catalog || !meta || !schemaMeta)
     return (
       <Pad>
         Table {schema}.{params.table} not found on “{params.connection}”.{" "}
@@ -62,10 +63,19 @@ export default function CustomizePage() {
     meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ??
     null;
 
-  const scope = explicitScope ?? (detectedPattern ? "pattern" : "schema");
-  const pattern = explicitPattern ?? detectedPattern ?? "";
+  // Schema patterns (multi-tenant "org_*" style overrides) are a Postgres
+  // concept — MySQL/Mongo connections have exactly one synthetic schema, so
+  // there's nothing to pick a pattern across.
+  const isPostgres = supportsSchemas(meta.connectionEngine);
+  const scope = isPostgres ? (explicitScope ?? (detectedPattern ? "pattern" : "schema")) : "schema";
+  const pattern = isPostgres ? (explicitPattern ?? detectedPattern ?? "") : "";
 
-  const saveSchema = scope === "pattern" && pattern ? pattern : meta.schema;
+  // meta.schema is undefined for non-Postgres (nothing to show/link) but
+  // overrides still need a concrete schema to store against and look up —
+  // schemaMeta.name is that resolved value (the database name, for MySQL)
+  // regardless.
+  const concreteSchema = meta.schema ?? schemaMeta.name;
+  const saveSchema = scope === "pattern" && pattern ? pattern : concreteSchema;
   const matchedSchemas =
     scope === "pattern" && pattern
       ? (catalog.connections
@@ -76,6 +86,7 @@ export default function CustomizePage() {
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["catalog"] });
+    qc.invalidateQueries({ queryKey: ["schema-meta", meta!.connection] });
     qc.invalidateQueries({
       queryKey: ["rows", meta!.connection, meta!.schema, meta!.table.name],
     });
@@ -94,7 +105,11 @@ export default function CustomizePage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={tableHref(params.connection, meta.schema, meta.table.name)} />}>
+            <BreadcrumbLink
+              render={
+                <Link href={tableHref({ connection: params.connection, schema: meta.schema, table: meta.table.name })} />
+              }
+            >
               {meta.label}
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -104,30 +119,40 @@ export default function CustomizePage() {
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-      <Tabs value={scope} onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")} className="mb-4">
-        <TabsList variant="line">
-          <TabsTrigger value="schema">This schema ({meta.schema})</TabsTrigger>
-          <TabsTrigger value="pattern">Schema pattern</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      {scope === "pattern" && (
-        <div className="mb-6">
-          <input
-            className="input"
-            placeholder="schema pattern, e.g. org_*"
-            value={pattern}
-            onChange={(e) => setExplicitPattern(e.target.value)}
-          />
-          <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
-            {pattern
-              ? `matches ${matchedSchemas.length}: ${matchedSchemas.slice(0, 8).join(", ")}${matchedSchemas.length > 8 ? "…" : ""}`
-              : "everything on this page is saved once and applied to every matching schema. Exact per-schema overrides still win."}
-          </p>
-        </div>
+      {isPostgres && (
+        <>
+          <Tabs value={scope} onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")} className="mb-4">
+            <TabsList variant="line">
+              <TabsTrigger value="schema">This schema ({meta.schema})</TabsTrigger>
+              <TabsTrigger value="pattern">Schema pattern</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {scope === "pattern" && (
+            <div className="mb-6">
+              <input
+                className="input"
+                placeholder="schema pattern, e.g. org_*"
+                value={pattern}
+                onChange={(e) => setExplicitPattern(e.target.value)}
+              />
+              <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
+                {pattern
+                  ? `matches ${matchedSchemas.length}: ${matchedSchemas.slice(0, 8).join(", ")}${matchedSchemas.length > 8 ? "…" : ""}`
+                  : "everything on this page is saved once and applied to every matching schema. Exact per-schema overrides still win."}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       <div className="grid lg:grid-cols-2 gap-8 items-start">
-        <TableOverridesEditor meta={meta} catalog={catalog} saveSchema={saveSchema} onSaved={invalidate} />
+        <TableOverridesEditor
+          meta={meta}
+          schema={concreteSchema}
+          columnOverrides={schemaMeta.columnOverrides}
+          saveSchema={saveSchema}
+          onSaved={invalidate}
+        />
         <div>
           <SectionTitle>Virtual relationships</SectionTitle>
           <p className="text-[12.5px] mb-3" style={{ color: "var(--muted-foreground)" }}>
@@ -139,7 +164,7 @@ export default function CustomizePage() {
             catalog={catalog}
             fromSchema={saveSchema}
             fromTable={meta.table.name}
-            defaultToSchema={scope === "pattern" ? SAME_SCHEMA : meta.schema}
+            defaultToSchema={scope === "pattern" ? SAME_SCHEMA : (meta.schema ?? schemaMeta.name)}
             onSaved={invalidate}
           />
         </div>

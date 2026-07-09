@@ -1,0 +1,101 @@
+// Catalog/introspection types: connection → schema → table, fully qualified
+// so nothing is ambiguous across the fleet.
+import type { DbEngine } from "./connection";
+import type { VirtualFk, TableOverride, ColumnOverride } from "./overrides";
+
+export interface ColumnInfo {
+  name: string;
+  dataType: string; // formatted type e.g. "character varying(255)"
+  udtName: string; // underlying type e.g. "varchar", "int8", enum name
+  nullable: boolean;
+  default: string | null;
+  isGenerated: boolean;
+  ordinal: number;
+  comment: string | null;
+  enumValues: string[] | null;
+  maxLength: number | null;
+}
+
+export interface ForeignKeyInfo {
+  constraintName: string;
+  columns: string[];
+  referencedSchema: string;
+  referencedTable: string;
+  referencedColumns: string[];
+}
+
+export interface CheckConstraintInfo {
+  name: string;
+  expression: string;
+  // populated when the check is a simple `col IN (...)` — drives select widgets
+  inColumn: string | null;
+  inValues: string[] | null;
+}
+
+export interface TableInfo {
+  schema: string;
+  name: string;
+  kind: "table" | "view";
+  comment: string | null;
+  rowEstimate: number;
+  columns: ColumnInfo[];
+  primaryKey: string[];
+  foreignKeys: ForeignKeyInfo[];
+  uniqueConstraints: string[][];
+  checkConstraints: CheckConstraintInfo[];
+}
+
+export interface SchemaCatalog {
+  name: string;
+  tables: TableInfo[];
+}
+
+export interface ConnectionCatalog {
+  connectionId: string;
+  connectionName: string;
+  engine: DbEngine;
+  database: string;
+  schemas: SchemaCatalog[];
+  fetchedAt: string;
+  error?: string;
+}
+
+export interface Catalog {
+  connections: ConnectionCatalog[];
+  virtualFks: VirtualFk[];
+}
+
+// ---------- client catalog API ----------
+// The client never needs full table/column definitions for every connection
+// up front — that doesn't scale to a fleet of many schemas. `/api/catalog`
+// returns just a light connection/schema tree; table detail (and the
+// overrides/virtual-FKs scoped to one connection) load lazily per schema via
+// `/api/catalog/[connection]?schema=…`. Shared between the route handlers and
+// the client hooks so both sides stay in sync.
+
+export interface LightSchemaCatalog {
+  name: string;
+}
+
+export interface LightConnectionCatalog {
+  connectionId: string;
+  connectionName: string;
+  database: string;
+  engine: DbEngine;
+  error?: string;
+  schemas: LightSchemaCatalog[];
+}
+
+export interface CatalogResponse {
+  connections: LightConnectionCatalog[];
+}
+
+// Response for `/api/catalog/[connection]?schema=…` — one schema's tables
+// plus the overrides/virtual-FKs for that connection (virtual FKs may point
+// at or come from other connections, but are still scoped to ones touching
+// this connection).
+export interface SchemaDetail extends SchemaCatalog {
+  virtualFks: VirtualFk[];
+  tableOverrides: TableOverride[];
+  columnOverrides: ColumnOverride[];
+}

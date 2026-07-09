@@ -3,9 +3,8 @@
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { useCatalog } from "@/components/browse/useTableMeta";
-import type { SchemaCatalog, TableInfo } from "@/lib/types";
+import { useCatalog, useSchemaMeta } from "@/components/browse/useTableMeta";
+import { supportsSchemas, type TableInfo } from "@/lib/types";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -23,8 +22,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { tableHref } from "@/components/browse/use-schema-param";
 
-function TableCard({ connection, schema, table }: { connection: string; schema: string; table: TableInfo }) {
-  const href = tableHref(connection, schema, table.name);
+function TableCard({ connection, schema, table }: { connection: string; schema?: string; table: TableInfo }) {
+  const href = tableHref({ connection, schema, table: table.name });
   return (
     <div className="panel relative group flex text-[13px] font-medium overflow-hidden">
       <Link href={href} className="flex-1 px-4 py-3 min-w-0 pr-8">
@@ -57,30 +56,20 @@ function TableCard({ connection, schema, table }: { connection: string; schema: 
   );
 }
 
-function useSchemaData(connection: string, schemaName: string) {
-  return useQuery<SchemaCatalog>({
-    queryKey: ["schema-tables", connection, schemaName],
-    queryFn: async () => {
-      const res = await fetch(`/api/catalog/${encodeURIComponent(connection)}/${encodeURIComponent(schemaName)}`);
-      if (!res.ok) throw new Error("failed to load schema");
-      return res.json();
-    },
-    staleTime: 60_000,
-  });
-}
-
 function SchemaGrid({
   connection,
   schemaName,
   search,
   multiSchema,
+  includeSchemaInUrl,
 }: {
   connection: string;
   schemaName: string;
   search: string;
   multiSchema: boolean;
+  includeSchemaInUrl: boolean;
 }) {
-  const { data: schemaData, isLoading } = useSchemaData(connection, schemaName);
+  const { schemaMeta: schemaData, isLoading } = useSchemaMeta(connection, schemaName);
   const q = search.trim().toLowerCase();
 
   if (isLoading) {
@@ -112,7 +101,12 @@ function SchemaGrid({
       )}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
         {tables.map((t) => (
-          <TableCard key={t.name} connection={connection} schema={schemaName} table={t} />
+          <TableCard
+            key={t.name}
+            connection={connection}
+            schema={includeSchemaInUrl ? schemaName : undefined}
+            table={t}
+          />
         ))}
       </div>
     </div>
@@ -177,6 +171,7 @@ export default function ConnectionPage() {
           schemaName={schema.name}
           search={search}
           multiSchema={multiSchema}
+          includeSchemaInUrl={supportsSchemas(conn.engine)}
         />
       ))}
     </div>

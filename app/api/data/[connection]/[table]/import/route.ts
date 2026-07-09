@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "write");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const { rows } = bodySchema.parse(await req.json());
     const result = await bulkInsertRows(connection, schema, table, rows);
     return ok(result);

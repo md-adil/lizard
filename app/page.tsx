@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-context";
 import { useCatalog } from "@/components/browse/useTableMeta";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { pluralize } from "@/lib/pluralize";
 
 function greeting() {
   const h = new Date().getHours();
@@ -97,7 +98,6 @@ export default function HomePage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {connections.map((c) => {
-          const tableCount = c.schemas.reduce((n, s) => n + s.tables.length, 0);
           return (
             <Link key={c.connectionId} href={`/browse/${c.connectionName}`} className="block">
               <Card className="p-0 hover:bg-accent/40 transition-colors">
@@ -115,9 +115,7 @@ export default function HomePage() {
                   </div>
                   {!c.error && (
                     <div className="text-[11.5px] mt-2" style={{ color: "var(--muted-foreground-faint)" }}>
-                      {c.schemas.length} schema
-                      {c.schemas.length !== 1 ? "s" : ""} · {tableCount} table
-                      {tableCount !== 1 ? "s" : ""}
+                      {pluralize(c.schemas.length, "schema")}
                     </div>
                   )}
                 </div>

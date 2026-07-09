@@ -3,7 +3,7 @@
 // Right-side drawer with an auto-generated form for creating/editing a row.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCatalog, type TableMeta, type ColumnMeta } from "./useTableMeta";
+import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
@@ -45,10 +45,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const ref = cm.ref!;
 
-  const { data: catalog } = useCatalog();
-  const targetConn = catalog?.connections.find((c) => c.connectionName === ref.connection);
-  const isMysql = targetConn?.engine === "mysql";
-  const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(ref.schema)}&`;
+  const schemaParam = ref.schema ? `schema=${encodeURIComponent(ref.schema)}&` : "";
 
   const { data: options } = useQuery<{ id: string; label: string }[]>({
     queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
@@ -307,7 +304,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
       const data = buildPayload();
       if (!data) throw new Error("Fix the highlighted fields");
       const base = `/api/data/${meta.connection}/${meta.table.name}`;
-      const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+      const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
       const res = isCreate
         ? await fetch(`${base}${query}`, {
             method: "POST",
@@ -340,7 +337,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
 
   const del = useMutation({
     mutationFn: async () => {
-      const query = meta.connectionEngine === "mysql" ? "" : `?schema=${encodeURIComponent(meta.schema)}`;
+      const query = meta.schema ? `?schema=${encodeURIComponent(meta.schema)}` : "";
       const res = await fetch(`/api/data/${meta.connection}/${meta.table.name}/row${query}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },

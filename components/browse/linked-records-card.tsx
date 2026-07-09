@@ -6,17 +6,21 @@
 // endpoints — no new write path needed.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTableMeta, useCatalog } from "./useTableMeta";
+import { useTableMeta } from "./useTableMeta";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
 
+// junctionSchema/otherSchema are undefined when this connection has no real
+// schema (see supportsSchemas) — junction and "other" are always the same
+// connection for an M2M relationship, so both share that one resolution,
+// already decided by the caller (record page's `relations` construction).
 interface Target {
   connection: string;
-  junctionSchema: string;
+  junctionSchema: string | undefined;
   junctionTable: string;
   selfFkColumn: string;
   otherFkColumn: string;
-  otherSchema: string;
+  otherSchema: string | undefined;
   otherTable: string;
 }
 
@@ -36,10 +40,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     String(selfValue),
   ];
 
-  const { data: catalog } = useCatalog();
-  const conn = catalog?.connections.find((c) => c.connectionName === target.connection);
-  const isMysql = conn?.engine === "mysql";
-  const schemaParam = isMysql ? "" : `schema=${encodeURIComponent(target.junctionSchema)}&`;
+  const schemaParam = target.junctionSchema ? `schema=${encodeURIComponent(target.junctionSchema)}&` : "";
 
   const { data } = useQuery<{ rows: Record<string, unknown>[] }>({
     queryKey: key,
@@ -47,7 +48,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
       const qs = new URLSearchParams({
         selfFkColumn: target.selfFkColumn,
         otherFkColumn: target.otherFkColumn,
-        otherSchema: target.otherSchema,
+        ...(target.otherSchema ? { otherSchema: target.otherSchema } : {}),
         otherTable: target.otherTable,
         selfValue: String(selfValue),
       });
@@ -64,7 +65,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
     if (!junctionMeta) return;
     const pk: Record<string, unknown> = {};
     for (const k of junctionMeta.table.primaryKey) pk[k] = junctionRow[k];
-    const query = isMysql ? "" : `?schema=${encodeURIComponent(target.junctionSchema)}`;
+    const query = target.junctionSchema ? `?schema=${encodeURIComponent(target.junctionSchema)}` : "";
     await fetch(`/api/data/${target.connection}/${target.junctionTable}/row${query}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -74,7 +75,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
   }
 
   async function link(otherId: string) {
-    const query = isMysql ? "" : `?schema=${encodeURIComponent(target.junctionSchema)}`;
+    const query = target.junctionSchema ? `?schema=${encodeURIComponent(target.junctionSchema)}` : "";
     await fetch(`/api/data/${target.connection}/${target.junctionTable}${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

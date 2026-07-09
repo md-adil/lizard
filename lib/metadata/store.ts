@@ -139,9 +139,8 @@ export function deleteConnection(id: string): void {
 
 // ---------- virtual FKs ----------
 
-export function listVirtualFks(): VirtualFk[] {
-  const rows = getDb().prepare("SELECT * FROM virtual_fks").all() as Record<string, unknown>[];
-  return rows.map((r) => ({
+function mapVirtualFkRow(r: Record<string, unknown>): VirtualFk {
+  return {
     id: r.id as string,
     fromConnection: r.from_connection as string,
     fromSchema: r.from_schema as string,
@@ -153,7 +152,24 @@ export function listVirtualFks(): VirtualFk[] {
     constants: JSON.parse((r.constants as string) || "[]"),
     label: (r.label as string) || null,
     joinHint: (r.join_hint as string) || null,
-  }));
+  };
+}
+
+export function listVirtualFks(): VirtualFk[] {
+  const rows = getDb().prepare("SELECT * FROM virtual_fks").all() as Record<string, unknown>[];
+  return rows.map(mapVirtualFkRow);
+}
+
+// Virtual FKs touching one connection, either as source or target — used by
+// the per-schema catalog endpoint so a page for connection A doesn't pull in
+// every other connection's relationships. `fromSchema`/`toSchema` may still
+// be glob patterns, so callers filter down to an exact schema/table
+// themselves (see vfkMatchesSource).
+export function listVirtualFksForConnection(connectionName: string): VirtualFk[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM virtual_fks WHERE from_connection = ? OR to_connection = ?")
+    .all(connectionName, connectionName) as Record<string, unknown>[];
+  return rows.map(mapVirtualFkRow);
 }
 
 export function addVirtualFk(fk: Omit<VirtualFk, "id">): VirtualFk {
@@ -200,16 +216,30 @@ export function getTableOverride(connectionId: string, schema: string, table: st
   };
 }
 
-export function listTableOverrides(): TableOverride[] {
-  const rows = getDb().prepare("SELECT * FROM table_overrides").all() as Record<string, unknown>[];
-  return rows.map((r) => ({
+function mapTableOverrideRow(r: Record<string, unknown>): TableOverride {
+  return {
     connectionId: r.connection_id as string,
     schema: r.schema_name as string,
     table: r.table_name as string,
     hidden: !!r.hidden,
     displayColumn: (r.display_column as string) || null,
     label: (r.label as string) || null,
-  }));
+  };
+}
+
+export function listTableOverrides(): TableOverride[] {
+  const rows = getDb().prepare("SELECT * FROM table_overrides").all() as Record<string, unknown>[];
+  return rows.map(mapTableOverrideRow);
+}
+
+// Scoped to one connection — `schema` on a row may be a glob pattern (e.g.
+// multi-tenant "org_*"), so callers still resolve the winning override for a
+// concrete schema themselves (see resolveTableOverride).
+export function listTableOverridesForConnection(connectionId: string): TableOverride[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM table_overrides WHERE connection_id = ?")
+    .all(connectionId) as Record<string, unknown>[];
+  return rows.map(mapTableOverrideRow);
 }
 
 export function setTableOverride(o: TableOverride): void {
@@ -223,9 +253,8 @@ export function setTableOverride(o: TableOverride): void {
     .run(o.connectionId, o.schema, o.table, o.hidden ? 1 : 0, o.displayColumn, o.label);
 }
 
-export function listColumnOverrides(): ColumnOverride[] {
-  const rows = getDb().prepare("SELECT * FROM column_overrides").all() as Record<string, unknown>[];
-  return rows.map((r) => ({
+function mapColumnOverrideRow(r: Record<string, unknown>): ColumnOverride {
+  return {
     connectionId: r.connection_id as string,
     schema: r.schema_name as string,
     table: r.table_name as string,
@@ -237,13 +266,26 @@ export function listColumnOverrides(): ColumnOverride[] {
     redacted: !!r.redacted,
     sortOrder: r.sort_order as number | null,
     help: (r.help as string) || null,
-  }));
+  };
+}
+
+export function listColumnOverrides(): ColumnOverride[] {
+  const rows = getDb().prepare("SELECT * FROM column_overrides").all() as Record<string, unknown>[];
+  return rows.map(mapColumnOverrideRow);
+}
+
+// Scoped to one connection — `schema`/`table` on a row may be glob patterns,
+// so callers still resolve the winning override for a concrete schema/table
+// themselves (see resolveColumnOverrides).
+export function listColumnOverridesForConnection(connectionId: string): ColumnOverride[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM column_overrides WHERE connection_id = ?")
+    .all(connectionId) as Record<string, unknown>[];
+  return rows.map(mapColumnOverrideRow);
 }
 
 export function getColumnOverrides(connectionId: string, schema: string, table: string): ColumnOverride[] {
-  return listColumnOverrides().filter(
-    (o) => o.connectionId === connectionId && o.schema === schema && o.table === table,
-  );
+  return listColumnOverridesForConnection(connectionId).filter((o) => o.schema === schema && o.table === table);
 }
 
 export function setColumnOverride(o: ColumnOverride): void {

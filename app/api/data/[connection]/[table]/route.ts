@@ -12,7 +12,7 @@ export async function GET(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "read");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const filters: FilterCondition[] = url.searchParams.get("filters")
       ? JSON.parse(url.searchParams.get("filters")!)
       : [];
@@ -39,7 +39,7 @@ export async function POST(req: Request, { params }: Params) {
     const { connection, table } = await params;
     await requireConnectionAccess(connection, "write");
     const url = new URL(req.url);
-    const schema = url.searchParams.get("schema") ?? "";
+    const schema = url.searchParams.get("schema") ?? undefined;
     const data = await req.json();
     const row = await createRow(connection, schema, table, data);
     return ok({ row }, { status: 201 });

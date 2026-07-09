@@ -5,14 +5,14 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
-  ConnectionCatalog,
   TableInfo,
   VirtualFk,
   TableOverride,
-  ColumnOverride,
   ColumnInfo,
   VfkTransform,
-  SchemaCatalog,
+  CatalogResponse,
+  SchemaDetail,
+  DbEngine,
 } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -26,13 +26,9 @@ import {
 } from "@/lib/introspect/heuristics";
 import { vfkMatchesSource, resolveToSchema, vfkDisplayColumn, vfkTargetColumn } from "@/lib/introspect/virtual-fk";
 import { resolveTableOverride, resolveColumnOverrides } from "@/lib/introspect/overrides";
+import { supportsSchemas } from "@/lib/types";
 
-export interface CatalogResponse {
-  connections: ConnectionCatalog[];
-  virtualFks: VirtualFk[];
-  tableOverrides: TableOverride[];
-  columnOverrides: ColumnOverride[];
-}
+export type { CatalogResponse, SchemaDetail } from "@/lib/types";
 
 export function useCatalog() {
   return useQuery<CatalogResponse>({
@@ -54,10 +50,13 @@ export interface ColumnMeta {
   redacted: boolean;
   help: string | null;
   options: string[] | null;
-  // where a reference picker should search: real FK or virtual FK target
+  // where a reference picker should search: real FK or virtual FK target.
+  // schema is undefined when the target connection doesn't have one (see
+  // TableMeta.schema) — it may point at a different connection than the
+  // table this column belongs to (virtual FKs can cross connections).
   ref: {
     connection: string;
-    schema: string;
+    schema: string | undefined;
     table: string;
     column: string;
     // value transform applied symmetrically to both sides of the join (see
@@ -70,8 +69,13 @@ export interface ColumnMeta {
 export interface TableMeta {
   connection: string;
   connectionId: string;
-  connectionEngine: string;
-  schema: string;
+  connectionEngine: DbEngine;
+  // Only Postgres connections have a real schema — undefined for MySQL/Mongo,
+  // where a connection maps to exactly one database and there's nothing to
+  // name or carry around (see supportsSchemas). Internal matching against
+  // stored overrides/virtual-FKs still uses the resolved schema name — see
+  // buildTableMeta — but nothing outside it should need to know that.
+  schema: string | undefined;
   table: TableInfo;
   label: string;
   isView: boolean;
@@ -84,17 +88,36 @@ export interface TableMeta {
 
 export function buildTableMeta(
   catalog: CatalogResponse,
+  schemaMeta: SchemaDetail,
   connection: string,
-  schema: string,
   tableName: string,
   table: TableInfo,
 ): TableMeta | null {
   const conn = catalog.connections.find((c) => c.connectionName === connection);
   if (!conn || !table) return null;
 
-  const tOverride = resolveTableOverride(catalog.tableOverrides, conn.connectionId, schema, tableName);
-  const cOverrides = resolveColumnOverrides(catalog.columnOverrides, conn.connectionId, schema, tableName);
-  const vfks = catalog.virtualFks.filter((v) => vfkMatchesSource(v, connection, schema, tableName));
+  // The resolved schema name always exists (Postgres: a real schema; MySQL:
+  // the database name introspection reports as a synthetic one) and is what
+  // overrides/virtual-FKs are actually stored/matched against, regardless of
+  // whether this engine's schema is worth exposing to the UI.
+  const schema = schemaMeta.name;
+  const tOverride = resolveTableOverride(schemaMeta.tableOverrides, conn.connectionId, schema, tableName);
+  const cOverrides = resolveColumnOverrides(schemaMeta.columnOverrides, conn.connectionId, schema, tableName);
+  const vfks = schemaMeta.virtualFks.filter((v) => vfkMatchesSource(v, connection, schema, tableName));
+
+  // A virtual FK can point at a different connection (with a different
+  // engine) than the source table, so its eligibility can't be inferred from
+  // conn.engine — look it up per target connection, once.
+  const connSupportsSchemas = new Map<string, boolean>();
+  function targetSupportsSchemas(connectionName: string): boolean {
+    let v = connSupportsSchemas.get(connectionName);
+    if (v === undefined) {
+      const engine = catalog.connections.find((c) => c.connectionName === connectionName)?.engine;
+      v = !!engine && supportsSchemas(engine);
+      connSupportsSchemas.set(connectionName, v);
+    }
+    return v;
+  }
 
   const columns: ColumnMeta[] = table.columns.map((col) => {
     const o = cOverrides.find((x) => x.column === col.name);
@@ -104,8 +127,10 @@ export function buildTableMeta(
     const vfk = vfks.find((v) => vfkDisplayColumn(v) === col.name);
     const ref = realFk
       ? {
+          // real FKs never cross connections, so the target shares this
+          // table's engine.
           connection,
-          schema: realFk.referencedSchema,
+          schema: targetSupportsSchemas(connection) ? realFk.referencedSchema : undefined,
           table: realFk.referencedTable,
           column: realFk.referencedColumns[0],
           transform: "none" as VfkTransform,
@@ -113,7 +138,7 @@ export function buildTableMeta(
       : vfk
         ? {
             connection: vfk.toConnection,
-            schema: resolveToSchema(vfk, schema),
+            schema: targetSupportsSchemas(vfk.toConnection) ? resolveToSchema(vfk, schema) : undefined,
             table: vfk.toTable,
             column: vfkTargetColumn(vfk)!,
             transform: vfk.pairs[0]?.transform ?? "none",
@@ -144,7 +169,7 @@ export function buildTableMeta(
     connection,
     connectionId: conn.connectionId,
     connectionEngine: conn.engine,
-    schema,
+    schema: supportsSchemas(conn.engine) ? schema : undefined,
     table,
     label: tOverride?.label || humanize(tableName),
     isView: table.kind === "view",
@@ -162,33 +187,35 @@ export function buildTableMeta(
 // build meta for several tables at once) should keep calling buildTableMeta
 // directly instead.
 export function useSchemaMeta(connection: string | undefined, schema: string | undefined) {
-  const { data: schemaMeta, isLoading, error } = useQuery<SchemaCatalog>({
+  const { data: schemaMeta, isLoading, error } = useQuery<SchemaDetail>({
     queryKey: ["schema-meta", connection, schema],
     queryFn: async () => {
-      const res = await fetch(`/api/catalog/${connection}/${schema}`);
+      const url = `/api/catalog/${connection}${schema ? `?schema=${encodeURIComponent(schema)}` : ""}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to load schema metadata");
       return res.json();
     },
-    enabled: !!connection && !!schema,
+    enabled: !!connection,
+    staleTime: 60_000,
   });
   return { schemaMeta, isLoading, error };
 }
 
+// `schema` is only meaningful for Postgres — omit it for MySQL/Mongo (or
+// when the caller doesn't know it yet) and the server resolves it to the
+// connection's one schema, or Postgres's "public" default.
 export function useTableMeta(connection: string | undefined, schema: string | undefined, table: string | undefined) {
   const { data: catalog } = useCatalog();
-  const conn = catalog?.connections.find((c) => c.connectionName === connection);
-  const resolvedSchema = schema || (conn?.engine === "mysql" ? conn.database : "public");
-
-  const { schemaMeta, isLoading, error } = useSchemaMeta(connection, resolvedSchema);
+  const { schemaMeta, isLoading, error } = useSchemaMeta(connection, schema);
 
   const meta = useMemo(() => {
-    if (!catalog || !connection || !resolvedSchema || !table || !schemaMeta) return null;
+    if (!catalog || !connection || !table || !schemaMeta) return null;
     const tableInfo = schemaMeta.tables.find((t) => t.name === table);
     if (!tableInfo) return null;
-    return buildTableMeta(catalog, connection, resolvedSchema, table, tableInfo);
-  }, [catalog, connection, resolvedSchema, table, schemaMeta]);
+    return buildTableMeta(catalog, schemaMeta, connection, table, tableInfo);
+  }, [catalog, connection, table, schemaMeta]);
 
-  return { meta, catalog, isLoading: isLoading || !catalog, error };
+  return { meta, catalog, schemaMeta, isLoading: isLoading || !catalog, error };
 }
 
 const INTERVAL_KEYS = new Set(["years", "months", "days", "hours", "minutes", "seconds", "milliseconds"]);

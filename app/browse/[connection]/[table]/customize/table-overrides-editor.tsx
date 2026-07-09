@@ -9,7 +9,8 @@ import { useMutation } from "@tanstack/react-query";
 import { resolveColumnOverrides } from "@/lib/introspect/overrides";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { TableMeta, CatalogResponse } from "@/components/browse/useTableMeta";
+import type { TableMeta } from "@/components/browse/useTableMeta";
+import type { ColumnOverride } from "@/lib/types";
 
 const WIDGETS = [
   "",
@@ -32,16 +33,21 @@ const WIDGETS = [
 
 export function TableOverridesEditor({
   meta,
-  catalog,
+  schema,
+  columnOverrides,
   saveSchema,
   onSaved,
 }: {
   meta: TableMeta;
-  catalog: CatalogResponse;
+  // Concrete, always-defined schema for the table being viewed (unlike
+  // meta.schema, which is undefined for non-Postgres) — used to look up the
+  // overrides currently in effect, as opposed to saveSchema (what to write).
+  schema: string;
+  columnOverrides: ColumnOverride[];
   saveSchema: string;
   onSaved: () => void;
 }) {
-  const colOv = resolveColumnOverrides(catalog.columnOverrides, meta.connectionId, meta.schema, meta.table.name);
+  const colOv = resolveColumnOverrides(columnOverrides, meta.connectionId, schema, meta.table.name);
   const findOv = (name: string) => colOv.find((o) => o.column === name);
 
   const [tableLabel, setTableLabel] = useState(meta.tableOverride?.label ?? "");

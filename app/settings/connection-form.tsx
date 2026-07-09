@@ -63,7 +63,7 @@ export function ConnectionForm({
   initial,
   onClose,
 }: {
-  mode: "create" | "edit";
+  mode: "create" | "edit" | null;
   initial?: ConnectionRow;
   onClose: () => void;
 }) {
@@ -228,7 +228,7 @@ export function ConnectionForm({
     );
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={Boolean(mode)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton
         className="w-160 max-w-[94vw] sm:max-w-160 max-h-[90vh] overflow-y-auto scrollbar-thin"

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ConnectionForm, type ConnectionRow } from "@/app/connection-form";
+import { ConnectionForm, type ConnectionRow } from "@/app/settings/connection-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
@@ -123,17 +123,14 @@ export function ConnectionsTab() {
           </Card>
         )}
       </div>
-
-      {formMode && (
-        <ConnectionForm
-          mode={formMode}
-          initial={editing ?? undefined}
-          onClose={() => {
-            setFormMode(null);
-            setEditing(null);
-          }}
-        />
-      )}
+      <ConnectionForm
+        mode={formMode}
+        initial={editing ?? undefined}
+        onClose={() => {
+          setFormMode(null);
+          setEditing(null);
+        }}
+      />
     </div>
   );
 }
