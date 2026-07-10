@@ -465,11 +465,17 @@ async function fetchFkLabels(
         // and turns each label lookup into a full scan.
         const targetExpr = (col: string) => `t.${targetDialect.quoteIdent(col)}`;
 
+        const targetCols = job.pairs.map((p) => {
+          return targetTable.columns.find((c) => c.name === p.to)!;
+        });
+
         const valuesRows = tuples.map((tuple, rowIndex) => {
           const cols = tuple.map((val, colIndex) => {
             params.push(val);
             const placeholder = targetDialect.placeholder(params.length);
-            return rowIndex === 0 ? `${placeholder} AS k${colIndex}` : placeholder;
+            const targetCol = targetCols[colIndex];
+            const castPlaceholder = targetDialect.cast(placeholder, targetCol.udtName);
+            return rowIndex === 0 ? `${castPlaceholder} AS k${colIndex}` : castPlaceholder;
           });
           return `SELECT ${cols.join(", ")}`;
         });
