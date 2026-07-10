@@ -47,7 +47,7 @@ beforeAll(() => {
     toConnection: "users_service",
     toSchema: "public",
     toTable: "customers",
-    pairs: [{ from: "customer_id", to: "id", transform: "none" }],
+    pairs: [{ from: "customer_id", to: "id" }],
     constants: [],
     label: "customer",
     joinHint: null,

@@ -6,7 +6,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTableMeta, connectionSupportsSchemas, formatCell, type TableMeta } from "@/components/browse/useTableMeta";
 import { dataApiUrl } from "@/components/browse/data-api";
-import type { VfkTransform } from "@/lib/types";
+import type { FkLabels } from "@/lib/types";
+import { fkLabelFor } from "@/lib/data/fk-labels";
 import { RowEditor } from "@/components/browse/row-editor";
 import { RedactedValue } from "@/components/browse/redacted-value";
 import { RecordComments } from "@/components/browse/record-comments";
@@ -142,21 +143,13 @@ function RelatedCard({
   );
 }
 
-function FieldList({
-  meta,
-  row,
-  fkLabels,
-}: {
-  meta: TableMeta;
-  row: Record<string, unknown>;
-  fkLabels: Record<string, Record<string, string>>;
-}) {
+function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<string, unknown>; fkLabels: FkLabels }) {
   const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "json" && c.widget !== "html");
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
       {cols.map((cm) => {
         const v = row[cm.col.name];
-        const label = cm.ref && v != null ? fkLabels[cm.col.name]?.[String(v)] : undefined;
+        const label = cm.ref && v != null ? fkLabelFor(fkLabels, cm.col.name, row) : undefined;
         const f = formatCell(v);
         const isMedia =
           (cm.widget === "image" || cm.widget === "video" || cm.widget === "audio") &&
@@ -454,20 +447,15 @@ function BelongsToCard({
     schema: string | undefined;
     table: string;
     column: string;
-    transform: VfkTransform;
   };
   value: unknown;
 }) {
   const { meta: targetMeta } = useTableMeta(target.connection, target.schema, target.table);
   const [editing, setEditing] = useState(false);
   const pkJson = JSON.stringify({ [target.column]: value });
-  // only the reference column can carry a transform (e.g. case-insensitive),
-  // so this key is a single-entry map — but keyTransforms is shaped to
-  // support composite keys if that's ever needed here too.
-  const keyTransformsJson = target.transform !== "none" ? JSON.stringify({ [target.column]: target.transform }) : undefined;
   const { data, error } = useQuery<{
     row: Record<string, unknown>;
-    fkLabels: Record<string, Record<string, string>>;
+    fkLabels: FkLabels;
   }>({
     queryKey: ["record", target.connection, target.schema, target.table, String(value)],
     queryFn: async () => {
@@ -477,7 +465,7 @@ function BelongsToCard({
           table: target.table,
           path: "row",
           schema: target.schema,
-          params: { pk: pkJson, keyTransforms: keyTransformsJson },
+          params: { pk: pkJson },
         }),
       );
       const body = await res.json();
@@ -491,7 +479,7 @@ function BelongsToCard({
     connection: target.connection,
     schema: target.schema,
     table: target.table,
-    params: { pk: pkJson, ...(keyTransformsJson ? { keyTransforms: keyTransformsJson } : {}) },
+    params: { pk: pkJson },
   });
   return (
     <RelatedCard
@@ -551,7 +539,7 @@ function HasManyCard({
   const { data, error } = useQuery<{
     rows: Record<string, unknown>[];
     total: number | null;
-    fkLabels: Record<string, Record<string, string>>;
+    fkLabels: FkLabels;
   }>({
     queryKey: [
       "related",
@@ -683,33 +671,11 @@ function RecordView() {
       return {};
     }
   }, [search]);
-  // present when this page was reached via a transformed reference (e.g.
-  // BelongsToCard's "Open record →" link on a case-insensitive join) — see
-  // getRow's keyTransforms.
-  const keyTransforms = useMemo(() => {
-    try {
-      const direct = search.get("keyTransforms");
-      if (direct) return JSON.parse(direct) as Record<string, string>;
-      const queryStr = search.get("query") ?? "";
-      const inner = new URLSearchParams(queryStr).get("keyTransforms");
-      return inner ? (JSON.parse(inner) as Record<string, string>) : undefined;
-    } catch {
-      return undefined;
-    }
-  }, [search]);
-
   const { data, error } = useQuery<{
     row: Record<string, unknown>;
-    fkLabels: Record<string, Record<string, string>>;
+    fkLabels: FkLabels;
   }>({
-    queryKey: [
-      "record",
-      params.connection,
-      schema,
-      params.table,
-      JSON.stringify(pk),
-      JSON.stringify(keyTransforms ?? {}),
-    ],
+    queryKey: ["record", params.connection, schema, params.table, JSON.stringify(pk)],
     queryFn: async () => {
       const res = await fetch(
         dataApiUrl({
@@ -719,7 +685,6 @@ function RecordView() {
           schema: meta?.schema,
           params: {
             pk: JSON.stringify(pk),
-            keyTransforms: keyTransforms ? JSON.stringify(keyTransforms) : undefined,
           },
         }),
       );
@@ -875,7 +840,9 @@ function RecordView() {
           <BreadcrumbSeparator />
           <BreadcrumbItem>
             <BreadcrumbLink
-              render={<Link href={tableHref({ connection: params.connection, schema: meta.schema, table: params.table })} />}
+              render={
+                <Link href={tableHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+              }
             >
               {meta.label}
             </BreadcrumbLink>

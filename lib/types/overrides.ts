@@ -1,14 +1,10 @@
-// Transform applied symmetrically to both sides of an equi-join comparison so
-// values that differ only by case/whitespace still match (e.g. LOWER(a)=LOWER(b)).
-export type VfkTransform = "none" | "lower" | "upper" | "trim";
-
 export interface VfkPair {
   from: string; // source column
   to: string; // target column
-  transform?: VfkTransform; // default "none"
 }
 
-// Constant predicate on the target side, e.g. target.type = 'user'.
+// Constant predicate pinning one side of the relation, e.g. a Laravel
+// polymorphic discriminator: source.subject_type = 'App\Models\Course'.
 export interface VfkConstant {
   toColumn: string;
   side: "source" | "target";

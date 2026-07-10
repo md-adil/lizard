@@ -2,12 +2,9 @@
 // must exist in the introspected catalog before it is quoted into SQL, and all
 // values are parameterized. Writes go through the connection's write role
 // inside a transaction and always target exactly one connection.
-import { supportsSchemas, type ConnectionConfig, type TableInfo, type VfkTransform } from "@/lib/types";
-import {
-  vfkMatchesSource,
-  resolveToSchema,
-  applyTransform,
-} from "@/lib/introspect/virtual-fk";
+import { supportsSchemas, type ConnectionConfig, type FkLabels, type TableInfo } from "@/lib/types";
+import { vfkMatchesSource, resolveToSchema } from "@/lib/introspect/virtual-fk";
+import { fkLabelKey, FK_KEY_SEP } from "@/lib/data/fk-labels";
 import { findUpdatedAtColumn } from "@/lib/introspect/heuristics";
 import { getClient, type DbClient } from "@/lib/db/pools";
 import { getDialect } from "@/app/api/database/registry";
@@ -66,6 +63,25 @@ const TEXT_LIKE_TYPES = new Set([
   "char",
 ]);
 const SEARCH_ROW_LIMIT = 500_000;
+
+// `term ILIKE any of the text columns`, as an OR-chain.
+//
+// Every column gets its own bound value. Postgres would let one `$n` be
+// referenced by all of them, but MySQL's `?` is strictly positional — reusing a
+// single placeholder leaves the extra `?`s unbound, and the statement fails to
+// parse. One value per placeholder is the only form that works on both.
+function buildSearchClause(
+  textCols: { name: string }[],
+  term: string,
+  values: unknown[],
+  dialect: Dialect,
+): string {
+  const parts = textCols.map((c) => {
+    values.push(`%${term}%`);
+    return dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(values.length));
+  });
+  return `(${parts.join(" OR ")})`;
+}
 
 async function resolveTable(
   connectionName: string,
@@ -136,9 +152,7 @@ export async function listRows(params: ListParams) {
         TEXT_LIKE_TYPES.has(c.udtName),
       );
       if (textCols.length > 0) {
-        const idx = allValues.length + 1;
-        allValues.push(`%${term}%`);
-        searchClause = `(${textCols.map((c) => dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(idx))).join(" OR ")})`;
+        searchClause = buildSearchClause(textCols, term, allValues, dialect);
       }
     }
 
@@ -218,9 +232,7 @@ export async function exportRows(
         TEXT_LIKE_TYPES.has(c.udtName),
       );
       if (textCols.length > 0) {
-        const idx = allValues.length + 1;
-        allValues.push(`%${term}%`);
-        searchClause = `(${textCols.map((c) => dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(idx))).join(" OR ")})`;
+        searchClause = buildSearchClause(textCols, term, allValues, dialect);
       }
     }
 
@@ -319,42 +331,13 @@ export async function listLinkedRows(
   }
 }
 
-function transformSql(expr: string, t: VfkTransform): string {
-  switch (t) {
-    case "lower":
-      return `LOWER(${expr})`;
-    case "upper":
-      return `UPPER(${expr})`;
-    case "trim":
-      return `TRIM(${expr})`;
-    default:
-      return expr;
-  }
-}
-
 // Equality against a bound parameter, without wrapping the column in a cast.
 // `CAST(id AS CHAR) = ?` (MySQL) and `id::text = $1` (Postgres) are not
 // sargable — the planner can't use the column's index and the lookup degrades
 // to a full table scan, which is fatal on a large table. Bind the raw value
 // instead and let the engine coerce the *parameter* to the column's type.
-//
-// A transform (case-insensitive / trimmed virtual-FK joins) does force text
-// semantics, and with them the scan — that's inherent to the comparison, not
-// something we can avoid. Omit `transform` when there is none.
-function equalsParam(
-  columnExpr: string,
-  placeholder: string,
-  dialect: Dialect,
-  transform?: VfkTransform,
-): string {
-  const expr = isTransform(transform) ? transformSql(dialect.castToText(columnExpr), transform) : columnExpr;
-  return `${expr} = ${placeholder}`;
-}
-
-// "none" and `undefined` both mean "compare the value as-is"; VfkPair.transform
-// is optional and defaults to "none", so every caller has to tolerate both.
-function isTransform(t: VfkTransform | undefined): t is Exclude<VfkTransform, "none"> {
-  return t !== undefined && t !== "none";
+function equalsParam(columnExpr: string, placeholder: string): string {
+  return `${columnExpr} = ${placeholder}`;
 }
 
 interface LabelJob {
@@ -362,22 +345,24 @@ interface LabelJob {
   targetConn: ConnectionConfig;
   schema: string; // concrete target schema (after $schema resolution)
   table: string;
-  pairs: { from: string; to: string; transform: VfkTransform }[];
+  pairs: { from: string; to: string }[];
   constants: { toColumn: string; side?: "source" | "target"; value: string }[];
 }
 
 // For each single-column real FK and each matching virtual FK (composite,
-// transformed, constant-filtered, possibly cross-connection / multi-tenant),
-// resolve the target display label for the rows present. Returns
-// { [displayColumn]: { [rawSourceValue]: label } } — keyed by the raw value of
-// the display column so the grid's `fkLabels[col][String(v)]` lookup hits
-// regardless of composite arity or case/whitespace transforms.
+// constant-filtered, possibly cross-connection / multi-tenant), resolve the
+// target display label for the rows present.
+//
+// Labels are keyed by the reference column's value *plus* any source-side
+// constant (discriminator) columns — see FkLabelSet. A polymorphic relation
+// (`subject_id` + `subject_type`) reuses ids across parent tables, so keying by
+// `subject_id` alone would hand a Course's title to a Batch row with the same id.
 async function fetchFkLabels(
   conn: ConnectionConfig,
   table: TableInfo,
   rows: Record<string, unknown>[],
-): Promise<Record<string, Record<string, string>>> {
-  const out: Record<string, Record<string, string>> = {};
+): Promise<FkLabels> {
+  const out: FkLabels = {};
   if (rows.length === 0) return out;
 
   const jobs: LabelJob[] = [];
@@ -389,9 +374,7 @@ async function fetchFkLabels(
       targetConn: conn,
       schema: fk.referencedSchema,
       table: fk.referencedTable,
-      pairs: [
-        { from: fk.columns[0], to: fk.referencedColumns[0], transform: "none" },
-      ],
+      pairs: [{ from: fk.columns[0], to: fk.referencedColumns[0] }],
       constants: [],
     });
   }
@@ -407,27 +390,34 @@ async function fetchFkLabels(
       targetConn: target,
       schema: resolveToSchema(v, table.schema),
       table: v.toTable,
-      pairs: v.pairs.map((p) => ({
-        from: p.from,
-        to: p.to,
-        transform: p.transform ?? "none",
-      })),
+      pairs: v.pairs.map((p) => ({ from: p.from, to: p.to })),
       constants: v.constants,
     });
   }
 
-  const SEP = " ";
+  // Every job writing to the same reference column must agree on the key shape,
+  // so the discriminator columns are unioned across jobs up front.
+  const keyColumnsFor = new Map<string, string[]>();
+  for (const job of jobs) {
+    const discriminators = job.constants.filter((c) => c.side === "source").map((c) => c.toColumn);
+    const prev = keyColumnsFor.get(job.displayColumn)?.slice(1) ?? [];
+    const merged = [...new Set([...prev, ...discriminators])].sort();
+    keyColumnsFor.set(job.displayColumn, [job.displayColumn, ...merged]);
+  }
+
+  const SEP = FK_KEY_SEP;
 
   await Promise.all(
     jobs.map(async (job) => {
       try {
-        // Build normalized source tuples and remember the raw display value
-        // each tuple maps to (last write wins on collision — best effort).
+        const keyColumns = keyColumnsFor.get(job.displayColumn)!;
+
+        // Join keys for the target lookup, and the row keys each one labels.
         const seen = new Set<string>();
-        const tuples: string[][] = [];
-        const rawByKey = new Map<string, string>();
+        const tuples: unknown[][] = [];
+        const rowKeysByTuple = new Map<string, Set<string>>();
         for (const r of rows) {
-          // If a constant predicate is defined on the source table, the row must match it.
+          // A source-side constant restricts which rows this relation covers.
           const matchesSourceConstants = job.constants
             .filter((c) => c.side === "source")
             .every((c) => String(r[c.toColumn] ?? "") === c.value);
@@ -435,12 +425,16 @@ async function fetchFkLabels(
 
           const vals = job.pairs.map((p) => r[p.from]);
           if (vals.some((v) => v === null || v === undefined)) continue;
-          const norm = job.pairs.map((p, i) => applyTransform(vals[i], p.transform));
-          const key = norm.join(SEP);
-          rawByKey.set(key, String(r[job.displayColumn]));
-          if (!seen.has(key)) {
-            seen.add(key);
-            tuples.push(norm);
+          const tupleKey = vals.map((v) => String(v)).join(SEP);
+          let rowKeys = rowKeysByTuple.get(tupleKey);
+          if (!rowKeys) {
+            rowKeys = new Set();
+            rowKeysByTuple.set(tupleKey, rowKeys);
+          }
+          rowKeys.add(fkLabelKey(r, keyColumns));
+          if (!seen.has(tupleKey)) {
+            seen.add(tupleKey);
+            tuples.push(vals);
           }
         }
         if (tuples.length === 0) return;
@@ -467,8 +461,9 @@ async function fetchFkLabels(
 
         const targetDialect = getDialect(job.targetConn.engine);
         const params: unknown[] = [];
-        const targetExpr = (col: string, t: VfkTransform) =>
-          transformSql(targetDialect.castToText(`t.${targetDialect.quoteIdent(col)}`), t);
+        // Compare the raw column, never a cast of it — a cast is not sargable
+        // and turns each label lookup into a full scan.
+        const targetExpr = (col: string) => `t.${targetDialect.quoteIdent(col)}`;
 
         const valuesRows = tuples.map((tuple, rowIndex) => {
           const cols = tuple.map((val, colIndex) => {
@@ -481,20 +476,14 @@ async function fetchFkLabels(
         const keysSubquery = `(${valuesRows.join(" UNION ALL ")})`;
 
         const keyCols = job.pairs.map((_, i) => `k${i}`);
-        const onClause = job.pairs
-          .map((p, i) => `${targetExpr(p.to, p.transform)} = vfk_keys.k${i}`)
-          .join(" AND ");
-        const selectKeys = job.pairs.map(
-          (p, i) => `${targetExpr(p.to, p.transform)} AS k${i}`,
-        );
+        const onClause = job.pairs.map((p, i) => `${targetExpr(p.to)} = vfk_keys.k${i}`).join(" AND ");
+        const selectKeys = job.pairs.map((p, i) => `${targetExpr(p.to)} AS k${i}`);
         const targetConstants = job.constants.filter((c) => !c.side || c.side === "target");
         const constClause = targetConstants.map((c) => {
           params.push(c.value);
-          return `${targetDialect.castToText(`t.${targetDialect.quoteIdent(c.toColumn)}`)} = ${targetDialect.placeholder(params.length)}`;
+          return `${targetExpr(c.toColumn)} = ${targetDialect.placeholder(params.length)}`;
         });
-        const where = constClause.length
-          ? `WHERE ${constClause.join(" AND ")}`
-          : "";
+        const where = constClause.length ? `WHERE ${constClause.join(" AND ")}` : "";
 
         const client = await getClient(job.targetConn, "read");
         try {
@@ -515,14 +504,22 @@ async function fetchFkLabels(
 
           const keyToLabel = new Map<string, string>();
           for (const tr of res.rows) {
-            keyToLabel.set(keyCols.map((kc) => tr[kc]).join(SEP), tr.label);
+            keyToLabel.set(keyCols.map((kc) => String(tr[kc])).join(SEP), tr.label as string);
           }
-          const map: Record<string, string> = {};
-          for (const [tupleKey, rawVal] of rawByKey) {
+
+          const labels: Record<string, string> = {};
+          for (const [tupleKey, rowKeys] of rowKeysByTuple) {
             const label = keyToLabel.get(tupleKey);
-            if (label != null) map[rawVal] = label;
+            if (label == null) continue;
+            for (const rowKey of rowKeys) labels[rowKey] = label;
           }
-          if (Object.keys(map).length) out[job.displayColumn] = map;
+          if (Object.keys(labels).length === 0) return;
+
+          // Merge: several relations may label the same column (one per
+          // polymorphic type); they share keyColumns so the keys never collide.
+          const existing = out[job.displayColumn];
+          if (existing) Object.assign(existing.labels, labels);
+          else out[job.displayColumn] = { keyColumns, labels };
         } finally {
           client.release();
         }
@@ -547,7 +544,7 @@ function pkWhere(
   const parts = table.primaryKey.map((col) => {
     if (!(col in pk)) throw new CrudError(`Missing primary key part: ${col}`);
     values.push(pk[col]);
-    return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length), dialect);
+    return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length));
   });
   return parts.join(" AND ");
 }
@@ -558,28 +555,18 @@ function pkWhere(
 // the full PK here would 404 valid reference lookups. Writes still go through
 // the strict pkWhere below; RowEditor re-derives the real PK from the loaded
 // row before editing/deleting, so this never weakens mutation safety.
-// `keyTransforms` mirrors a virtual FK pair's value transform (see
-// fetchFkLabels) so a case-insensitive/trimmed join can still be looked up
-// one row at a time — without it, a lookup on a transformed reference column
-// would silently 404 (exact match against a value that only matches modulo
-// case/whitespace).
 function lookupWhere(
   table: TableInfo,
   key: Record<string, unknown>,
   values: unknown[],
   dialect: Dialect,
-  keyTransforms: Record<string, VfkTransform> = {},
 ): string {
   const cols = Object.keys(key);
   if (cols.length === 0) throw new CrudError("No lookup key provided");
   const parts = cols.map((col) => {
     assertColumn(table, col);
-    const t = keyTransforms[col];
-    // Untransformed lookups are the overwhelmingly common case (opening a
-    // record by its primary key) — bind the value as-is so the column's index
-    // is usable. Only a transformed key forces the textual comparison.
-    values.push(isTransform(t) ? applyTransform(key[col], t) : key[col]);
-    return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length), dialect, t);
+    values.push(key[col]);
+    return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length));
   });
   return parts.join(" AND ");
 }
@@ -589,12 +576,11 @@ export async function getRow(
   schema: string | undefined,
   tableName: string,
   pk: Record<string, unknown>,
-  keyTransforms?: Record<string, VfkTransform>,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   const dialect = getDialect(conn.engine);
   const values: unknown[] = [];
-  const where = lookupWhere(table, pk, values, dialect, keyTransforms);
+  const where = lookupWhere(table, pk, values, dialect);
   const client = await getClient(conn, "read");
   try {
     const fqtn = dialect.supportsSchemas

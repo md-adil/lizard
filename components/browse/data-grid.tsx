@@ -7,6 +7,8 @@
 // state) keeps header/body aligned and drives live column-resize. Sorting
 // stays server-side: header clicks call back to the parent to refetch.
 import { useEffect, useMemo, useState } from "react";
+import type { FkLabels } from "@/lib/types";
+import { fkLabelFor } from "@/lib/data/fk-labels";
 import {
   useReactTable,
   getCoreRowModel,
@@ -40,7 +42,7 @@ type Row = Record<string, unknown>;
 interface Props {
   columns: ColumnMeta[];
   rows: Row[];
-  fkLabels: Record<string, Record<string, string>>;
+  fkLabels: FkLabels;
   sort?: string;
   sortDir: "asc" | "desc";
   onToggleSort: (column: string) => void;
@@ -144,7 +146,10 @@ export function DataGrid({
             if (cm.redacted) {
               return <RedactedValue value={v} />;
             }
-            const label = cm.ref && v != null ? fkLabels[cm.col.name]?.[String(v)] : undefined;
+            const label =
+              cm.ref && v != null
+                ? fkLabelFor(fkLabels, cm.col.name, info.row.original as Record<string, unknown>)
+                : undefined;
             if (label) {
               return (
                 <>

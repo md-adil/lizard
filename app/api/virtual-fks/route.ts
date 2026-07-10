@@ -6,7 +6,6 @@ import { requireUser, requireEditor } from "@/lib/auth/session";
 const pairSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
-  transform: z.enum(["none", "lower", "upper", "trim"]).default("none"),
 });
 
 const constantSchema = z.object({

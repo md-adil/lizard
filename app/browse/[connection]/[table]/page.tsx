@@ -31,7 +31,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
 import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
 import { dataApiUrl } from "@/components/browse/data-api";
-import type { SavedViewConfig } from "@/lib/types";
+import type { FkLabels, SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -42,11 +42,11 @@ interface ListResponse {
   rows: Record<string, unknown>[];
   hasMore: boolean;
   total: number | null;
-  fkLabels: Record<string, Record<string, string>>;
+  fkLabels: FkLabels;
 }
 
 const EMPTY_ROWS: Record<string, unknown>[] = [];
-const EMPTY_FK_LABELS: Record<string, Record<string, string>> = {};
+const EMPTY_FK_LABELS: FkLabels = {};
 
 export default function TablePage() {
   const params = useParams<{
@@ -56,7 +56,11 @@ export default function TablePage() {
   const router = useRouter();
   // schema is a query param now (?schema=) — absent for engines without schemas.
   const schema = useSchemaParam();
-  const { meta, isLoading: catalogLoading, error: catalogError } = useTableMeta(params.connection, schema, params.table);
+  const {
+    meta,
+    isLoading: catalogLoading,
+    error: catalogError,
+  } = useTableMeta(params.connection, schema, params.table);
 
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<string | undefined>();
@@ -96,9 +100,9 @@ export default function TablePage() {
         ...(sort ? { sort, sortDir } : {}),
         ...(filterSet.conditions.length
           ? {
-            filters: JSON.stringify(filterSet.conditions),
-            combinator: filterSet.combinator,
-          }
+              filters: JSON.stringify(filterSet.conditions),
+              combinator: filterSet.combinator,
+            }
           : {}),
         ...(search ? { search } : {}),
       });
@@ -128,7 +132,8 @@ export default function TablePage() {
   if (!meta)
     return (
       <PagePad>
-        Table {schema ? `${schema}.` : ""}{params.table} not found on “{params.connection}”.
+        Table {schema ? `${schema}.` : ""}
+        {params.table} not found on “{params.connection}”.
       </PagePad>
     );
 
@@ -147,7 +152,12 @@ export default function TablePage() {
     const pkObj: Record<string, unknown> = {};
     for (const k of meta.table.primaryKey) pkObj[k] = row[k];
     router.push(
-      recordHref({ connection: params.connection, schema: meta.schema, table: params.table, params: { pk: JSON.stringify(pkObj) } }),
+      recordHref({
+        connection: params.connection,
+        schema: meta.schema,
+        table: params.table,
+        params: { pk: JSON.stringify(pkObj) },
+      }),
     );
   };
 
@@ -165,11 +175,14 @@ export default function TablePage() {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
         for (const k of meta.table.primaryKey) pk[k] = row[k];
-        await fetch(dataApiUrl({ connection: params.connection, table: params.table, path: "row", schema: meta.schema }), {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pk }),
-        });
+        await fetch(
+          dataApiUrl({ connection: params.connection, table: params.table, path: "row", schema: meta.schema }),
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pk }),
+          },
+        );
       }
       clearSelection();
       refetch();
@@ -184,9 +197,9 @@ export default function TablePage() {
     ...(sort ? { sort, sortDir } : {}),
     ...(filterSet.conditions.length
       ? {
-        filters: JSON.stringify(filterSet.conditions),
-        combinator: filterSet.combinator,
-      }
+          filters: JSON.stringify(filterSet.conditions),
+          combinator: filterSet.combinator,
+        }
       : {}),
     ...(search ? { search } : {}),
   });
@@ -287,7 +300,9 @@ export default function TablePage() {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />}
+            render={
+              <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+            }
           >
             ⚙ Customize
           </Button>

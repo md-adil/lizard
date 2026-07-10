@@ -99,3 +99,23 @@ export interface SchemaDetail extends SchemaCatalog {
   tableOverrides: TableOverride[];
   columnOverrides: ColumnOverride[];
 }
+
+// ---------- resolved reference labels ----------
+
+// A label cannot be keyed by the reference column's value alone. Laravel-style
+// polymorphic relations reuse one id column across several parent tables and
+// discriminate with a type column (`subject_id` + `subject_type`), so id `1`
+// may be a Course, a Batch and a CourseLesson at once — keying by `subject_id`
+// would hand the Course's title to every one of them.
+//
+// So each column's label set declares the source columns that identify a row's
+// target: the reference column plus any source-side constant (discriminator)
+// columns. Labels are keyed by those values together.
+export interface FkLabelSet {
+  // keyColumns[0] is the reference column; the rest are source-side
+  // discriminators, sorted for determinism.
+  keyColumns: string[];
+  labels: Record<string, string>;
+}
+
+export type FkLabels = Record<string, FkLabelSet>;
