@@ -194,7 +194,7 @@ export function ImportCsvDialog({
               {importing ? "Importing…" : `Import ${rows.length} rows`}
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             {result ? "Close" : "Cancel"}
           </Button>
         </DialogFooter>

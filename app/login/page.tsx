@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -56,13 +57,12 @@ export default function LoginPage() {
           {needsSetup && (
             <div>
               <label className="label">Name (optional)</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
             </div>
           )}
           <div>
             <label className="label">Email</label>
-            <input
-              className="input"
+            <Input
               type="email"
               autoFocus
               value={email}
@@ -72,8 +72,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="label">Password{needsSetup && " (min 8 characters)"}</label>
-            <input
-              className="input"
+            <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

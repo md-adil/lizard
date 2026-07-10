@@ -8,6 +8,8 @@ import type { AiQueryPlan, QueryResult, SavedQuery } from "@/lib/types";
 import { ResultGrid } from "@/components/ai/result-grid";
 import { VisualizeButton } from "@/components/charts/visualize-button";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Turn {
   question: string;
@@ -184,9 +186,8 @@ export default function AiConsole() {
         </div>
 
         <div className="flex gap-2 mb-6">
-          <input
-            className="input"
-            style={{ fontSize: 14, padding: "10px 14px" }}
+          <Input
+            className="h-auto py-2.5 text-sm"
             placeholder='e.g. "top 10 customers by order revenue last 90 days"'
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -231,7 +232,7 @@ export default function AiConsole() {
                       ))}
                       <span className="flex-1" />
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
 
                         onClick={() =>
@@ -245,8 +246,8 @@ export default function AiConsole() {
                     </div>
                     {t.editing ? (
                       <>
-                        <textarea
-                          className="input code w-full"
+                        <Textarea
+                          className="code w-full"
                           rows={6}
                           value={t.editedSql}
                           onChange={(e) =>
@@ -284,7 +285,7 @@ export default function AiConsole() {
                 <>
                   <ResultGrid result={t.result} />
                   <div className="flex gap-2 mt-2">
-                    <Button variant="outline" size="sm" onClick={() => saveQuery(t)}>
+                    <Button variant="secondary" size="sm" onClick={() => saveQuery(t)}>
                       ☆ Save query
                     </Button>
                     {t.plan && (

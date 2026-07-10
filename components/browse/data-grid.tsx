@@ -201,7 +201,7 @@ export function DataGrid({
     <div>
       <div className="flex justify-end mb-2">
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1.5 bg-card" />}>
+          <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="gap-1.5 bg-card" />}>
             <Columns3 className="size-3.5" />
             Columns
           </DropdownMenuTrigger>
@@ -238,7 +238,7 @@ export function DataGrid({
           shadow={false}
           containerStyle={{ position: "absolute", top: 0, left: 0, width: "100%", zIndex: 10 }}
         />
-        <div className="overflow-auto rounded-md border" style={{ maxHeight }}>
+        <div className="overflow-auto rounded-md border bg-card" style={{ maxHeight }}>
           <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (

@@ -5,11 +5,13 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Search, X } from "lucide-react";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { useAuth } from "@/components/auth-context";
 import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -27,7 +29,6 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuAction,
-  SidebarInput,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,7 +53,7 @@ function ThemeToggle() {
   const theme = resolvedTheme === "light" ? "light" : "dark";
   return (
     <Button
-      variant="outline"
+      variant="secondary"
       size="sm"
       style={{ padding: "2px 8px" }}
       title={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}
@@ -352,14 +353,19 @@ export function Sidebar() {
               No connections yet
             </p>
           ) : (
-            <select className="input" value={selected} onChange={(e) => setSelected(e.target.value)}>
-              {connections.map((c) => (
-                <option key={c.connectionName} value={c.connectionName}>
-                  {c.connectionName}
-                  {c.error ? " ⚠" : ""}
-                </option>
-              ))}
-            </select>
+            <Select value={selected} onValueChange={(v) => v && setSelected(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {connections.map((c) => (
+                  <SelectItem key={c.connectionName} value={c.connectionName}>
+                    {c.connectionName}
+                    {c.error ? " ⚠" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           {conn?.error && (
             <p className="text-[11.5px] mt-1 px-2" style={{ color: "var(--destructive)" }} title={conn.error}>
@@ -375,7 +381,7 @@ export function Sidebar() {
               <SidebarGroupLabel>Schemas</SidebarGroupLabel>
               {remaining.length > 0 && (
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   style={{ padding: "0 7px" }}
                   title="Load another schema"
@@ -412,14 +418,29 @@ export function Sidebar() {
             </div>
             {addingSchema && (
               <div className="mt-1.5 px-2">
-                <input
-                  className="input mb-1"
-                  style={{ padding: "4px 8px", fontSize: 12 }}
-                  placeholder={`Search ${remaining.length} schemas…`}
-                  value={schemaSearch}
-                  autoFocus
-                  onChange={(e) => setSchemaSearch(e.target.value)}
-                />
+                <InputGroup className="h-8 mb-1 shadow-none">
+                  <InputGroupAddon align="inline-start">
+                    <Search className="size-3.5" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    placeholder={`Search ${remaining.length} schemas…`}
+                    value={schemaSearch}
+                    autoFocus
+                    onChange={(e) => setSchemaSearch(e.target.value)}
+                  />
+                  {schemaSearch && (
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton
+                        size="icon-xs"
+                        title="Clear"
+                        aria-label="Clear"
+                        onClick={() => setSchemaSearch("")}
+                      >
+                        <X />
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  )}
+                </InputGroup>
                 <div className="space-y-0.5 max-h-56 overflow-y-auto scrollbar-thin">
                   {(() => {
                     const q = schemaSearch.trim().toLowerCase();
@@ -431,7 +452,7 @@ export function Sidebar() {
                             variant="ghost"
                             className="block w-full text-left rounded px-2 py-1 text-[13px] hoverable truncate"
                             key={s}
-                            style={{ color: "var(--text-dim)" }}
+                            style={{ color: "var(--muted-foreground)" }}
                             onClick={() => {
                               persist([...loaded, s]);
                               setAddingSchema(false);
@@ -442,12 +463,12 @@ export function Sidebar() {
                           </Button>
                         ))}
                         {matches.length > 50 && (
-                          <p className="px-2 py-1 text-[11.5px]" style={{ color: "var(--text-faint)" }}>
+                          <p className="px-2 py-1 text-[11.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
                             …{matches.length - 50} more — keep typing to narrow
                           </p>
                         )}
                         {matches.length === 0 && (
-                          <p className="px-2 py-1 text-[11.5px]" style={{ color: "var(--text-faint)" }}>
+                          <p className="px-2 py-1 text-[11.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
                             No schemas match
                           </p>
                         )}
@@ -463,11 +484,28 @@ export function Sidebar() {
         {/* table filter */}
         {conn && !conn.error && loaded.length > 0 && (
           <div className="px-2 pb-1">
-            <SidebarInput
-              placeholder="Filter tables…"
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
-            />
+            <InputGroup className="h-8 shadow-none">
+              <InputGroupAddon align="inline-start">
+                <Search className="size-3.5" />
+              </InputGroupAddon>
+              <InputGroupInput
+                placeholder="Filter tables…"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+              />
+              {tableSearch && (
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    size="icon-xs"
+                    title="Clear filter"
+                    aria-label="Clear filter"
+                    onClick={() => setTableSearch("")}
+                  >
+                    <X />
+                  </InputGroupButton>
+                </InputGroupAddon>
+              )}
+            </InputGroup>
           </div>
         )}
 
@@ -530,7 +568,7 @@ export function Sidebar() {
             </p>
           </div>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="shrink-0"
             title="Profile"
@@ -540,7 +578,7 @@ export function Sidebar() {
             ✎
           </Button>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="shrink-0"
             title="Sign out"

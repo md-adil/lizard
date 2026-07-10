@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parseConnectionUri } from "@/lib/parse-uri";
 import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
@@ -242,8 +243,8 @@ export function ConnectionForm({
 
         <div>
           <label className="label">Paste a connection URI (optional)</label>
-          <input
-            className="input code"
+          <Input
+            className="code"
             placeholder={URI_PLACEHOLDER[form.engine]}
             value={uri}
             onChange={(e) => applyUri(e.target.value)}
@@ -279,28 +280,27 @@ export function ConnectionForm({
           </div>
           <div>
             <label className="label">Name (identifier, e.g. users_service)</label>
-            <input className="input" value={form.name} onChange={set("name")} placeholder="users_service" />
+            <Input value={form.name} onChange={set("name")} placeholder="users_service" />
           </div>
           <div>
             <label className="label">Database</label>
-            <input className="input" value={form.database} onChange={set("database")} />
+            <Input value={form.database} onChange={set("database")} />
           </div>
           <div>
             <label className="label">Host</label>
-            <input className="input" value={form.host} onChange={set("host")} />
+            <Input value={form.host} onChange={set("host")} />
           </div>
           <div>
             <label className="label">Port</label>
-            <input className="input" value={form.port} onChange={set("port")} />
+            <Input value={form.port} onChange={set("port")} />
           </div>
           <div>
             <label className="label">Read user (SELECT-only role)</label>
-            <input className="input" value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
+            <Input value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
           </div>
           <div>
             <label className="label">Read password</label>
-            <input
-              className="input"
+            <Input
               type="password"
               value={form.readPassword}
               onChange={set("readPassword")}
@@ -309,12 +309,11 @@ export function ConnectionForm({
           </div>
           <div>
             <label className="label">Write user (optional — enables CRUD)</label>
-            <input className="input" value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
+            <Input value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
           </div>
           <div>
             <label className="label">Write password</label>
-            <input
-              className="input"
+            <Input
               type="password"
               value={form.writePassword}
               onChange={set("writePassword")}
@@ -346,14 +345,14 @@ export function ConnectionForm({
 
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={testMutation.isPending || !form.host || !form.database || !form.readUser}
             onClick={() => testMutation.mutate()}
           >
             {testMutation.isPending ? "Testing…" : "Test connection"}
           </Button>
           <span className="flex-1" />
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>

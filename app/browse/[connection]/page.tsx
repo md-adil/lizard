@@ -22,6 +22,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { tableHref } from "@/components/browse/use-schema-param";
+import { Search, X } from "lucide-react";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 
 function TableCard({ connection, schema, table }: { connection: string; schema?: string; table: TableInfo }) {
   const href = tableHref({ connection, schema, table: table.name });
@@ -177,14 +179,19 @@ export default function ConnectionPage() {
         </p>
       )}
 
-      <input
-        className="input mb-4"
-        style={{ maxWidth: 320 }}
-        placeholder="Search tables…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        autoFocus
-      />
+      <InputGroup className="mb-4" style={{ maxWidth: 320 }}>
+        <InputGroupAddon align="inline-start">
+          <Search className="size-3.5" />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Search tables…" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
+        {search && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton size="icon-xs" title="Clear" aria-label="Clear" onClick={() => setSearch("")}>
+              <X />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
 
       {sortedSchemas.map((schema) => (
         <SchemaGrid

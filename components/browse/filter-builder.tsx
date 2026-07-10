@@ -15,6 +15,9 @@ import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { dataApiUrl } from "./data-api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ColumnsSelect } from "@/components/browse/columns-select";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
 
@@ -119,10 +122,9 @@ function RefSelect({ cm, onSelect }: { cm: ColumnMeta; onSelect: (id: string, la
   const { data } = useRefSearch(cm, search, open);
   return (
     <div className="relative flex-1 min-w-35">
-      <input
+      <Input
         ref={inputRef}
-        className="input"
-        style={{ padding: "3px 8px", fontSize: 12 }}
+        className="h-auto py-0.75 text-xs"
         placeholder={`Search ${cm.ref!.table}…`}
         value={search}
         onFocus={() => {
@@ -241,17 +243,15 @@ function ConditionRow({
       const t = kind === "number" ? "number" : kind === "date" ? dateType : "text";
       return (
         <div className="flex items-center gap-1">
-          <input
-            className="input w-28"
-            style={{ padding: "3px 8px", fontSize: 12 }}
+          <Input
+            className="h-auto py-0.75 text-xs w-28"
             type={t}
             value={cond.value ?? ""}
             onChange={(e) => onChange({ ...cond, value: e.target.value })}
           />
           <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
-          <input
-            className="input w-28"
-            style={{ padding: "3px 8px", fontSize: 12 }}
+          <Input
+            className="h-auto py-0.75 text-xs w-28"
             type={t}
             value={cond.value2 ?? ""}
             onChange={(e) => onChange({ ...cond, value2: e.target.value })}
@@ -317,7 +317,7 @@ function ConditionRow({
                 }}
               />
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 type="button"
 
@@ -334,9 +334,8 @@ function ConditionRow({
       return (
         <div className="min-w-40">
           <Chips values={values} onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })} />
-          <input
-            className="input"
-            style={{ padding: "3px 8px", fontSize: 12 }}
+          <Input
+            className="h-auto py-0.75 text-xs"
             placeholder="type value, Enter to add"
             type={kind === "number" ? "number" : "text"}
             value={chipDraft}
@@ -358,33 +357,39 @@ function ConditionRow({
     // single-value editors
     if (kind === "boolean") {
       return (
-        <select
-          className="input w-28"
-          style={{ padding: "3px 8px", fontSize: 12 }}
-          value={cond.value ?? ""}
-          onChange={(e) => onChange({ ...cond, value: e.target.value })}
+        <Select
+          value={cond.value || "__none"}
+          onValueChange={(v) => onChange({ ...cond, value: v === "__none" ? "" : (v ?? "") })}
         >
-          <option value="">—</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+          <SelectTrigger size="sm" className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none">—</SelectItem>
+            <SelectItem value="true">true</SelectItem>
+            <SelectItem value="false">false</SelectItem>
+          </SelectContent>
+        </Select>
       );
     }
     if (kind === "enum" && cm.options) {
       return (
-        <select
-          className="input w-40"
-          style={{ padding: "3px 8px", fontSize: 12 }}
-          value={cond.value ?? ""}
-          onChange={(e) => onChange({ ...cond, value: e.target.value })}
+        <Select
+          value={cond.value || "__none"}
+          onValueChange={(v) => onChange({ ...cond, value: v === "__none" ? "" : (v ?? "") })}
         >
-          <option value="">—</option>
-          {cm.options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger size="sm" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none">—</SelectItem>
+            {cm.options.map((o) => (
+              <SelectItem key={o} value={o}>
+                {o}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     }
     if (kind === "reference") {
@@ -424,7 +429,7 @@ function ConditionRow({
             />
           )}
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             type="button"
 
@@ -438,9 +443,8 @@ function ConditionRow({
     }
     if (kind === "jsonb") {
       return (
-        <input
-          className="input flex-1 min-w-40 code"
-          style={{ padding: "3px 8px", fontSize: 12 }}
+        <Input
+          className="h-auto py-0.75 text-xs flex-1 min-w-40 code"
           placeholder={'{"key":"value"}'}
           value={cond.value ?? ""}
           onChange={(e) => onChange({ ...cond, value: e.target.value })}
@@ -449,9 +453,8 @@ function ConditionRow({
     }
     // text / number / date single value
     return (
-      <input
-        className="input flex-1 min-w-30"
-        style={{ padding: "3px 8px", fontSize: 12 }}
+      <Input
+        className="h-auto py-0.75 text-xs flex-1 min-w-30"
         type={kind === "number" ? "number" : kind === "date" ? dateType : "text"}
         placeholder="value"
         value={cond.value ?? ""}
@@ -462,38 +465,36 @@ function ConditionRow({
 
   return (
     <div className="flex items-start gap-1.5 flex-wrap">
-      <select
-        className="input w-40"
-        style={{ padding: "3px 8px", fontSize: 12 }}
-        value={cond.column}
-        onChange={(e) => setCol(e.target.value)}
-      >
-        {columns.map((c) => (
-          <option key={c.col.name} value={c.col.name}>
-            {c.label}
-          </option>
-        ))}
-      </select>
-      <select
-        className="input w-36"
-        style={{ padding: "3px 8px", fontSize: 12 }}
+      <ColumnsSelect
+        items={columns.map((c) => c.col)}
+        value={cm.col}
+        onChange={(col) => col && setCol(col.name)}
+        className="w-40"
+      />
+      <Select
         value={cond.op}
-        onChange={(e) =>
+        onValueChange={(v) =>
+          v &&
           onChange({
             ...cond,
-            op: e.target.value as FilterOp,
+            op: v as FilterOp,
             value: "",
             value2: "",
             values: [],
           })
         }
       >
-        {ops.map((o) => (
-          <option key={o} value={o}>
-            {opLabel(kind, o)}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger size="sm" className="w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ops.map((o) => (
+            <SelectItem key={o} value={o}>
+              {opLabel(kind, o)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {valueEditor()}
       <Button
         variant="destructive"
@@ -602,7 +603,7 @@ export function FilterPanel({
         </span>
         <span className="flex-1" />
         {set.conditions.length > 0 && (
-          <Button variant="outline" size="sm" onClick={clearAll}>
+          <Button variant="secondary" size="sm" onClick={clearAll}>
             Clear
           </Button>
         )}
@@ -626,7 +627,7 @@ export function FilterPanel({
       </div>
 
       <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-        <Button variant="outline" size="sm" onClick={addCondition}>
+        <Button variant="secondary" size="sm" onClick={addCondition}>
           ＋ Add condition
         </Button>
         {dirty && (
@@ -637,7 +638,7 @@ export function FilterPanel({
         <span className="flex-1" />
         {onClose && (
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
 
             onClick={() => {
@@ -677,7 +678,7 @@ export function FilterBuilder({
   return (
     <div>
       <Button
-        variant="outline"
+        variant="secondary"
         className="shrink-0"
 
         style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}

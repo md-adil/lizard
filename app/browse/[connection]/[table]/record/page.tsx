@@ -20,6 +20,7 @@ import { useSchemaParam, tableHref, recordHref } from "@/components/browse/use-s
 import { humanize, effectiveKey } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -59,12 +60,12 @@ function RelatedCard({
           </span>
         )}
         <span className="flex-1" />
-        <Button variant="outline" size="sm" title="Enlarge" onClick={() => setExpanded(true)}>
+        <Button variant="secondary" size="sm" title="Enlarge" onClick={() => setExpanded(true)}>
           ⤢
         </Button>
         {menu && menu.length > 0 && (
           <div className="relative">
-            <Button variant="outline" size="sm" onClick={() => setOpen((s) => !s)}>
+            <Button variant="secondary" size="sm" onClick={() => setOpen((s) => !s)}>
               ⋯
             </Button>
             {open && (
@@ -274,7 +275,7 @@ function HtmlCard({
     >
       {editing ? (
         <>
-          <textarea className="input code w-full" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
+          <Textarea className="code w-full" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
           {err && (
             <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
               {err}
@@ -405,7 +406,7 @@ function JsonCard({
     >
       {editing ? (
         <>
-          <textarea className="input code w-full" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
+          <Textarea className="code w-full" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
           {err && (
             <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
               {err}
@@ -865,7 +866,7 @@ function RecordView() {
         <span className="flex-1" />
         {!meta.isView && (
           <>
-            <Button variant="outline" onClick={() => setEditing(true)}>
+            <Button variant="secondary" onClick={() => setEditing(true)}>
               ✎ Edit
             </Button>
             <Button

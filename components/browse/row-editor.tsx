@@ -10,6 +10,9 @@ import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 interface Props {
@@ -95,8 +98,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
     <>
       <div className="flex gap-1.5">
         <div className="relative flex-1">
-          <input
-            className="input"
+          <Input
             placeholder={`Search ${ref.table}…`}
             value={open ? search : displayLabel ? `${displayLabel} (${value})` : value}
             onFocus={() => {
@@ -145,7 +147,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
           )}
         </div>
         <Button
-          variant="outline"
+          variant="secondary"
           type="button"
           title={`Browse ${ref.table} in a full table with filters`}
           onClick={() => setBrowsing(true)}
@@ -184,7 +186,7 @@ function ChipInput({ value, onChange }: { value: string; onChange: (v: string) =
     setDraft("");
   };
   return (
-    <div className="input flex flex-wrap items-center gap-1 h-auto min-h-8 py-1">
+    <div className="flex h-auto min-h-8 w-full flex-wrap items-center gap-1 rounded-lg border border-input bg-card py-1 px-2.5">
       {items.map((it, i) => (
         <span key={i} className="tag flex items-center gap-1" style={{ fontSize: 11.5 }}>
           {it}
@@ -397,7 +399,9 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                   </span>
                 </label>
                 {disabled ? (
-                  <div className="input opacity-60 code" style={{ minHeight: 32 }}>
+                  <div
+                    className="code flex min-h-8 w-full items-center rounded-lg border border-input bg-card px-2.5 py-1 opacity-60"
+                  >
                     {cm.redacted ? (
                       <RedactedValue value={row?.[name]} />
                     ) : row ? (
@@ -409,33 +413,43 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                 ) : cm.widget === "reference" && cm.ref ? (
                   <ReferenceInput cm={cm} value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : cm.widget === "select" && cm.options ? (
-                  <select className="input" value={v} onChange={(e) => setVal(name, e.target.value)}>
-                    <option value="">{cm.col.nullable ? "∅ null" : "— pick —"}</option>
-                    {cm.options.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={v || "__null"} onValueChange={(sel) => setVal(name, sel === "__null" ? "" : (sel ?? ""))}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__null">{cm.col.nullable ? "∅ null" : "— pick —"}</SelectItem>
+                      {cm.options.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : cm.widget === "toggle" ? (
-                  <select className="input" value={v} onChange={(e) => setVal(name, e.target.value)}>
-                    {cm.col.nullable && <option value="">∅ null</option>}
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
+                  <Select value={v || "__null"} onValueChange={(sel) => setVal(name, sel === "__null" ? "" : (sel ?? ""))}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cm.col.nullable && <SelectItem value="__null">∅ null</SelectItem>}
+                      <SelectItem value="true">true</SelectItem>
+                      <SelectItem value="false">false</SelectItem>
+                    </SelectContent>
+                  </Select>
                 ) : cm.widget === "array" ? (
                   <ChipInput value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : cm.widget === "uuid" ? (
                   <div className="flex gap-1.5">
-                    <input
-                      className="input code"
+                    <Input
+                      className="code"
                       value={v}
                       placeholder="uuid"
                       onChange={(e) => setVal(name, e.target.value)}
                     />
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       title="Generate a random UUID"
                       onClick={() => setVal(name, crypto.randomUUID())}
                     >
@@ -443,34 +457,28 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     </Button>
                   </div>
                 ) : cm.widget === "bytea" ? (
-                  <div className="input opacity-70 code flex items-center" style={{ minHeight: 32 }}>
+                  <div className="code flex min-h-8 w-full items-center rounded-lg border border-input bg-card px-2.5 py-1 opacity-70">
                     {row ? toInputValue(cm, row[name]) || "∅" : "∅"}
                     <span className="ml-2" style={{ color: "var(--muted-foreground-faint)", fontSize: 11 }}>
                       binary — not editable here
                     </span>
                   </div>
                 ) : cm.widget === "textarea" || cm.widget === "json" || cm.widget === "html" ? (
-                  <textarea
-                    className={`input ${cm.widget === "json" || cm.widget === "html" ? "code" : ""}`}
+                  <Textarea
+                    className={cm.widget === "json" || cm.widget === "html" ? "code" : undefined}
                     rows={cm.widget === "textarea" ? 3 : cm.widget === "html" ? 8 : 5}
                     value={v}
                     onChange={(e) => setVal(name, e.target.value)}
                   />
                 ) : cm.widget === "image" || cm.widget === "video" || cm.widget === "audio" ? (
                   <div>
-                    <input
-                      className="input"
-                      placeholder="URL"
-                      value={v}
-                      onChange={(e) => setVal(name, e.target.value)}
-                    />
+                    <Input placeholder="URL" value={v} onChange={(e) => setVal(name, e.target.value)} />
                     {v && (
                       <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />
                     )}
                   </div>
                 ) : (
-                  <input
-                    className="input"
+                  <Input
                     type={
                       cm.redacted
                         ? "password"

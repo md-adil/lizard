@@ -10,6 +10,8 @@ import { suggestCharts } from "@/lib/charts/suggest";
 import { ChartRenderer } from "./chart-renderer";
 import { SpecControls } from "./spec-controls";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function VisualizeButton({ result, source }: { result: QueryResult; source: QueryRequest }) {
@@ -75,7 +77,7 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={openModal}>
+      <Button variant="secondary" size="sm" onClick={openModal}>
         📊 Visualize
       </Button>
       {open && spec && (
@@ -93,17 +95,25 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
                 <SpecControls spec={spec} result={result} onChange={setSpec} />
                 <div className="mt-5 pt-4 border-t">
                   <label className="label">Add to dashboard</label>
-                  <select className="input mb-2" value={dashboardId} onChange={(e) => setDashboardId(e.target.value)}>
-                    <option value="">＋ New dashboard…</option>
-                    {dashboards?.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    value={dashboardId || "new"}
+                    onValueChange={(v: string | null) => setDashboardId(v === "new" || !v ? "" : v)}
+                  >
+                    <SelectTrigger className="mb-2 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">＋ New dashboard…</SelectItem>
+                      {dashboards?.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {!dashboardId && (
-                    <input
-                      className="input mb-2"
+                    <Input
+                      className="mb-2"
                       placeholder="Dashboard name"
                       value={newDashName}
                       onChange={(e) => setNewDashName(e.target.value)}

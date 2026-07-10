@@ -4,12 +4,15 @@
 // the source side (schema/table) is governed by the page's scope, so this only
 // asks for the target and the join. Composite keys and constant filters are
 // always available.
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { VfkPair, VfkConstant } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ColumnsSelect } from "@/components/browse/columns-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useSchemaMeta,
@@ -85,6 +88,13 @@ export function VirtualFkEditor({
   const { schemaMeta: targetSchemaMeta } = useSchemaMeta(toConnection || undefined, repSchemaName);
   const targetTable = targetSchemaMeta?.tables.find((t) => t.name === toTable);
   const targetColumns = targetTable?.columns ?? [];
+  // O(1) name lookups for the join-pair pickers below instead of re-scanning
+  // the column list (which can run into the hundreds) on every render.
+  const sourceColumnsByName = useMemo(
+    () => new Map(meta.table.columns.map((c) => [c.name, c])),
+    [meta.table.columns],
+  );
+  const targetColumnsByName = useMemo(() => new Map(targetColumns.map((c) => [c.name, c])), [targetColumns]);
 
   const pairsFilled = pairs.length > 0 && pairs.every((p) => p.from && p.to);
   const canAdd = !!toConnection && !!toSchema && !!toTable && pairsFilled;
@@ -196,7 +206,7 @@ export function VirtualFkEditor({
             <AlertDialog>
               <AlertDialogTrigger
                 render={
-                  <Button variant="outline" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
+                  <Button variant="secondary" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
                     ✕
                   </Button>
                 }
@@ -230,7 +240,7 @@ export function VirtualFkEditor({
       )}
 
       {!adding ? (
-        <Button variant="outline" className="mt-1" onClick={() => setAdding(true)}>
+        <Button variant="secondary" className="mt-1" onClick={() => setAdding(true)}>
           + Add relationship
         </Button>
       ) : (
@@ -262,11 +272,10 @@ export function VirtualFkEditor({
               <>
                 <div>
                   <label className="label">Target connection</label>
-                  <select
-                    className="input"
+                  <Select
                     value={toConnection}
-                    onChange={(e) => {
-                      const name = e.target.value;
+                    onValueChange={(name: string | null) => {
+                      name = name ?? "";
                       setToConnection(name);
                       setToTable("");
                       // A connection without schemas has exactly one — pick it for
@@ -276,34 +285,41 @@ export function VirtualFkEditor({
                       setToSchema(!picked || hasSchema ? "" : (picked.schemas[0]?.name ?? ""));
                     }}
                   >
-                    <option value="">— select —</option>
-                    {catalog.connections.map((c) => (
-                      <option key={c.connectionName} value={c.connectionName}>
-                        {c.connectionName}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="— select —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {catalog.connections.map((c) => (
+                        <SelectItem key={c.connectionName} value={c.connectionName}>
+                          {c.connectionName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {toConnHasSchema && (
                   <div>
                     <label className="label">Target schema</label>
-                    <select
-                      className="input"
+                    <Select
                       value={toSchema}
                       disabled={!toConn}
-                      onChange={(e) => {
-                        setToSchema(e.target.value);
+                      onValueChange={(val: string | null) => {
+                        setToSchema(val ?? "");
                         setToTable("");
                       }}
                     >
-                      <option value="">— select —</option>
-                      <option value={SAME_SCHEMA}>Same schema as row</option>
-                      {toConn?.schemas.map((s) => (
-                        <option key={s.name} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="— select —" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SAME_SCHEMA}>Same schema as row</SelectItem>
+                        {toConn?.schemas.map((s) => (
+                          <SelectItem key={s.name} value={s.name}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
               </>
@@ -338,46 +354,26 @@ export function VirtualFkEditor({
             <div className="space-y-2">
               {pairs.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <Combobox
-                    items={meta.table.columns.map((c) => c.name)}
-                    value={p.from}
-                    onValueChange={(val) => setPair(i, { from: val || "" })}
-                  >
-                    <ComboboxInput className="flex-1" placeholder="— this column —" />
-                    <ComboboxContent>
-                      <ComboboxEmpty>No columns found</ComboboxEmpty>
-                      <ComboboxList>
-                        {(col) => (
-                          <ComboboxItem key={col} value={col}>
-                            {col}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
+                  <ColumnsSelect
+                    items={meta.table.columns}
+                    value={sourceColumnsByName.get(p.from) ?? null}
+                    onChange={(col) => setPair(i, { from: col?.name ?? "" })}
+                    placeholder="— this column —"
+                    className="flex-1"
+                  />
                   <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
                     =
                   </span>
-                  <Combobox
-                    items={targetColumns.map((c) => c.name)}
-                    value={p.to}
-                    onValueChange={(val) => setPair(i, { to: val || "" })}
+                  <ColumnsSelect
+                    items={targetColumns}
+                    value={targetColumnsByName.get(p.to) ?? null}
+                    onChange={(col) => setPair(i, { to: col?.name ?? "" })}
+                    placeholder="— target column —"
+                    className="flex-1"
                     disabled={!targetTable}
-                  >
-                    <ComboboxInput placeholder="— target column —" className="flex-1" disabled={!targetTable} />
-                    <ComboboxContent>
-                      <ComboboxEmpty>No columns found</ComboboxEmpty>
-                      <ComboboxList>
-                        {(col) => (
-                          <ComboboxItem key={col} value={col}>
-                            {col}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
+                  />
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="icon-sm"
                     className="shrink-0"
                     disabled={pairs.length === 1}
@@ -387,7 +383,7 @@ export function VirtualFkEditor({
                   </Button>
                 </div>
               ))}
-              <Button variant="outline" size="sm" onClick={() => setPairs((s) => [...s, { from: "", to: "" }])}>
+              <Button variant="secondary" size="sm" onClick={() => setPairs((s) => [...s, { from: "", to: "" }])}>
                 + Add column (composite key)
               </Button>
             </div>
@@ -457,14 +453,14 @@ export function VirtualFkEditor({
                     <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
                       =
                     </span>
-                    <input
-                      className="input flex-1"
+                    <Input
+                      className="flex-1"
                       placeholder="value, e.g. user"
                       value={c.value}
                       onChange={(e) => setConst(i, { value: e.target.value })}
                     />
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="icon-sm"
                       className="shrink-0"
                       onClick={() => setConstants((s) => s.filter((_, idx) => idx !== i))}
@@ -475,7 +471,7 @@ export function VirtualFkEditor({
                 );
               })}
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => setConstants((s) => [...s, { toColumn: "", side: "target", value: "" }])}
               >
@@ -487,17 +483,11 @@ export function VirtualFkEditor({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Label (optional)</label>
-              <input
-                className="input"
-                placeholder="e.g. Owner"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-              />
+              <Input placeholder="e.g. Owner" value={label} onChange={(e) => setLabel(e.target.value)} />
             </div>
             <div>
               <label className="label">AI join hint (optional)</label>
-              <input
-                className="input"
+              <Input
                 placeholder="free-text for complex joins"
                 value={joinHint}
                 onChange={(e) => setJoinHint(e.target.value)}
@@ -516,7 +506,7 @@ export function VirtualFkEditor({
               {saving ? "Adding…" : "Add relationship"}
             </Button>
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={() => {
                 reset();
                 setAdding(false);

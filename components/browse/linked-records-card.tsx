@@ -112,7 +112,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
           {[target.otherSchema, target.otherTable].filter(Boolean).join(".")}
         </span>
         <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={() => setLinking(true)}>
+        <Button variant="secondary" size="sm" onClick={() => setLinking(true)}>
           ＋ Link
         </Button>
       </div>

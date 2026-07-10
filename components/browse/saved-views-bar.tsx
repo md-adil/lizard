@@ -77,7 +77,7 @@ export function SavedViewsBar({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" />}>
+      <DropdownMenuTrigger render={<Button variant="secondary" />}>
         ▤ Views{views?.length ? ` (${views.length})` : ""}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
