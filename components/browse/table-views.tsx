@@ -12,12 +12,13 @@ import { kanbanGroupColumns } from "./view-types";
 import { Card } from "@/components/ui/card";
 import type { FkLabels } from "@/lib/types";
 import { fkLabelFor } from "@/lib/data/fk-labels";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 
 type Row = Record<string, unknown>;
 
 function rowPk(meta: TableMeta, row: Row): Record<string, unknown> {
   const pk: Record<string, unknown> = {};
-  for (const k of meta.table.primaryKey) pk[k] = row[k];
+  for (const k of effectiveKey(meta.table)) pk[k] = row[k];
   return pk;
 }
 
@@ -25,7 +26,7 @@ function displayValue(meta: TableMeta, row: Row): string {
   const dc = meta.displayColumn;
   const v = dc ? row[dc] : undefined;
   if (v != null && String(v).trim()) return String(v);
-  return meta.table.primaryKey.map((k) => String(row[k])).join(" · ") || "—";
+  return effectiveKey(meta.table).map((k) => String(row[k])).join(" · ") || "—";
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|avif)(\?|$)/i;
@@ -44,7 +45,7 @@ function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
   return (
     <div className="space-y-0.5 mt-1">
       {cols.map((cm) => {
-        const f = formatCell(row[cm.col.name]);
+        const f = formatCell(row[cm.col.name], cm.widget);
         return (
           <div key={cm.col.name} className="flex gap-2 text-[12px] min-w-0">
             <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
@@ -54,7 +55,7 @@ function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
               className="truncate"
               style={{ color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)" }}
             >
-              {f.text}
+              {f.icon ?? f.text}
             </span>
           </div>
         );
@@ -113,7 +114,7 @@ export function KanbanView({
   const cm = meta.columns.find((c) => c.col.name === groupBy);
   const isBool = cm?.col.udtName === "bool";
   const nullable = cm?.col.nullable ?? true;
-  const canWrite = !meta.isView && meta.table.primaryKey.length > 0;
+  const canWrite = !meta.isView && effectiveKey(meta.table).length > 0;
 
   // column order: explicit options (enum / check-IN), else booleans, else the
   // distinct values present in the loaded rows.
@@ -349,7 +350,7 @@ export function TreeView({
   parentField: string;
   onOpen: (row: Row) => void;
 }) {
-  const pkCol = meta.table.primaryKey[0];
+  const pkCol = effectiveKey(meta.table)[0];
   if (!pkCol) return null;
 
   const idOf = (row: Row) => String(row[pkCol]);

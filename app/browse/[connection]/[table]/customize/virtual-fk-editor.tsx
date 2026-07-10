@@ -7,6 +7,7 @@
 import { useState } from "react";
 import type { VfkPair, VfkConstant } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -123,7 +124,7 @@ export function VirtualFkEditor({
     setToTable(t);
     const target = targetSchemaMeta?.tables.find((x) => x.name === t);
     if (!target) return;
-    const pk = target.primaryKey[0] ?? target.columns[0]?.name ?? "";
+    const pk = effectiveKey(target)[0] ?? target.columns[0]?.name ?? "";
     const guessFrom =
       meta.table.columns.find((c) => c.name === `${t}_id`)?.name ??
       meta.table.columns.find((c) => c.name === `${t.replace(/s$/, "")}_id`)?.name ??

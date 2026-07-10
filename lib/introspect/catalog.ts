@@ -102,7 +102,8 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     `SELECT c.table_schema, c.table_name, c.column_name, c.ordinal_position,
             c.is_nullable, c.column_default, c.data_type, c.udt_name,
             c.character_maximum_length,
-            (c.is_generated = 'ALWAYS' OR c.identity_generation IS NOT NULL) AS is_generated,
+            (c.is_generated = 'ALWAYS' OR c.identity_generation IS NOT NULL
+             OR c.column_default LIKE 'nextval(%') AS is_generated,
             col_description(pc.oid, c.ordinal_position) AS comment,
             CASE WHEN t.typtype = 'e' THEN
               (SELECT array_agg(e.enumlabel::text ORDER BY e.enumsortorder) FROM pg_enum e WHERE e.enumtypid = t.oid)::text[]

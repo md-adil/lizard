@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 import Link from "next/link";
 import {
   Breadcrumb,
@@ -147,10 +148,11 @@ export default function TablePage() {
   const activeGroupBy = groupBy ?? groupCols[0]?.col.name;
   const activeDateField = dateField ?? dateCols[0]?.col.name;
 
+  const rowKey = effectiveKey(meta.table);
   const openRow = (row: Record<string, unknown>) => {
-    if (meta.table.primaryKey.length === 0) return;
+    if (rowKey.length === 0) return;
     const pkObj: Record<string, unknown> = {};
-    for (const k of meta.table.primaryKey) pkObj[k] = row[k];
+    for (const k of rowKey) pkObj[k] = row[k];
     router.push(
       recordHref({
         connection: params.connection,
@@ -161,8 +163,9 @@ export default function TablePage() {
     );
   };
 
-  // Phase 8.2 — bulk delete needs a real, writable primary key to target rows.
-  const canBulkDelete = !meta.isView && meta.table.primaryKey.length > 0;
+  // Phase 8.2 — bulk delete needs a real, writable key (primary key or first
+  // unique constraint) to target rows.
+  const canBulkDelete = !meta.isView && rowKey.length > 0;
   const bulkDelete = async () => {
     if (
       !window.confirm(
@@ -174,7 +177,7 @@ export default function TablePage() {
     try {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
-        for (const k of meta.table.primaryKey) pk[k] = row[k];
+        for (const k of rowKey) pk[k] = row[k];
         await fetch(
           dataApiUrl({ connection: params.connection, table: params.table, path: "row", schema: meta.schema }),
           {
@@ -425,7 +428,7 @@ export default function TablePage() {
           onToggleSort={toggleSort}
           columnVisibility={columnVisibility}
           onColumnVisibilityChange={setColumnVisibility}
-          rowClickable={meta.table.primaryKey.length > 0}
+          rowClickable={rowKey.length > 0}
           onRowClick={openRow}
           onSelectionChange={canBulkDelete ? setSelectedRows : undefined}
           clearSelectionSignal={clearSelectionSignal}

@@ -6,7 +6,8 @@
 // width on every th/td (driven by TanStack column sizing held in React
 // state) keeps header/body aligned and drives live column-resize. Sorting
 // stays server-side: header clicks call back to the parent to refetch.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import LoadingBar, { type LoadingBarRef } from "react-top-loading-bar";
 import type { FkLabels } from "@/lib/types";
 import { fkLabelFor } from "@/lib/data/fk-labels";
 import {
@@ -158,8 +159,8 @@ export function DataGrid({
                 </>
               );
             }
-            const f = formatCell(v);
-            return <span className={f.muted ? "text-muted-foreground" : undefined}>{f.text}</span>;
+            const f = formatCell(v, cm.widget);
+            return <span className={f.muted ? "text-muted-foreground" : undefined}>{f.icon ?? f.text}</span>;
           },
         }),
       ),
@@ -190,6 +191,11 @@ export function DataGrid({
   const totalWidth = table.getTotalSize();
 
   const showRefetchOverlay = isFetching && !isLoading;
+  const loadingBarRef = useRef<LoadingBarRef>(null);
+  useEffect(() => {
+    if (showRefetchOverlay) loadingBarRef.current?.continuousStart();
+    else loadingBarRef.current?.complete();
+  }, [showRefetchOverlay]);
 
   return (
     <div>
@@ -225,7 +231,13 @@ export function DataGrid({
       </div>
 
       <div className="relative">
-        {showRefetchOverlay && <div className="absolute inset-x-0 top-0 z-10 h-0.5 animate-pulse bg-primary" />}
+        <LoadingBar
+          ref={loadingBarRef}
+          color="var(--primary)"
+          height={2}
+          shadow={false}
+          containerStyle={{ position: "absolute", top: 0, left: 0, width: "100%", zIndex: 10 }}
+        />
         <div className="overflow-auto rounded-md border" style={{ maxHeight }}>
           <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
             <TableHeader>

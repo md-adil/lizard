@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RedactedValue } from "./redacted-value";
@@ -221,7 +222,7 @@ function ChipInput({ value, onChange }: { value: string; onChange: (v: string) =
 export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
   const qc = useQueryClient();
   const isCreate = row === null;
-  const editable = meta.columns.filter((c) => !c.col.isGenerated);
+  const editable = meta.columns;
   const [values, setValues] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -231,8 +232,8 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     const source = row ?? duplicateFrom ?? null;
     const init: Record<string, string> = {};
     for (const cm of editable) {
-      // when duplicating, clear PK columns so the DB assigns new ones
-      const clear = !!duplicateFrom && !row && meta.table.primaryKey.includes(cm.col.name);
+      // when duplicating, clear key columns so the DB assigns new ones
+      const clear = !!duplicateFrom && !row && effectiveKey(meta.table).includes(cm.col.name);
       init[cm.col.name] = source && !clear ? toInputValue(cm, source[cm.col.name]) : "";
     }
     setValues(init);
@@ -242,12 +243,13 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row, duplicateFrom, meta.table.name]);
 
+  const rowKey = effectiveKey(meta.table);
   const pk = useMemo(() => {
     if (!row) return null;
     const obj: Record<string, unknown> = {};
-    for (const k of meta.table.primaryKey) obj[k] = row[k];
+    for (const k of rowKey) obj[k] = row[k];
     return obj;
-  }, [row, meta.table.primaryKey]);
+  }, [row, rowKey]);
 
   const buildPayload = () => {
     const data: Record<string, unknown> = {};
@@ -462,7 +464,9 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       value={v}
                       onChange={(e) => setVal(name, e.target.value)}
                     />
-                    {v && <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />}
+                    {v && (
+                      <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />
+                    )}
                   </div>
                 ) : (
                   <input

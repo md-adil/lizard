@@ -5,7 +5,7 @@
 import { supportsSchemas, type ConnectionConfig, type FkLabels, type TableInfo } from "@/lib/types";
 import { vfkMatchesSource, resolveToSchema } from "@/lib/introspect/virtual-fk";
 import { fkLabelKey, FK_KEY_SEP } from "@/lib/data/fk-labels";
-import { findUpdatedAtColumn } from "@/lib/introspect/heuristics";
+import { findUpdatedAtColumn, effectiveKey } from "@/lib/introspect/heuristics";
 import { getClient, type DbClient } from "@/lib/db/pools";
 import { getDialect } from "@/app/api/database/registry";
 import type { Dialect } from "@/app/api/database/driver";
@@ -166,8 +166,8 @@ export async function listRows(params: ListParams) {
       if (dialect.engine === "postgres") {
         orderSql += " NULLS LAST";
       }
-    } else if (table.primaryKey.length > 0) {
-      orderSql = `ORDER BY ${table.primaryKey.map((c) => dialect.quoteIdent(c)).join(", ")}`;
+    } else if (effectiveKey(table).length > 0) {
+      orderSql = `ORDER BY ${effectiveKey(table).map((c) => dialect.quoteIdent(c)).join(", ")}`;
     }
 
     const pageSize = Math.min(Math.max(params.pageSize, 1), 200);
@@ -246,8 +246,8 @@ export async function exportRows(
       if (dialect.engine === "postgres") {
         orderSql += " NULLS LAST";
       }
-    } else if (table.primaryKey.length > 0) {
-      orderSql = `ORDER BY ${table.primaryKey.map((c) => dialect.quoteIdent(c)).join(", ")}`;
+    } else if (effectiveKey(table).length > 0) {
+      orderSql = `ORDER BY ${effectiveKey(table).map((c) => dialect.quoteIdent(c)).join(", ")}`;
     }
 
     const fqtn = dialect.supportsSchemas
@@ -295,8 +295,8 @@ export async function listLinkedRows(
     .find((s) => s.name === resolvedOtherSchema)
     ?.tables.find((t) => t.name === otherTableName);
   if (!otherTable) throw new CrudError("Unknown target table", 404);
-  const otherPk = otherTable.primaryKey[0];
-  if (!otherPk) throw new CrudError("Target table has no primary key", 400);
+  const otherPk = effectiveKey(otherTable)[0];
+  if (!otherPk) throw new CrudError("Target table has no primary key or unique constraint", 400);
   const display = displayColumnFor(conn, otherTable) ?? otherPk;
 
   const dialect = getDialect(conn.engine);
@@ -539,10 +539,29 @@ function pkWhere(
   values: unknown[],
   dialect: Dialect,
 ): string {
-  if (table.primaryKey.length === 0)
-    throw new CrudError("Table has no primary key; editing is not supported");
-  const parts = table.primaryKey.map((col) => {
-    if (!(col in pk)) throw new CrudError(`Missing primary key part: ${col}`);
+  // Falls back to the first unique constraint when there's no declared
+  // primary key — Laravel-style pivot tables (user_id, post_id) commonly
+  // have a unique composite index instead of a formal PK. And when a table
+  // has NEITHER (some pivot tables only get plain, non-unique indexes on
+  // each FK column), fall back further to whatever columns the caller
+  // supplied in `pk` — still identifier-validated, just not DB-enforced as
+  // unique. Matching every row that happens to share those values is the
+  // correct behavior for e.g. an M2M "unlink", which already knows the FK
+  // pair is the relationship's real identity regardless of a DB constraint.
+  const key = effectiveKey(table);
+  if (key.length > 0) {
+    const parts = key.map((col) => {
+      if (!(col in pk)) throw new CrudError(`Missing key part: ${col}`);
+      values.push(pk[col]);
+      return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length));
+    });
+    return parts.join(" AND ");
+  }
+  const cols = Object.keys(pk);
+  if (cols.length === 0)
+    throw new CrudError("Table has no primary key or unique constraint; editing is not supported");
+  const parts = cols.map((col) => {
+    assertColumn(table, col);
     values.push(pk[col]);
     return equalsParam(dialect.quoteIdent(col), dialect.placeholder(values.length));
   });
@@ -737,12 +756,22 @@ export async function createRow(
       return res.rows[0];
     } else {
       const pkObj: Record<string, unknown> = {};
-      if (table.primaryKey.length === 1) {
-        const pkCol = table.primaryKey[0];
+      const key = effectiveKey(table);
+      if (key.length === 1) {
+        const pkCol = key[0];
         pkObj[pkCol] = data[pkCol] ?? res.insertId;
-      } else {
-        for (const pkCol of table.primaryKey) {
+      } else if (key.length > 1) {
+        for (const pkCol of key) {
           pkObj[pkCol] = data[pkCol];
+        }
+      } else {
+        // No PK or unique constraint (e.g. a Laravel-style pivot table with
+        // only plain, non-unique indexes) — fall back to matching on every
+        // column the caller actually inserted, which for a junction-table
+        // link is exactly the FK pair, its real identity regardless of a
+        // DB constraint.
+        for (const col of Object.keys(data)) {
+          pkObj[col] = data[col];
         }
       }
       const { row } = await getRow(connection, schema, tableName, pkObj);
@@ -832,9 +861,8 @@ export async function updateRow(
   const { conn, table } = await resolveTable(connection, schema, tableName);
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const dialect = getDialect(conn.engine);
-  const cols = writableColumns(table, data).filter(
-    (c) => !table.primaryKey.includes(c),
-  );
+  const key = effectiveKey(table);
+  const cols = writableColumns(table, data).filter((c) => !key.includes(c));
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
   const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
   const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c], jsonCols));

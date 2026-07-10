@@ -52,25 +52,30 @@ const READONLY_NAME_PATTERNS = /^(created_at|updated_at|inserted_at|modified_at)
 const REDACTED_NAME_PATTERNS = /password|passwd|pwd|secret|token|api_key|apikey|access_key|private_key|credential/i;
 const DISPLAY_NAME_CANDIDATES = ["name", "title", "label", "email", "username", "slug"];
 
+// A table's real primary key if it has one, otherwise its first unique
+// constraint — Laravel-style pivot tables (user_id, post_id, no declared PK)
+// commonly have a unique composite index instead. Returns [] if neither
+// exists, meaning no single row can be reliably targeted for edit/delete.
+export function effectiveKey(table: TableInfo): string[] {
+  if (table.primaryKey.length > 0) return table.primaryKey;
+  return table.uniqueConstraints[0] ?? [];
+}
+
 export function guessDisplayColumn(table: TableInfo): string | null {
   const cols = table.columns;
   for (const cand of DISPLAY_NAME_CANDIDATES) {
     const hit = cols.find((c) => c.name.toLowerCase() === cand);
     if (hit) return hit.name;
   }
-  const firstText = cols.find(
-    (c) => ["text", "varchar", "bpchar"].includes(c.udtName) && !table.primaryKey.includes(c.name),
-  );
+  const key = effectiveKey(table);
+  const firstText = cols.find((c) => ["text", "varchar", "bpchar"].includes(c.udtName) && !key.includes(c.name));
   if (firstText) return firstText.name;
-  return table.primaryKey[0] ?? cols[0]?.name ?? null;
+  return key[0] ?? cols[0]?.name ?? null;
 }
 
-// Whether a column should default to read-only absent an explicit override:
-// generated columns, "created_at"-style timestamps, and db-assigned serial PKs.
 export function guessReadonly(table: TableInfo, col: ColumnInfo): boolean {
   if (col.isGenerated) return true;
   if (READONLY_NAME_PATTERNS.test(col.name)) return true;
-  if (table.primaryKey.includes(col.name) && col.default?.includes("nextval")) return true;
   return false;
 }
 
