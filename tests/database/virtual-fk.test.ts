@@ -12,15 +12,13 @@ describe("Virtual FK summary and formatting", () => {
       toConnection: "local",
       toSchema: "public",
       toTable: "posts",
-      pairs: [
-        { from: "commentable_id", to: "id", transform: "none" }
-      ],
+      pairs: [{ from: "commentable_id", to: "id" }],
       constants: [
         { toColumn: "commentable_type", value: "App\\Models\\Post", side: "source" },
-        { toColumn: "status", value: "published", side: "target" }
+        { toColumn: "status", value: "published", side: "target" },
       ],
       label: "Post Comments",
-      joinHint: null
+      joinHint: null,
     };
 
     const summary = vfkSummary(vfk);

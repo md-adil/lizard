@@ -2,10 +2,10 @@
 
 // Relationships section of the table customization page. Inline (no modal) —
 // the source side (schema/table) is governed by the page's scope, so this only
-// asks for the target and the join. Composite keys, value transforms and
-// constant filters are always available.
+// asks for the target and the join. Composite keys and constant filters are
+// always available.
 import { useState } from "react";
-import type { VfkTransform, VfkPair, VfkConstant } from "@/lib/types";
+import type { VfkPair, VfkConstant } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -40,13 +40,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const TRANSFORMS: { value: VfkTransform; label: string }[] = [
-  { value: "none", label: "exact" },
-  { value: "lower", label: "lower()" },
-  { value: "upper", label: "upper()" },
-  { value: "trim", label: "trim()" },
-];
-
 export function VirtualFkEditor({
   meta,
   catalog,
@@ -71,7 +64,7 @@ export function VirtualFkEditor({
   const [toConnection, setToConnection] = useState(meta.connection);
   const [toSchema, setToSchema] = useState(defaultToSchema);
   const [toTable, setToTable] = useState("");
-  const [pairs, setPairs] = useState<VfkPair[]>([{ from: "", to: "", transform: "none" }]);
+  const [pairs, setPairs] = useState<VfkPair[]>([{ from: "", to: "" }]);
   const [constants, setConstants] = useState<VfkConstant[]>([]);
   const [label, setLabel] = useState("");
   const [joinHint, setJoinHint] = useState("");
@@ -118,7 +111,7 @@ export function VirtualFkEditor({
     setToConnection(meta.connection);
     setToSchema(defaultToSchema);
     setToTable("");
-    setPairs([{ from: "", to: "", transform: "none" }]);
+    setPairs([{ from: "", to: "" }]);
     setConstants([]);
     setLabel("");
     setJoinHint("");
@@ -135,7 +128,7 @@ export function VirtualFkEditor({
       meta.table.columns.find((c) => c.name === `${t}_id`)?.name ??
       meta.table.columns.find((c) => c.name === `${t.replace(/s$/, "")}_id`)?.name ??
       "";
-    setPairs((s) => (s.length === 1 && !s[0].from && !s[0].to ? [{ from: guessFrom, to: pk, transform: "none" }] : s));
+    setPairs((s) => (s.length === 1 && !s[0].from && !s[0].to ? [{ from: guessFrom, to: pk }] : s));
   }
 
   async function submit() {
@@ -200,11 +193,13 @@ export function VirtualFkEditor({
             <span className="text-[12px] text-muted-foreground animate-pulse shrink-0 self-center">Deleting…</span>
           ) : (
             <AlertDialog>
-              <AlertDialogTrigger render={
-                <Button variant="outline" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
-                  ✕
-                </Button>
-              } />
+              <AlertDialogTrigger
+                render={
+                  <Button variant="outline" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
+                    ✕
+                  </Button>
+                }
+              />
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Relationship</AlertDialogTitle>
@@ -380,18 +375,6 @@ export function VirtualFkEditor({
                       </ComboboxList>
                     </ComboboxContent>
                   </Combobox>
-                  <select
-                    className="input flex-1"
-                    value={p.transform ?? "none"}
-                    onChange={(e) => setPair(i, { transform: e.target.value as VfkTransform })}
-                    title="Value transform applied to both sides"
-                  >
-                    {TRANSFORMS.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
                   <Button
                     variant="outline"
                     size="icon-sm"
@@ -403,11 +386,7 @@ export function VirtualFkEditor({
                   </Button>
                 </div>
               ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPairs((s) => [...s, { from: "", to: "", transform: "none" }])}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPairs((s) => [...s, { from: "", to: "" }])}>
                 + Add column (composite key)
               </Button>
             </div>

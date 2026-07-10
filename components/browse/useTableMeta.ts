@@ -4,15 +4,7 @@
 // overrides + virtual FKs. Heuristics are pure functions shared with the server.
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  TableInfo,
-  VirtualFk,
-  TableOverride,
-  ColumnInfo,
-  VfkTransform,
-  CatalogResponse,
-  SchemaDetail,
-} from "@/lib/types";
+import type { TableInfo, VirtualFk, TableOverride, ColumnInfo, CatalogResponse, SchemaDetail } from "@/lib/types";
 import {
   findUpdatedAtColumn,
   guessWidget,
@@ -67,9 +59,6 @@ export interface ColumnMeta {
     schema: string | undefined;
     table: string;
     column: string;
-    // value transform applied symmetrically to both sides of the join (see
-    // VfkPair.transform) — "none" for real FKs, which are always exact.
-    transform: VfkTransform;
   } | null;
   required: boolean;
 }
@@ -133,7 +122,6 @@ export function buildTableMeta(
           schema: hasSchema ? realFk.referencedSchema : undefined,
           table: realFk.referencedTable,
           column: realFk.referencedColumns[0],
-          transform: "none" as VfkTransform,
         }
       : vfk
         ? {
@@ -141,7 +129,6 @@ export function buildTableMeta(
             schema: connectionSupportsSchemas(catalog, vfk.toConnection) ? resolveToSchema(vfk, schema) : undefined,
             table: vfk.toTable,
             column: vfkTargetColumn(vfk)!,
-            transform: vfk.pairs[0]?.transform ?? "none",
           }
         : null;
     return {
@@ -187,7 +174,11 @@ export function buildTableMeta(
 // build meta for several tables at once) should keep calling buildTableMeta
 // directly instead.
 export function useSchemaMeta(connection: string | undefined, schema: string | undefined) {
-  const { data: schemaMeta, isLoading, error } = useQuery<SchemaDetail>({
+  const {
+    data: schemaMeta,
+    isLoading,
+    error,
+  } = useQuery<SchemaDetail>({
     queryKey: ["schema-meta", connection, schema],
     queryFn: async () => {
       const url = `/api/catalog/${connection}${schema ? `?schema=${encodeURIComponent(schema)}` : ""}`;

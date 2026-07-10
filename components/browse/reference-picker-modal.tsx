@@ -10,6 +10,7 @@ import { dataApiUrl } from "./data-api";
 import { DataGrid } from "./data-grid";
 import { TableSearchBar } from "./table-search-bar";
 import type { FilterSet } from "@/lib/data/filters";
+import type { FkLabels } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -17,7 +18,7 @@ interface ListResponse {
   rows: Record<string, unknown>[];
   hasMore: boolean;
   total: number | null;
-  fkLabels: Record<string, Record<string, string>>;
+  fkLabels: FkLabels;
 }
 
 export function ReferencePickerModal({
@@ -184,5 +185,5 @@ interface ListResponse {
   rows: Record<string, unknown>[];
   hasMore: boolean;
   total: number | null;
-  fkLabels: Record<string, Record<string, string>>;
+  fkLabels: FkLabels;
 }

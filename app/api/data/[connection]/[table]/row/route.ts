@@ -5,9 +5,6 @@ import { requireConnectionAccess } from "@/lib/auth/session";
 type Params = { params: Promise<{ connection: string; table: string }> };
 
 // pk is passed as a JSON object in the `pk` query param (composite keys work).
-// keyTransforms optionally maps a subset of those columns to a value
-// transform (see VfkPair.transform) for looking up a reference whose join
-// isn't an exact match (e.g. case-insensitive).
 export async function GET(req: Request, { params }: Params) {
   try {
     const { connection, table } = await params;
@@ -15,10 +12,7 @@ export async function GET(req: Request, { params }: Params) {
     const url = new URL(req.url);
     const schema = url.searchParams.get("schema") ?? undefined;
     const pk = JSON.parse(url.searchParams.get("pk") ?? "{}");
-    const keyTransforms = url.searchParams.get("keyTransforms")
-      ? JSON.parse(url.searchParams.get("keyTransforms")!)
-      : undefined;
-    const result = await getRow(connection, schema, table, pk, keyTransforms);
+    const result = await getRow(connection, schema, table, pk);
     return ok(result);
   } catch (e) {
     return fail(e);

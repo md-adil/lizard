@@ -10,9 +10,10 @@ import { formatCell } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
 import { kanbanGroupColumns } from "./view-types";
 import { Card } from "@/components/ui/card";
+import type { FkLabels } from "@/lib/types";
+import { fkLabelFor } from "@/lib/data/fk-labels";
 
 type Row = Record<string, unknown>;
-type FkLabels = Record<string, Record<string, string>>;
 
 function rowPk(meta: TableMeta, row: Row): Record<string, unknown> {
   const pk: Record<string, unknown> = {};
@@ -134,8 +135,12 @@ export function KanbanView({
 
   const labelFor = (key: string) => {
     if (key === NULL_KEY) return "∅ none";
-    if (cm?.ref) return fkLabels[groupBy]?.[key] ?? key;
-    return key;
+    if (!cm?.ref) return key;
+    // A reference label can depend on more than the grouped value (polymorphic
+    // relations key on a discriminator too), so resolve it against a row that
+    // actually belongs to this group.
+    const sample = rows.find((r) => String(r[groupBy]) === key);
+    return (sample && fkLabelFor(fkLabels, groupBy, sample)) ?? key;
   };
   // Normalize bool values: MySQL returns 1/0, Postgres returns true/false.
   const normalizeBool = (v: unknown): string => {
