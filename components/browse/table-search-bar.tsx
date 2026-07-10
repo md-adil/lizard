@@ -4,12 +4,13 @@
 // and the reference picker modal. The parent owns `search` (committed value)
 // and `filterSet`; this component owns the draft `searchInput` state.
 import { useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, X, Loader2 } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterSet } from "@/lib/data/filters";
 import { isComplete } from "@/lib/data/filters";
 import { FilterPanel } from "./filter-builder";
 import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 
 const TEXT_LIKE = new Set(["text", "varchar", "bpchar", "citext", "name", "char"]);
 const SEARCH_ROW_LIMIT = 500_000;
@@ -51,7 +52,7 @@ export function TableSearchBar({
       <div className="flex items-center gap-2">
         {/* filter toggle button — left */}
         <Button
-          variant="outline"
+          variant="secondary"
           className="shrink-0"
 
           style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
@@ -66,25 +67,13 @@ export function TableSearchBar({
           <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{filterOpen ? "▲" : "▼"}</span>
         </Button>
 
-        {/* search input group: input + search button joined */}
-        <div
-          className="flex flex-1"
-          style={{
-            border: "1px solid var(--input)",
-            borderRadius: 7,
-            overflow: "hidden",
-            opacity: tooLarge || textColCount === 0 ? 0.5 : 1,
-          }}
-        >
-          <div className="relative flex-1">
-            <input
-              className="input"
-              style={{
-                border: "none",
-                borderRadius: 0,
-                width: "100%",
-                paddingRight: searchInput ? 28 : undefined,
-              }}
+        {/* search input group: icon + input + clear + search button joined */}
+        <div className="flex flex-1" style={{ opacity: tooLarge || textColCount === 0 ? 0.5 : 1 }}>
+          <InputGroup className="rounded-r-none">
+            <InputGroupAddon align="inline-start">
+              <Search className="size-3.5" />
+            </InputGroupAddon>
+            <InputGroupInput
               placeholder={
                 tooLarge
                   ? "Search disabled — table too large, use filters"
@@ -98,26 +87,16 @@ export function TableSearchBar({
               onKeyDown={(e) => e.key === "Enter" && commit()}
             />
             {searchInput && (
-              <Button
-                variant="ghost"
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-
-                style={{ color: "var(--muted-foreground-faint)", fontSize: 12 }}
-                title="Clear search"
-                onClick={clear}
-              >
-                ✕
-              </Button>
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton size="icon-xs" title="Clear search" aria-label="Clear search" onClick={clear}>
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
             )}
-          </div>
+          </InputGroup>
 
           <Button
-            style={{
-              borderRadius: 0,
-              border: "none",
-              borderLeft: "1px solid var(--primary)",
-              padding: "6px 12px",
-            }}
+            className="rounded-l-none border-l-0"
             disabled={tooLarge || textColCount === 0 || isLoading}
             title="Search (Enter)"
             onClick={commit}

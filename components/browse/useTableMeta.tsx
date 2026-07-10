@@ -2,8 +2,9 @@
 
 // Client-side view of one table's metadata: catalog info merged with
 // overrides + virtual FKs. Heuristics are pure functions shared with the server.
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Check, X } from "lucide-react";
 import type { TableInfo, VirtualFk, TableOverride, ColumnInfo, CatalogResponse, SchemaDetail } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -223,9 +224,29 @@ const INTERVAL_SUFFIX: Record<string, string> = {
 // Values arrive JSON-serialized from the API, so Postgres arrays stay arrays,
 // bytea becomes { type: "Buffer", data: [...] }, and interval becomes an object
 // of {hours,minutes,...}. Render each readably instead of dumping raw JSON.
-export function formatCell(value: unknown): { text: string; muted: boolean } {
+export function formatCell(
+  value: unknown,
+  widget?: Widget,
+): { text: string; muted: boolean; icon?: ReactNode } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
-  if (typeof value === "boolean") return { text: value ? "✓" : "✗", muted: !value };
+  if (typeof value === "boolean") {
+    return {
+      text: String(value),
+      muted: !value,
+      icon: value ? <Check className="size-3.5 text-green-600 dark:text-green-500" /> : <X className="size-3.5 text-muted-foreground" />,
+    };
+  }
+  // MySQL's tinyint(1) (normalized to the "bool" udtName/"toggle" widget)
+  // comes back as a raw 0/1 number, not a real JS boolean — trust the widget
+  // rather than the runtime type so it still renders as a check/x icon.
+  if (widget === "toggle") {
+    const truthy = value === 1 || value === "1";
+    return {
+      text: String(truthy),
+      muted: !truthy,
+      icon: truthy ? <Check className="size-3.5 text-green-600 dark:text-green-500" /> : <X className="size-3.5 text-muted-foreground" />,
+    };
+  }
   if (Array.isArray(value)) {
     if (value.length === 0) return { text: "[]", muted: true };
     const parts = value.map((v) =>

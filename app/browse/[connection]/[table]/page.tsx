@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 import Link from "next/link";
 import {
   Breadcrumb,
@@ -34,6 +35,7 @@ import { dataApiUrl } from "@/components/browse/data-api";
 import type { FkLabels, SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useInterval } from "@/hooks/use-interval";
 import { Card } from "@/components/ui/card";
@@ -147,10 +149,11 @@ export default function TablePage() {
   const activeGroupBy = groupBy ?? groupCols[0]?.col.name;
   const activeDateField = dateField ?? dateCols[0]?.col.name;
 
+  const rowKey = effectiveKey(meta.table);
   const openRow = (row: Record<string, unknown>) => {
-    if (meta.table.primaryKey.length === 0) return;
+    if (rowKey.length === 0) return;
     const pkObj: Record<string, unknown> = {};
-    for (const k of meta.table.primaryKey) pkObj[k] = row[k];
+    for (const k of rowKey) pkObj[k] = row[k];
     router.push(
       recordHref({
         connection: params.connection,
@@ -161,8 +164,9 @@ export default function TablePage() {
     );
   };
 
-  // Phase 8.2 — bulk delete needs a real, writable primary key to target rows.
-  const canBulkDelete = !meta.isView && meta.table.primaryKey.length > 0;
+  // Phase 8.2 — bulk delete needs a real, writable key (primary key or first
+  // unique constraint) to target rows.
+  const canBulkDelete = !meta.isView && rowKey.length > 0;
   const bulkDelete = async () => {
     if (
       !window.confirm(
@@ -174,7 +178,7 @@ export default function TablePage() {
     try {
       for (const row of selectedRows) {
         const pk: Record<string, unknown> = {};
-        for (const k of meta.table.primaryKey) pk[k] = row[k];
+        for (const k of rowKey) pk[k] = row[k];
         await fetch(
           dataApiUrl({ connection: params.connection, table: params.table, path: "row", schema: meta.schema }),
           {
@@ -289,16 +293,16 @@ export default function TablePage() {
             currentConfig={viewConfig}
             onApply={applyView}
           />
-          <Button variant="outline" nativeButton={false} render={<a href={exportHref} download />}>
+          <Button variant="secondary" nativeButton={false} render={<a href={exportHref} download />}>
             ⬇ Export CSV
           </Button>
           {!meta.isView && (
-            <Button variant="outline" onClick={() => setImporting(true)}>
+            <Button variant="secondary" onClick={() => setImporting(true)}>
               ⬆ Import CSV
             </Button>
           )}
           <Button
-            variant="outline"
+            variant="secondary"
             nativeButton={false}
             render={
               <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
@@ -350,48 +354,47 @@ export default function TablePage() {
           </Tabs>
         )}
         {viewType === "kanban" && groupCols.length > 1 && (
-          <select
-            className="input"
-            style={{ width: "auto" }}
-            value={activeGroupBy}
-            onChange={(e) => setGroupBy(e.target.value)}
-          >
-            {groupCols.map((c) => (
-              <option key={c.col.name} value={c.col.name}>
-                Group by {c.label}
-              </option>
-            ))}
-          </select>
+          <Select value={activeGroupBy} onValueChange={(v) => v && setGroupBy(v)}>
+            <SelectTrigger size="sm" className="w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {groupCols.map((c) => (
+                <SelectItem key={c.col.name} value={c.col.name}>
+                  Group by {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         {viewType === "calendar" && dateCols.length > 1 && (
-          <select
-            className="input"
-            style={{ width: "auto" }}
-            value={activeDateField}
-            onChange={(e) => setDateField(e.target.value)}
-          >
-            {dateCols.map((c) => (
-              <option key={c.col.name} value={c.col.name}>
-                By {c.label}
-              </option>
-            ))}
-          </select>
+          <Select value={activeDateField} onValueChange={(v) => v && setDateField(v)}>
+            <SelectTrigger size="sm" className="w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {dateCols.map((c) => (
+                <SelectItem key={c.col.name} value={c.col.name}>
+                  By {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         <span className="flex-1" />
         {/* Phase 8.8 — auto-refresh, default off */}
-        <select
-          className="input"
-          style={{ width: "auto" }}
-          value={refreshMs}
-          onChange={(e) => setRefreshMs(Number(e.target.value))}
-          title="Auto-refresh"
-        >
-          <option value={0}>Refresh: off</option>
-          <option value={5000}>Refresh: 5s</option>
-          <option value={10000}>Refresh: 10s</option>
-          <option value={30000}>Refresh: 30s</option>
-          <option value={60000}>Refresh: 1m</option>
-        </select>
+        <Select value={String(refreshMs)} onValueChange={(v) => v && setRefreshMs(Number(v))}>
+          <SelectTrigger size="sm" className="w-auto" title="Auto-refresh">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0">Refresh: off</SelectItem>
+            <SelectItem value="5000">Refresh: 5s</SelectItem>
+            <SelectItem value="10000">Refresh: 10s</SelectItem>
+            <SelectItem value="30000">Refresh: 30s</SelectItem>
+            <SelectItem value="60000">Refresh: 1m</SelectItem>
+          </SelectContent>
+        </Select>
         {isFetching && refreshMs > 0 && (
           <Loader2 className="size-3.5 animate-spin" style={{ color: "var(--primary)" }} />
         )}
@@ -425,7 +428,7 @@ export default function TablePage() {
           onToggleSort={toggleSort}
           columnVisibility={columnVisibility}
           onColumnVisibilityChange={setColumnVisibility}
-          rowClickable={meta.table.primaryKey.length > 0}
+          rowClickable={rowKey.length > 0}
           onRowClick={openRow}
           onSelectionChange={canBulkDelete ? setSelectedRows : undefined}
           clearSelectionSignal={clearSelectionSignal}
@@ -455,14 +458,14 @@ export default function TablePage() {
       )}
 
       <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-        <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+        <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
           ← Prev
         </Button>
         <span>
           Page {page + 1}
           {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
         </span>
-        <Button variant="outline" size="sm" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
+        <Button variant="secondary" size="sm" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
           Next →
         </Button>
       </div>

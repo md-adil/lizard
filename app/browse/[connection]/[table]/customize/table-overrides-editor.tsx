@@ -9,31 +9,20 @@ import { useMutation } from "@tanstack/react-query";
 import { resolveColumnOverrides } from "@/lib/introspect/overrides";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ColumnsSelect } from "@/components/browse/columns-select";
+import { WidgetSelect, type WidgetOption } from "@/components/browse/widget-select";
 import type { TableMeta } from "@/components/browse/useTableMeta";
 import type { ColumnOverride } from "@/lib/types";
+import { widgets, widgetIcons } from "@/lib/data/widgets";
 
-const WIDGETS = [
-  "",
-  "text",
-  "textarea",
-  "number",
-  "toggle",
-  "date",
-  "datetime",
-  "select",
-  "json",
-  "reference",
-  "array",
-  "range",
-  "network",
-  "interval",
-  "uuid",
-  "bytea",
-  "html",
-  "image",
-  "video",
-  "audio",
-];
+const WIDGETS: WidgetOption[] = widgets.map((x, i) => {
+  const Icon = widgetIcons[x];
+  if (i === 0) {
+    return { value: "", label: x, icon: Icon ? <Icon /> : null };
+  }
+  return { value: x, label: x, icon: Icon ? <Icon /> : null };
+});
 
 export function TableOverridesEditor({
   meta,
@@ -125,23 +114,17 @@ export function TableOverridesEditor({
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
           <label className="label">Table label</label>
-          <input
-            className="input"
-            value={tableLabel}
-            placeholder={meta.label}
-            onChange={(e) => setTableLabel(e.target.value)}
-          />
+          <Input value={tableLabel} placeholder={meta.label} onChange={(e) => setTableLabel(e.target.value)} />
         </div>
         <div>
           <label className="label">Display column (used for FK labels)</label>
-          <select className="input" value={displayCol} onChange={(e) => setDisplayCol(e.target.value)}>
-            <option value="">auto ({meta.displayColumn})</option>
-            {meta.table.columns.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <ColumnsSelect
+            items={meta.table.columns}
+            value={meta.table.columns.find((c) => c.name === displayCol) ?? null}
+            onChange={(col) => setDisplayCol(col?.name ?? "")}
+            placeholder={`auto (${meta.displayColumn})`}
+            className="w-full"
+          />
         </div>
       </div>
       <label className="flex items-center gap-2 text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
@@ -162,29 +145,22 @@ export function TableOverridesEditor({
               <span className="code text-[12px] flex-1 truncate" title={c.name}>
                 {c.name}
               </span>
-              <input
-                className="input flex-2"
-                style={{ padding: "3px 8px", fontSize: 12 }}
+              <Input
+                className="flex-2"
                 placeholder="Label"
                 value={c.label}
                 onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
               />
-              <select
-                className="input flex-1"
-                style={{ padding: "3px 6px", fontSize: 12 }}
-                value={c.widget}
-                onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, widget: e.target.value } : x)))}
-              >
-                {WIDGETS.map((w) => (
-                  <option key={w} value={w}>
-                    {w || "auto"}
-                  </option>
-                ))}
-              </select>
-              <Button variant="outline" size="icon-sm" onClick={() => move(i, -1)}>
+              <WidgetSelect
+                items={WIDGETS}
+                value={WIDGETS.find((w) => w.value === c.widget) ?? WIDGETS[0]}
+                onChange={(w) => setCols((s) => s.map((x, j) => (j === i ? { ...x, widget: w.value } : x)))}
+                className="flex-1"
+              />
+              <Button variant="secondary" size="icon-sm" onClick={() => move(i, -1)}>
                 ↑
               </Button>
-              <Button variant="outline" size="icon-sm" onClick={() => move(i, 1)}>
+              <Button variant="secondary" size="icon-sm" onClick={() => move(i, 1)}>
                 ↓
               </Button>
             </div>

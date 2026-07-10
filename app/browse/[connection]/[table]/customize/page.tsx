@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
 import { useSchemaParam, tableHref } from "@/components/browse/use-schema-param";
@@ -86,7 +87,7 @@ export default function CustomizePage() {
   }
 
   return (
-    <div className="px-8 py-7 max-w-6xl">
+    <div className="px-8 py-7">
       <Breadcrumb className="mb-4">
         <BreadcrumbList>
           <BreadcrumbItem>
@@ -122,8 +123,7 @@ export default function CustomizePage() {
           </Tabs>
           {scope === "pattern" && (
             <div className="mb-6">
-              <input
-                className="input"
+              <Input
                 placeholder="schema pattern, e.g. org_*"
                 value={pattern}
                 onChange={(e) => setExplicitPattern(e.target.value)}

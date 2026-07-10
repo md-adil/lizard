@@ -82,7 +82,7 @@ export default function HomePage() {
         >
           Your databases
         </h2>
-        <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/settings" />}>
+        <Button variant="secondary" size="sm" nativeButton={false} render={<Link href="/settings" />}>
           Manage connections
         </Button>
       </div>
@@ -146,7 +146,7 @@ function ConnectionCard({ connection: c }: { connection: LightConnectionCatalog 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0">
               <span className="font-semibold text-[14px] truncate">{c.connectionName}</span>
-              <Badge variant="outline" className="shrink-0">
+              <Badge variant="secondary" className="shrink-0">
                 {ENGINE_LABELS[c.engine]}
               </Badge>
               {c.error && (

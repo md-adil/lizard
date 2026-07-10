@@ -17,9 +17,10 @@ import { JsonView } from "@/components/browse/json-view";
 import { MediaPreview, type MediaKind } from "@/components/browse/media-preview";
 import { ShadowDom } from "@/components/ui/shadow-dom";
 import { useSchemaParam, tableHref, recordHref } from "@/components/browse/use-schema-param";
-import { humanize } from "@/lib/introspect/heuristics";
+import { humanize, effectiveKey } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -59,12 +60,12 @@ function RelatedCard({
           </span>
         )}
         <span className="flex-1" />
-        <Button variant="outline" size="sm" title="Enlarge" onClick={() => setExpanded(true)}>
+        <Button variant="secondary" size="sm" title="Enlarge" onClick={() => setExpanded(true)}>
           ⤢
         </Button>
         {menu && menu.length > 0 && (
           <div className="relative">
-            <Button variant="outline" size="sm" onClick={() => setOpen((s) => !s)}>
+            <Button variant="secondary" size="sm" onClick={() => setOpen((s) => !s)}>
               ⋯
             </Button>
             {open && (
@@ -150,7 +151,7 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
       {cols.map((cm) => {
         const v = row[cm.col.name];
         const label = cm.ref && v != null ? fkLabelFor(fkLabels, cm.col.name, row) : undefined;
-        const f = formatCell(v);
+        const f = formatCell(v, cm.widget);
         const isMedia =
           (cm.widget === "image" || cm.widget === "video" || cm.widget === "audio") &&
           typeof v === "string" &&
@@ -187,7 +188,7 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
                     </span>
                   </>
                 ) : (
-                  f.text
+                  (f.icon ?? f.text)
                 )}
               </div>
             )}
@@ -274,7 +275,7 @@ function HtmlCard({
     >
       {editing ? (
         <>
-          <textarea className="input code w-full" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
+          <Textarea className="code w-full" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
           {err && (
             <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
               {err}
@@ -405,7 +406,7 @@ function JsonCard({
     >
       {editing ? (
         <>
-          <textarea className="input code w-full" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
+          <Textarea className="code w-full" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
           {err && (
             <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
               {err}
@@ -621,7 +622,7 @@ function HasManyCard({
             onRowClick={(row) => {
               if (meta.isView) return;
               const pkObj: Record<string, unknown> = {};
-              for (const k of meta.table.primaryKey) pkObj[k] = row[k];
+              for (const k of effectiveKey(meta.table)) pkObj[k] = row[k];
               router.push(
                 recordHref({
                   connection: source.connection,
@@ -823,8 +824,9 @@ function RecordView() {
   const pkText = Object.entries(pk)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
-  // the value other tables' FKs point at (single-column PK case)
-  const pkValue = meta.table.primaryKey.length === 1 ? pk[meta.table.primaryKey[0]] : null;
+  // the value other tables' FKs point at (single-column key case)
+  const recordKey = effectiveKey(meta.table);
+  const pkValue = recordKey.length === 1 ? pk[recordKey[0]] : null;
 
   return (
     <div className="px-8 py-7 max-w-6xl">
@@ -864,7 +866,7 @@ function RecordView() {
         <span className="flex-1" />
         {!meta.isView && (
           <>
-            <Button variant="outline" onClick={() => setEditing(true)}>
+            <Button variant="secondary" onClick={() => setEditing(true)}>
               ✎ Edit
             </Button>
             <Button

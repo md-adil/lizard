@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Dashboard } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function DashboardsPage() {
   const qc = useQueryClient();
@@ -44,8 +45,8 @@ export default function DashboardsPage() {
       </p>
 
       <div className="flex gap-2 mb-6">
-        <input
-          className="input max-w-xs"
+        <Input
+          className="max-w-xs"
           placeholder="New dashboard name"
           value={name}
           onChange={(e) => setName(e.target.value)}

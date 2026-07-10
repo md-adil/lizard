@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Role = "admin" | "editor" | "viewer";
 type Access = "read" | "write";
@@ -82,20 +84,23 @@ function GrantsEditor({
             <span className="flex-1 truncate" style={{ color: "var(--muted-foreground)" }}>
               {c.name}
             </span>
-            <select
-              className="input"
-              style={{ padding: "2px 6px", fontSize: 12, width: "auto" }}
-              value={g?.access ?? ""}
-              onChange={(e) => setGrant(c.id, (e.target.value as Access) || null)}
+            <Select
+              value={g?.access ?? "none"}
+              onValueChange={(v) => setGrant(c.id, v === "none" ? null : (v as Access))}
             >
-              <option value="">no access</option>
-              <option value="read">read</option>
-              <option value="write">read + write</option>
-            </select>
+              <SelectTrigger size="sm" className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">no access</SelectItem>
+                <SelectItem value="read">read</SelectItem>
+                <SelectItem value="write">read + write</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         );
       })}
-      <Button variant="outline" size="sm" className="mt-1" onClick={onDone}>
+      <Button variant="secondary" size="sm" className="mt-1" onClick={onDone}>
         Done
       </Button>
     </div>
@@ -173,22 +178,25 @@ function UserCard({
 
         <div className="flex items-center gap-1.5 shrink-0">
           {/* role selector */}
-          <select
-            className="input"
-            style={{ padding: "3px 6px", fontSize: 12, width: "auto" }}
+          <Select
             value={user.role}
             disabled={patch.isPending}
-            onChange={(e) => patch.mutate({ role: e.target.value as Role })}
+            onValueChange={(v) => patch.mutate({ role: v as Role })}
           >
-            <option value="admin">admin</option>
-            <option value="editor">editor</option>
-            <option value="viewer">viewer</option>
-          </select>
+            <SelectTrigger size="sm" className="w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="admin">admin</SelectItem>
+              <SelectItem value="editor">editor</SelectItem>
+              <SelectItem value="viewer">viewer</SelectItem>
+            </SelectContent>
+          </Select>
 
           {/* toggle disabled */}
           {!isSelf && (
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
 
               title={user.disabled ? "Enable user" : "Disable user"}
@@ -204,7 +212,7 @@ function UserCard({
             (confirmDelete ? (
               <>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
 
                   style={{ color: "var(--destructive)" }}
@@ -213,7 +221,7 @@ function UserCard({
                   confirm
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
 
                   onClick={() => setConfirmDelete(false)}
@@ -223,7 +231,7 @@ function UserCard({
               </>
             ) : (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
 
                 style={{ color: "var(--destructive)" }}
@@ -239,7 +247,7 @@ function UserCard({
       {user.role !== "admin" && connections.length > 0 && (
         <div>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="text-[12px]"
 
@@ -319,23 +327,28 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Email *</label>
-          <input className="input" type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
           <label className="label">Name (optional)</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
           <label className="label">Password * (min 8 chars)</label>
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <div>
           <label className="label">Role</label>
-          <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="admin">admin</option>
-            <option value="editor">editor</option>
-            <option value="viewer">viewer</option>
-          </select>
+          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="admin">admin</SelectItem>
+              <SelectItem value="editor">editor</SelectItem>
+              <SelectItem value="viewer">viewer</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       {error && (
@@ -347,7 +360,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         <Button disabled={busy || !email || password.length < 8} onClick={submit}>
           {busy ? "Creating…" : "Create"}
         </Button>
-        <Button variant="outline" onClick={reset}>
+        <Button variant="secondary" onClick={reset}>
           Cancel
         </Button>
       </div>

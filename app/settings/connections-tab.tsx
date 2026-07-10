@@ -117,7 +117,7 @@ export function ConnectionsTab() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-[14px] truncate">{c.name}</span>
-                    <Badge variant="outline" className="shrink-0">
+                    <Badge variant="secondary" className="shrink-0">
                       {ENGINE_LABELS[c.engine]}
                     </Badge>
                     <StatusBadge role="read" error={c.status.read} />
@@ -148,7 +148,7 @@ export function ConnectionsTab() {
               </Link>
               <div className="flex gap-2 shrink-0">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => {
                     setEditing(c);

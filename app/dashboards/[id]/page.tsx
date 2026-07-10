@@ -10,6 +10,9 @@ import { ChartRenderer } from "@/components/charts/chart-renderer";
 import { SpecControls } from "@/components/charts/spec-controls";
 import { ResultGrid } from "@/components/ai/result-grid";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const REFRESH_OPTIONS = [
@@ -67,7 +70,7 @@ function PanelCard({
         ))}
         <span className="flex-1" />
         <div className="relative">
-          <Button variant="outline" size="sm" onClick={() => setMenu((m) => !m)}>
+          <Button variant="secondary" size="sm" onClick={() => setMenu((m) => !m)}>
             ⋮
           </Button>
           {menu && (
@@ -81,7 +84,7 @@ function PanelCard({
               <div className="flex items-center gap-1 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
                 w
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
 
                   onClick={() => onResize(Math.max(3, panel.w - 1), panel.h)}
@@ -89,7 +92,7 @@ function PanelCard({
                   −
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
 
                   onClick={() => onResize(Math.min(12, panel.w + 1), panel.h)}
@@ -98,7 +101,7 @@ function PanelCard({
                 </Button>
                 h
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
 
                   onClick={() => onResize(panel.w, Math.max(4, panel.h - 1))}
@@ -106,7 +109,7 @@ function PanelCard({
                   −
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
 
                   onClick={() => onResize(panel.w, Math.min(20, panel.h + 1))}
@@ -284,8 +287,7 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
               ))}
             </div>
             <div className="flex gap-2">
-              <input
-                className="input"
+              <Input
                 placeholder='e.g. "revenue by month, split by order status" or "orders per customer country" (cross-DB)'
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -299,14 +301,15 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
         ) : (
           <div className="mb-4 space-y-2">
             <div className="flex gap-2 items-center flex-wrap">
-              <select
-                className="input w-32"
-                value={sqlTarget}
-                onChange={(e) => setSqlTarget(e.target.value as "single" | "federated")}
-              >
-                <option value="single">single</option>
-                <option value="federated">federated</option>
-              </select>
+              <Select value={sqlTarget} onValueChange={(v) => setSqlTarget(v as "single" | "federated")}>
+                <SelectTrigger size="sm" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">single</SelectItem>
+                  <SelectItem value="federated">federated</SelectItem>
+                </SelectContent>
+              </Select>
               {connections.map((c) => (
                 <button
                   key={c}
@@ -322,8 +325,8 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
                 </button>
               ))}
             </div>
-            <textarea
-              className="input code"
+            <Textarea
+              className="code"
               rows={4}
               placeholder={
                 sqlTarget === "federated"
@@ -442,8 +445,8 @@ export default function DashboardPage() {
     <div className="px-6 py-6">
       <div className="flex items-center gap-3 mb-5">
         {renaming ? (
-          <input
-            className="input max-w-xs"
+          <Input
+            className="max-w-xs"
             value={name}
             autoFocus
             onChange={(e) => setName(e.target.value)}

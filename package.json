@@ -9,7 +9,8 @@
     "lint": "next lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
+    "test": "vitest run tests/database tests/guard",
+    "test:integration": "vitest run tests/integration",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -34,6 +35,7 @@
     "pino": "^10.3.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-top-loading-bar": "^3.0.2",
     "recharts": "^3.8.0",
     "shadcn": "^4.13.0",
     "sonner": "^2.0.7",

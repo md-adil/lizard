@@ -84,12 +84,10 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
     const col: ColumnInfo = {
       name: c.column_name as string,
       dataType: columnType || dataType,
-      udtName: normalizeUdt(dataType, columnType),
+      udtName: normalizeUdt(dataType, columnType, c.column_name as string),
       nullable: c.is_nullable === "YES",
       default: (c.column_default as string) ?? null,
-      // generated (virtual/stored) columns are read-only; auto_increment is
-      // db-assigned but still user-viewable, handled by the readonly heuristic.
-      isGenerated: extra.includes("generated"),
+      isGenerated: extra.includes("generated") || extra.includes("auto_increment"),
       ordinal: Number(c.ordinal_position),
       comment: (c.column_comment as string) ?? null,
       enumValues: parseEnumValues(dataType, columnType),
@@ -161,11 +159,19 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
 // Map a MySQL data_type to a Postgres-style udtName so the shared heuristics
 // (widgets, display-column guess, numeric detection) apply without a MySQL
 // branch. column_type carries the detail needed for tinyint(1)→bool and enums.
-function normalizeUdt(dataType: string, columnType: string): string {
+function normalizeUdt(dataType: string, columnType: string, columnName: string): string {
   const t = dataType.toLowerCase();
+  // tinyint(1) is always boolean-shaped. A wider/unspecified-width tinyint
+  // named is_active, is_deleted, etc. is conventionally a boolean flag too,
+  // even though MySQL itself just reports it as a plain small integer — but
+  // only when BOTH the name and the type agree, so a genuine small-int
+  // column that happens to start with "is_" isn't misread as a toggle.
+  if (t === "tinyint" && (/^tinyint\(1\)/i.test(columnType) || /^is_/i.test(columnName))) {
+    return "bool";
+  }
   switch (t) {
     case "tinyint":
-      return /^tinyint\(1\)/i.test(columnType) ? "bool" : "int2";
+      return "int2";
     case "smallint":
       return "int2";
     case "mediumint":

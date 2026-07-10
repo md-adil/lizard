@@ -152,7 +152,7 @@ export function ReferencePickerModal({
 
         <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
 
             disabled={page === 0}
@@ -165,7 +165,7 @@ export function ReferencePickerModal({
             {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
           </span>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
 
             disabled={!data?.hasMore}

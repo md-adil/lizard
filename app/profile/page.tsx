@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function ProfilePage() {
   const { user, refresh } = useAuth();
@@ -77,11 +78,15 @@ export default function ProfilePage() {
         <div className="grid grid-cols-2 gap-6">
           <div>
             <label className="label">Email</label>
-            <div className="input opacity-60">{user.email}</div>
+            <div className="flex h-8 w-full items-center rounded-lg border border-input bg-card px-2.5 py-1 opacity-60">
+              {user.email}
+            </div>
           </div>
           <div>
             <label className="label">Role</label>
-            <div className="input opacity-60 capitalize">{user.role}</div>
+            <div className="flex h-8 w-full items-center rounded-lg border border-input bg-card px-2.5 py-1 capitalize opacity-60">
+              {user.role}
+            </div>
           </div>
         </div>
       </div>
@@ -104,7 +109,7 @@ export default function ProfilePage() {
           >
             <div>
               <label className="label">Name</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
             </div>
             {nameMutation.error && (
               <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
@@ -140,8 +145,7 @@ export default function ProfilePage() {
           >
             <div>
               <label className="label">Current password</label>
-              <input
-                className="input"
+              <Input
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -150,8 +154,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className="label">New password</label>
-              <input
-                className="input"
+              <Input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -161,8 +164,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className="label">Confirm new password</label>
-              <input
-                className="input"
+              <Input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

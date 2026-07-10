@@ -10,6 +10,7 @@ import { useTableMeta } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { Button } from "@/components/ui/button";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 
 // junctionSchema/otherSchema are undefined when this connection has no real
 // schema (see supportsSchemas) — junction and "other" are always the same
@@ -71,8 +72,15 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
 
   async function unlink(junctionRow: Record<string, unknown>) {
     if (!junctionMeta) return;
+    // Many junction tables (Laravel pivot migrations especially) have neither
+    // a primary key nor a unique constraint — just plain, non-unique indexes
+    // on each FK column individually. We can't trust an arbitrary non-unique
+    // index to identify one row, but the FK pair itself always can: that pair
+    // *is* what a link is, by definition, whether or not the DB enforces it.
+    const key = effectiveKey(junctionMeta.table);
+    const junctionKey = key.length > 0 ? key : [target.selfFkColumn, target.otherFkColumn];
     const pk: Record<string, unknown> = {};
-    for (const k of junctionMeta.table.primaryKey) pk[k] = junctionRow[k];
+    for (const k of junctionKey) pk[k] = junctionRow[k];
     await fetch(junctionUrl("row"), {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -104,7 +112,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
           {[target.otherSchema, target.otherTable].filter(Boolean).join(".")}
         </span>
         <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={() => setLinking(true)}>
+        <Button variant="secondary" size="sm" onClick={() => setLinking(true)}>
           ＋ Link
         </Button>
       </div>
