@@ -14,29 +14,15 @@ import { ColumnsSelect } from "@/components/browse/columns-select";
 import { WidgetSelect, type WidgetOption } from "@/components/browse/widget-select";
 import type { TableMeta } from "@/components/browse/useTableMeta";
 import type { ColumnOverride } from "@/lib/types";
+import { widgets, widgetIcons } from "@/lib/data/widgets";
 
-const WIDGETS: WidgetOption[] = [
-  { value: "", label: "auto" },
-  { value: "text", label: "text" },
-  { value: "textarea", label: "textarea" },
-  { value: "number", label: "number" },
-  { value: "toggle", label: "toggle" },
-  { value: "date", label: "date" },
-  { value: "datetime", label: "datetime" },
-  { value: "select", label: "select" },
-  { value: "json", label: "json" },
-  { value: "reference", label: "reference" },
-  { value: "array", label: "array" },
-  { value: "range", label: "range" },
-  { value: "network", label: "network" },
-  { value: "interval", label: "interval" },
-  { value: "uuid", label: "uuid" },
-  { value: "bytea", label: "bytea" },
-  { value: "html", label: "html" },
-  { value: "image", label: "image" },
-  { value: "video", label: "video" },
-  { value: "audio", label: "audio" },
-];
+const WIDGETS: WidgetOption[] = widgets.map((x, i) => {
+  const Icon = widgetIcons[x];
+  if (i === 0) {
+    return { value: "", label: x, icon: Icon ? <Icon /> : null };
+  }
+  return { value: x, label: x, icon: Icon ? <Icon /> : null };
+});
 
 export function TableOverridesEditor({
   meta,
@@ -160,7 +146,7 @@ export function TableOverridesEditor({
                 {c.name}
               </span>
               <Input
-                className="flex-2 h-auto py-0.75 text-xs"
+                className="flex-2"
                 placeholder="Label"
                 value={c.label}
                 onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}

@@ -124,7 +124,6 @@ function RefSelect({ cm, onSelect }: { cm: ColumnMeta; onSelect: (id: string, la
     <div className="relative flex-1 min-w-35">
       <Input
         ref={inputRef}
-        className="h-auto py-0.75 text-xs"
         placeholder={`Search ${cm.ref!.table}…`}
         value={search}
         onFocus={() => {
@@ -244,14 +243,14 @@ function ConditionRow({
       return (
         <div className="flex items-center gap-1">
           <Input
-            className="h-auto py-0.75 text-xs w-28"
+            className="w-28"
             type={t}
             value={cond.value ?? ""}
             onChange={(e) => onChange({ ...cond, value: e.target.value })}
           />
           <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
           <Input
-            className="h-auto py-0.75 text-xs w-28"
+            className="w-28"
             type={t}
             value={cond.value2 ?? ""}
             onChange={(e) => onChange({ ...cond, value2: e.target.value })}
@@ -335,7 +334,6 @@ function ConditionRow({
         <div className="min-w-40">
           <Chips values={values} onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })} />
           <Input
-            className="h-auto py-0.75 text-xs"
             placeholder="type value, Enter to add"
             type={kind === "number" ? "number" : "text"}
             value={chipDraft}
@@ -444,7 +442,7 @@ function ConditionRow({
     if (kind === "jsonb") {
       return (
         <Input
-          className="h-auto py-0.75 text-xs flex-1 min-w-40 code"
+          className="flex-1 min-w-40 code"
           placeholder={'{"key":"value"}'}
           value={cond.value ?? ""}
           onChange={(e) => onChange({ ...cond, value: e.target.value })}
@@ -454,7 +452,7 @@ function ConditionRow({
     // text / number / date single value
     return (
       <Input
-        className="h-auto py-0.75 text-xs flex-1 min-w-30"
+        className="flex-1 min-w-30"
         type={kind === "number" ? "number" : kind === "date" ? dateType : "text"}
         placeholder="value"
         value={cond.value ?? ""}
