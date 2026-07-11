@@ -1,18 +1,5 @@
 "use client";
 
-// Multi-value tag editor built on the Combobox's native `multiple` (chips)
-// mode — the column stores a JSON array of strings per row (matches
-// ChipInput's convention for the "array" widget in row-editor.tsx).
-// Suggestions are the unique tag values already used elsewhere in the table
-// (see /tags, which flattens every row's array and dedupes across rows — a
-// plain distinct-values query would only dedupe whole arrays).
-//
-// Tags aren't constrained to previously-used values — typing something new
-// and pressing Enter must add it too. The reliable way to do that is to make
-// the typed text a real, selectable item (as "Create '<text>'") so it's
-// committed through the Combobox's own selection machinery, rather than a
-// custom onKeyDown side-channel racing the primitive's internal Enter
-// handling in multi-select mode.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { dataApiUrl } from "./data-api";
@@ -41,16 +28,10 @@ export function TagInput({
   schema: string | undefined;
   table: string;
   column: string;
-  value: string;
-  onChange: (val: string) => void;
+  value: string[];
+  onChange: (val: string[]) => void;
 }) {
-  let items: string[] = [];
-  try {
-    const parsed = value ? JSON.parse(value) : [];
-    if (Array.isArray(parsed)) items = parsed.map((x) => String(x));
-  } catch {
-    /* treat as empty */
-  }
+  const items = value;
 
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -76,7 +57,7 @@ export function TagInput({
       value={items}
       onValueChange={(next) => {
         const cleaned = next.map((v) => (v.startsWith(CREATE_PREFIX) ? v.slice(CREATE_PREFIX.length) : v));
-        onChange(JSON.stringify([...new Set(cleaned)]));
+        onChange([...new Set(cleaned)]);
         setSearch("");
       }}
       inputValue={search}
@@ -91,7 +72,7 @@ export function TagInput({
         ))}
         <ComboboxChipsInput placeholder={items.length ? "" : "add tag…"} />
       </ComboboxChips>
-      <ComboboxContent className="w-full min-w-[220px]">
+      <ComboboxContent className="w-full min-w-55">
         <ComboboxEmpty className="py-2 text-xs text-muted-foreground text-center">No matching tags</ComboboxEmpty>
         <ComboboxList>
           {(v: string) =>

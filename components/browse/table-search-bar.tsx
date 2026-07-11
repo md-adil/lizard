@@ -8,7 +8,7 @@ import { Search, X, Loader2 } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterSet } from "@/lib/data/filters";
 import { isComplete } from "@/lib/data/filters";
-import { FilterPanel } from "./filter-builder";
+import { FilterPanel, type FilterTarget } from "./filter-builder";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 
@@ -17,6 +17,7 @@ const SEARCH_ROW_LIMIT = 500_000;
 
 interface Props {
   columns: ColumnMeta[];
+  target: FilterTarget;
   rowEstimate?: number;
   filterSet: FilterSet;
   onFilterChange: (set: FilterSet) => void;
@@ -27,6 +28,7 @@ interface Props {
 
 export function TableSearchBar({
   columns,
+  target,
   rowEstimate = 0,
   filterSet,
   onFilterChange,
@@ -110,6 +112,7 @@ export function TableSearchBar({
       {filterOpen && (
         <FilterPanel
           columns={columns}
+          target={target}
           value={filterSet}
           onChange={onFilterChange}
           onClose={() => setFilterOpen(false)}

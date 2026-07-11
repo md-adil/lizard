@@ -6,6 +6,7 @@ import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/dat
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
+import { TagInput } from "./tag-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TypedInput } from "@/components/ui/typed-input";
@@ -17,10 +18,19 @@ import { ColumnsSelect } from "@/components/browse/columns-select";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
 
+// identifies the table being filtered, so a "tag" widget column's value
+// editor can pull suggestions from that column's own existing values (same
+// source the row-editor's TagInput/AutocompleteInput use).
+export interface FilterTarget {
+  connection: string;
+  schema: string | undefined;
+  table: string;
+}
+
 function kindOf(cm: ColumnMeta): Kind {
   if (cm.ref) return "reference";
   if (cm.options && cm.options.length) return "enum";
-  if (cm.widget === "array") return "array";
+  if (cm.widget === "array" || cm.widget === "tag") return "array";
   if (cm.widget === "json") return "jsonb";
   if (cm.col.udtName === "bool") return "boolean";
   if (cm.col.udtName === "date") return "date";
@@ -139,11 +149,13 @@ function Chips({
 
 function ConditionRow({
   columns,
+  target,
   cond,
   onChange,
   onRemove,
 }: {
   columns: ColumnMeta[];
+  target: FilterTarget;
   cond: FilterCondition;
   onChange: (c: FilterCondition) => void;
   onRemove: () => void;
@@ -277,6 +289,20 @@ function ConditionRow({
               </Button>
             </div>
           </div>
+        );
+      }
+      // "tag" widget "in": same multi-chip combobox the row-editor uses,
+      // suggesting from that column's own existing tag values.
+      if (cm.widget === "tag") {
+        return (
+          <TagInput
+            connection={target.connection}
+            schema={target.schema}
+            table={target.table}
+            column={cm.col.name}
+            value={values}
+            onChange={(arr) => onChange({ ...cond, values: arr })}
+          />
         );
       }
       // text/number "in": type + Enter to add chips
@@ -455,11 +481,13 @@ function ConditionRow({
 // Reusable filter panel (no trigger button — embed wherever needed).
 export function FilterPanel({
   columns,
+  target,
   value,
   onChange,
   onClose,
 }: {
   columns: ColumnMeta[];
+  target: FilterTarget;
   value: FilterSet;
   onChange: (set: FilterSet) => void;
   onClose?: () => void;
@@ -553,6 +581,7 @@ export function FilterPanel({
           <ConditionRow
             key={i}
             columns={columns}
+            target={target}
             cond={c}
             onChange={(nc) => update(i, nc)}
             onRemove={() => remove(i)}
@@ -599,10 +628,12 @@ export function FilterPanel({
 // Trigger button + inline FilterPanel (standalone, self-contained).
 export function FilterBuilder({
   columns,
+  target,
   value,
   onChange,
 }: {
   columns: ColumnMeta[];
+  target: FilterTarget;
   value: FilterSet;
   onChange: (set: FilterSet) => void;
 }) {
@@ -626,7 +657,9 @@ export function FilterBuilder({
         )}
         <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
       </Button>
-      {open && <FilterPanel columns={columns} value={value} onChange={onChange} onClose={() => setOpen(false)} />}
+      {open && (
+        <FilterPanel columns={columns} target={target} value={value} onChange={onChange} onClose={() => setOpen(false)} />
+      )}
     </div>
   );
 }

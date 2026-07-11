@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
-import { effectiveKey } from "@/lib/introspect/heuristics";
+import { effectiveKey, NUMERIC_UDTS } from "@/lib/introspect/heuristics";
 import { toBoolean, getLocalCurrency, getCurrencySymbol, type Widget } from "@/lib/data/widgets";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
@@ -51,19 +51,21 @@ const WIDE_WIDGETS = new Set<Widget>([
   "bytea",
 ]);
 
-function toInputValue(cm: ColumnMeta, v: unknown): string {
-  if (v === null || v === undefined) return "";
+function toInputValue(cm: ColumnMeta, v: unknown): string | string[] {
+  if (v === null || v === undefined) return cm.widget === "tag" ? [] : "";
   // ToggleInput's value is matched against the literal strings "true"/
   // "false" — trust the widget rather than `String(v)`, or a MySQL
   // tinyint(1) column (raw 0/1) would leave an existing row's toggle
   // unselected on edit.
   if (cm.widget === "toggle") return toBoolean(v) ? "true" : "false";
   if (cm.widget === "json") return typeof v === "string" ? v : JSON.stringify(v, null, 2);
-  // array/tag editor state is held as a JSON string of the element list —
-  // the server already normalizes both to a real array on every read (see
-  // normalizeTagColumns in lib/data/crud.ts for "tag"), so there's nothing
-  // left to defend against here.
-  if (cm.widget === "array" || cm.widget === "tag") return JSON.stringify(Array.isArray(v) ? v : []);
+  // "array" editor state is held as a JSON string of the element list
+  // (ChipInput's convention). "tag" is kept as a real string[] end to end —
+  // the server already normalizes it to an array on every read (see
+  // normalizeTagColumns in lib/data/crud.ts), and TagInput's Combobox needs
+  // the real array, not a serialized form of it.
+  if (cm.widget === "array") return JSON.stringify(Array.isArray(v) ? v : []);
+  if (cm.widget === "tag") return Array.isArray(v) ? v.map(String) : [];
   if (cm.widget === "bytea") {
     const b = v as { type?: string; data?: unknown[] };
     if (b && b.type === "Buffer" && Array.isArray(b.data)) return `⬇ ${b.data.length} bytes`;
@@ -170,18 +172,19 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
   const qc = useQueryClient();
   const isCreate = row === null;
   const editable = meta.columns;
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string | string[]>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [jsonErrors, setJsonErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const source = row ?? duplicateFrom ?? null;
-    const init: Record<string, string> = {};
+    const init: Record<string, string | string[]> = {};
     for (const cm of editable) {
       // when duplicating, clear key columns so the DB assigns new ones
       const clear = !!duplicateFrom && !row && effectiveKey(meta.table).includes(cm.col.name);
-      init[cm.col.name] = source && !clear ? toInputValue(cm, source[cm.col.name]) : "";
+      init[cm.col.name] =
+        source && !clear ? toInputValue(cm, source[cm.col.name]) : cm.widget === "tag" ? [] : "";
     }
     setValues(init);
     // duplicated fields count as user-entered so create sends them all
@@ -206,13 +209,14 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
       if (cm.readonly) continue;
       if (!isCreate && !touched.has(name)) continue; // only send changed fields on update
       const raw = values[name] ?? "";
+      const isEmpty = Array.isArray(raw) ? raw.length === 0 : raw === "";
       // inline required-field validation (Phase 8.2) — catch NOT NULL with no
       // default before the round-trip instead of surfacing a DB 23502 error
-      if (raw === "" && cm.required && cm.widget !== "toggle") {
+      if (isEmpty && cm.required && cm.widget !== "toggle") {
         errs[name] = "Required";
         continue;
       }
-      if (raw === "" && cm.widget !== "toggle") {
+      if (isEmpty && cm.widget !== "toggle") {
         if (isCreate && cm.col.default !== null) continue; // let the DB default apply
         data[name] = null;
         continue;
@@ -226,30 +230,43 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
           break;
         case "json":
           try {
-            data[name] = JSON.parse(raw);
+            data[name] = JSON.parse(raw as string);
           } catch {
             errs[name] = "Invalid JSON";
           }
           break;
-        case "array":
-        case "tag": {
+        case "array": {
           // held as a JSON string of the element list; empty → null. Sent
           // as a real array — coerceValue (lib/data/crud.ts) is what
           // decides whether the underlying column needs it stringified
           // (plain text/varchar) or can take it natively (json/jsonb, or a
-          // real DB array type for "array"), same as the "json" widget.
+          // real DB array type), same as the "json" widget.
           let arr: unknown[] = [];
           try {
-            arr = raw ? JSON.parse(raw) : [];
+            arr = raw ? JSON.parse(raw as string) : [];
           } catch {
             /* treat as empty */
           }
           data[name] = arr.length ? arr : null;
           break;
         }
+        case "tag": {
+          // held as a real string[] end to end (see toInputValue) — sent as
+          // a real array, same coerceValue handoff as "array" above.
+          const arr = Array.isArray(raw) ? raw : [];
+          data[name] = arr.length ? arr : null;
+          break;
+        }
         case "bytea":
           // binary editing is not supported here; never send it back
           continue;
+        case "autocomplete":
+          // the editor is always a text combobox regardless of the
+          // underlying column type (same display/typing as "text") — but a
+          // numeric column needs a real number on write, same coercion as
+          // the "number" widget above, or the value round-trips as text.
+          data[name] = NUMERIC_UDTS.has(cm.col.udtName) ? Number(raw) : raw;
+          break;
         default:
           data[name] = raw;
       }
@@ -316,7 +333,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     onError: (e: Error) => setError(e.message),
   });
 
-  const setVal = (name: string, v: string) => {
+  const setVal = (name: string, v: string | string[]) => {
     setValues((s) => ({ ...s, [name]: v }));
     setTouched((s) => new Set(s).add(name));
   };
@@ -350,7 +367,8 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
             {editable.map((cm) => {
               const name = cm.col.name;
-              const v = values[name] ?? "";
+              const raw = values[name] ?? "";
+              const v = typeof raw === "string" ? raw : "";
               const disabled = cm.readonly;
               return (
                 <div key={name} className={WIDE_WIDGETS.has(cm.widget) ? "col-span-2" : undefined}>
@@ -564,8 +582,8 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     schema={meta.resolvedSchema}
                     table={meta.table.name}
                     column={name}
-                    value={v}
-                    onChange={(val) => setVal(name, val)}
+                    value={Array.isArray(raw) ? raw : []}
+                    onChange={(arr) => setVal(name, arr)}
                   />
                 ) : cm.widget === "autocomplete" ? (
                   <AutocompleteInput

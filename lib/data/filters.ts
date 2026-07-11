@@ -95,7 +95,12 @@ export function buildFilterClause(
   conditions: FilterCondition[],
   combinator: Combinator,
   dialect: Dialect,
-  startIndex = 0
+  startIndex = 0,
+  // "tag" widget columns store a JSON array (jsonb/json, or JSON text in a
+  // plain text/varchar column per widgetOverrideColumns in lib/data/crud.ts)
+  // rather than a native SQL array — arraycontains/arrayoverlap need each
+  // engine's JSON functions/operators for these instead of @>/&&.
+  tagColumns: Set<string> = new Set()
 ): { clause: string; values: unknown[] } {
   const parts: string[] = [];
   const values: unknown[] = [];
@@ -185,12 +190,23 @@ export function buildFilterClause(
         break;
       case "arraycontains":
       case "arrayoverlap": {
+        const arr = (f.values ?? []).map(String);
+        if (tagColumns.has(f.column)) {
+          if (dialect.engine === "postgres") {
+            // ?& / ?| take a text[] of top-level array elements to check for.
+            const sym = f.op === "arraycontains" ? "?&" : "?|";
+            parts.push(`${dialect.cast(col, "jsonb")} ${sym} ${dialect.cast(push(arr), "text[]")}`);
+          } else if (dialect.engine === "mysql") {
+            const fn = f.op === "arraycontains" ? "JSON_CONTAINS" : "JSON_OVERLAPS";
+            parts.push(`${fn}(${col}, ${push(JSON.stringify(arr))})`);
+          }
+          break;
+        }
         if (!dialect.supportsArrays) continue;
         const colInfo = table.columns.find((c) => c.name === f.column)!;
         const elemCast = isArrayColumn(colInfo)
           ? arrayElementUdt(colInfo)
           : "text";
-        const arr = (f.values ?? []).map(String);
         const sym = f.op === "arraycontains" ? "@>" : "&&";
         parts.push(`${col} ${sym} ${dialect.cast(push(arr), `${elemCast}[]`)}`);
         break;

@@ -95,11 +95,14 @@ export async function listRows(params: ListParams) {
   const client = await getClient(conn, "read");
 
   try {
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
     const { clause: filterClause, values: filterValues } = buildFilterClause(
       table,
       params.filters ?? [],
       params.combinator ?? "and",
       dialect,
+      0,
+      tagCols,
     );
     const allValues: unknown[] = [...filterValues];
 
@@ -138,7 +141,6 @@ export async function listRows(params: ListParams) {
     const res = await client.query(sql, allValues);
     const hasMore = res.rows.length > pageSize;
     const rows = hasMore ? res.rows.slice(0, pageSize) : res.rows;
-    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
     normalizeTagColumns(rows, tagCols);
 
     // exact count for small tables, estimate for big ones
@@ -170,11 +172,14 @@ export async function exportRows(
   const client = await getClient(conn, "read");
 
   try {
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
     const { clause: filterClause, values: filterValues } = buildFilterClause(
       table,
       params.filters ?? [],
       params.combinator ?? "and",
       dialect,
+      0,
+      tagCols,
     );
     const allValues: unknown[] = [...filterValues];
 

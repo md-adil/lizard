@@ -110,6 +110,7 @@ export function ReferencePickerModal({
         <div className="mb-3">
           <TableSearchBar
             columns={visibleCols}
+            target={{ connection: target.connection, schema: target.schema, table: target.table }}
             rowEstimate={meta?.table.rowEstimate}
             filterSet={filterSet}
             onFilterChange={(s) => {
