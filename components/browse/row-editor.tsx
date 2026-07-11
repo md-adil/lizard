@@ -5,27 +5,21 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { effectiveKey } from "@/lib/introspect/heuristics";
-import { toBoolean, getLocalCurrency, getCurrencySymbol } from "@/lib/data/widgets";
+import { toBoolean, getLocalCurrency, getCurrencySymbol, type Widget } from "@/lib/data/widgets";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
+import { TagInput } from "./tag-input";
+import { AutocompleteInput } from "./autocomplete-input";
 import { RedactedValue } from "./redacted-value";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
-import {
-  Combobox,
-  ComboboxInput,
-  ComboboxContent,
-  ComboboxList,
-  ComboboxItem,
-  ComboboxEmpty,
-} from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { ToggleInput } from "@/components/ui/toggle-input";
 import { Textarea } from "@/components/ui/textarea";
 import { DataSelect } from "@/components/ui/data-select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Rating } from "@/components/ui/rating";
 import { marked } from "marked";
 import { AvatarCell } from "./avatar-cell";
@@ -41,6 +35,22 @@ interface Props {
   onClose: () => void;
 }
 
+// Widgets whose content needs more than half the dialog's width (long-form
+// text, chip lists, media previews) — everything else pairs up two-per-row
+// in the field grid below.
+const WIDE_WIDGETS = new Set<Widget>([
+  "textarea",
+  "json",
+  "html",
+  "markdown",
+  "array",
+  "tag",
+  "image",
+  "video",
+  "audio",
+  "bytea",
+]);
+
 function toInputValue(cm: ColumnMeta, v: unknown): string {
   if (v === null || v === undefined) return "";
   // ToggleInput's value is matched against the literal strings "true"/
@@ -49,8 +59,11 @@ function toInputValue(cm: ColumnMeta, v: unknown): string {
   // unselected on edit.
   if (cm.widget === "toggle") return toBoolean(v) ? "true" : "false";
   if (cm.widget === "json") return typeof v === "string" ? v : JSON.stringify(v, null, 2);
-  // array editor state is held as a JSON string of the element list
-  if (cm.widget === "array") return JSON.stringify(Array.isArray(v) ? v : []);
+  // array/tag editor state is held as a JSON string of the element list —
+  // the server already normalizes both to a real array on every read (see
+  // normalizeTagColumns in lib/data/crud.ts for "tag"), so there's nothing
+  // left to defend against here.
+  if (cm.widget === "array" || cm.widget === "tag") return JSON.stringify(Array.isArray(v) ? v : []);
   if (cm.widget === "bytea") {
     const b = v as { type?: string; data?: unknown[] };
     if (b && b.type === "Buffer" && Array.isArray(b.data)) return `⬇ ${b.data.length} bytes`;
@@ -153,119 +166,6 @@ function ChipInput({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-interface TagItem {
-  id: string;
-  value: string;
-  isCreate?: boolean;
-}
-
-function TagInput({
-  connection,
-  schema,
-  table,
-  column,
-  value,
-  onChange,
-}: {
-  connection: string;
-  schema: string | undefined;
-  table: string;
-  column: string;
-  value: string;
-  onChange: (val: string) => void;
-}) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    const fetchTags = async () => {
-      try {
-        const url = `/api/data/${connection}/${table}/tags?column=${column}${
-          schema ? `&schema=${encodeURIComponent(schema)}` : ""
-        }`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (active && data.success) {
-          setSuggestions(data.data || []);
-        }
-      } catch (err) {
-        /* ignore */
-      }
-    };
-    fetchTags();
-    return () => {
-      active = false;
-    };
-  }, [connection, schema, table, column]);
-
-  const filteredSuggestions = useMemo(() => {
-    return suggestions.filter((s) => s.toLowerCase().includes(search.toLowerCase()));
-  }, [suggestions, search]);
-
-  const showCreateOption =
-    search.trim() !== "" &&
-    !suggestions.some((s) => s.toLowerCase() === search.trim().toLowerCase());
-
-  const comboboxItems = useMemo(() => {
-    const items: TagItem[] = filteredSuggestions.map((tag) => ({
-      id: `tag-${tag}`,
-      value: tag,
-    }));
-    if (showCreateOption) {
-      items.unshift({
-        id: `create-${search.trim()}`,
-        value: search.trim(),
-        isCreate: true,
-      });
-    }
-    return items;
-  }, [filteredSuggestions, showCreateOption, search]);
-
-  const activeItem = value ? { id: `tag-${value}`, value } : null;
-
-  return (
-    <div className="w-full">
-      <Combobox
-        items={comboboxItems}
-        value={activeItem}
-        onValueChange={(item: TagItem | null) => {
-          onChange(item?.value || "");
-        }}
-        onInputValueChange={(inputValue) => setSearch(inputValue)}
-        filter={null}
-        isItemEqualToValue={(a, b) => a?.value === b?.value}
-        itemToStringLabel={(item) => item?.value || ""}
-      >
-        <ComboboxInput
-          placeholder="Select or type tag..."
-          className="w-full h-8"
-          showClear={!!value}
-        />
-        <ComboboxContent className="w-full min-w-[220px]">
-          <ComboboxEmpty className="py-2 text-xs text-muted-foreground text-center">
-            No tags found. Type to create one.
-          </ComboboxEmpty>
-          <ComboboxList>
-            {(item: TagItem) =>
-              item.isCreate ? (
-                <ComboboxItem key={item.id} value={item} className="text-primary font-medium">
-                  ＋ Create tag "{item.value}"
-                </ComboboxItem>
-              ) : (
-                <ComboboxItem key={item.id} value={item}>
-                  {item.value}
-                </ComboboxItem>
-              )
-            }
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-    </div>
-  );
-}
-
 export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
   const qc = useQueryClient();
   const isCreate = row === null;
@@ -331,8 +231,13 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
             errs[name] = "Invalid JSON";
           }
           break;
-        case "array": {
-          // held as a JSON string of the element list; empty → null
+        case "array":
+        case "tag": {
+          // held as a JSON string of the element list; empty → null. Sent
+          // as a real array — coerceValue (lib/data/crud.ts) is what
+          // decides whether the underlying column needs it stringified
+          // (plain text/varchar) or can take it natively (json/jsonb, or a
+          // real DB array type for "array"), same as the "json" widget.
           let arr: unknown[] = [];
           try {
             arr = raw ? JSON.parse(raw) : [];
@@ -425,21 +330,32 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && close()}>
-      <SheetContent side="right" className="w-150 max-w-full overflow-y-auto scrollbar-thin p-6">
-        <SheetHeader className="mb-5">
-          <SheetTitle>{isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(v) => !v && close()}>
+      <DialogContent
+        className="top-[5vh] translate-y-0 flex flex-col gap-3 resize overflow-auto rounded-xl"
+        style={{
+          width: 880,
+          height: "min(85vh, 900px)",
+          minWidth: 480,
+          minHeight: 320,
+          maxWidth: "95vw",
+          maxHeight: "95vh",
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-4">
-          {editable.map((cm) => {
-            const name = cm.col.name;
-            const v = values[name] ?? "";
-            const disabled = cm.readonly;
-            return (
-              <div key={name}>
-                <label className="label">
-                  {cm.label}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-1 -mx-1">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+            {editable.map((cm) => {
+              const name = cm.col.name;
+              const v = values[name] ?? "";
+              const disabled = cm.readonly;
+              return (
+                <div key={name} className={WIDE_WIDGETS.has(cm.widget) ? "col-span-2" : undefined}>
+                  <label className="label">
+                    {cm.label}
                   {cm.required && !disabled && <span style={{ color: "var(--destructive)" }}> *</span>}
                   <span className="ml-2 code" style={{ color: "var(--muted-foreground-faint)", fontSize: 10.5 }}>
                     {cm.col.udtName}
@@ -651,6 +567,17 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     value={v}
                     onChange={(val) => setVal(name, val)}
                   />
+                ) : cm.widget === "autocomplete" ? (
+                  <AutocompleteInput
+                    target={{
+                      connection: meta.connection,
+                      schema: meta.resolvedSchema,
+                      table: meta.table.name,
+                      column: name,
+                    }}
+                    value={v}
+                    onChange={(val) => setVal(name, val)}
+                  />
                 ) : (
                   <Input
                     type={
@@ -687,9 +614,10 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     {cm.help}
                   </p>
                 )}
-              </div>
-            );
-          })}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {error && (
@@ -715,7 +643,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
             </Button>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

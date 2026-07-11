@@ -1,7 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 
 export interface TagCellProps {
-  value: unknown;
+  // the server normalizes a "tag" widget column to string[] on every read
+  // (see normalizeTagColumns in lib/data/crud.ts) — no need to defend
+  // against a raw JSON string or other shape here.
+  value: string[];
   className?: string;
 }
 
@@ -27,17 +30,22 @@ function getTagStyles(str: string) {
 }
 
 export function TagCell({ value, className }: TagCellProps) {
-  const text = String(value || "").trim();
-  if (!text) return <span className="text-muted-foreground">∅</span>;
-
-  const styles = getTagStyles(text);
+  if (value.length === 0) return <span className="text-muted-foreground">∅</span>;
 
   return (
-    <Badge
-      variant="outline"
-      className={`${styles.bg} font-semibold px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider select-none shrink-0 border ${className || ""}`}
-    >
-      {text}
-    </Badge>
+    <div className="flex flex-wrap gap-1">
+      {value.map((tag) => {
+        const styles = getTagStyles(tag);
+        return (
+          <Badge
+            key={tag}
+            variant="outline"
+            className={`${styles.bg} font-semibold px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider select-none shrink-0 border ${className || ""}`}
+          >
+            {tag}
+          </Badge>
+        );
+      })}
+    </div>
   );
 }

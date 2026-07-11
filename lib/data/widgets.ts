@@ -29,6 +29,7 @@ import {
   BookOpen,
   UserCircle,
   Tag,
+  Search,
 } from "lucide-react";
 
 export const widgets = [
@@ -63,6 +64,7 @@ export const widgets = [
   "avatar",
   "timezone",
   "tag",
+  "autocomplete",
 ] as const;
 
 export type Widget = (typeof widgets)[number];
@@ -151,4 +153,5 @@ export const widgetIcons: Record<Widget, LucideIcon> = {
   avatar: UserCircle,
   timezone: Globe,
   tag: Tag,
+  autocomplete: Search,
 };
