@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { effectiveKey } from "@/lib/introspect/heuristics";
-import { toBoolean } from "@/lib/data/widgets";
+import { toBoolean, getLocalCurrency, getCurrencySymbol } from "@/lib/data/widgets";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
@@ -18,6 +18,7 @@ import { ToggleInput } from "@/components/ui/toggle-input";
 import { Textarea } from "@/components/ui/textarea";
 import { DataSelect } from "@/components/ui/data-select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Rating } from "@/components/ui/rating";
 
 interface Props {
   meta: TableMeta;
@@ -235,19 +236,19 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
         dataApiUrl({ connection: meta.connection, table: meta.table.name, path, schema: meta.schema });
       const res = isCreate
         ? await fetch(url(), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        })
         : await fetch(url("row"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              pk,
-              data,
-              expectedUpdatedAt: meta.updatedAtColumn && row ? row[meta.updatedAtColumn] : undefined,
-            }),
-          });
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pk,
+            data,
+            expectedUpdatedAt: meta.updatedAtColumn && row ? row[meta.updatedAtColumn] : undefined,
+          }),
+        });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Save failed");
       return body;
@@ -396,16 +397,95 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     value={v === "" ? "" : Number(v)}
                     onChange={(value) => setVal(name, String(value))}
                   />
+                ) : cm.widget === "color" ? (
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="color"
+                      className="w-10 h-10 p-0 border rounded cursor-pointer shrink-0"
+                      value={v || "#000000"}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                    <Input
+                      placeholder="#000000"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                      className="font-mono flex-1"
+                    />
+                  </div>
+                ) : cm.widget === "percent" ? (
+                  <div className="flex gap-3 items-center">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      className="flex-1 cursor-pointer accent-primary h-2 bg-muted rounded-lg appearance-none"
+                      value={Number(v) || 0}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                    <div className="flex items-center gap-1 shrink-0 w-20">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={v}
+                        onChange={(e) => setVal(name, e.target.value)}
+                        className="w-16 text-right"
+                      />
+                      <span className="text-sm font-medium text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                ) : cm.widget === "rating" ? (
+                  <div className="flex items-center gap-2 py-1">
+                    <Rating
+                      value={Number(v) || 0}
+                      onChange={(starValue) => setVal(name, String(starValue))}
+                    />
+                    {(Number(v) || 0) > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setVal(name, "")}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                ) : cm.widget === "currency" ? (
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-muted-foreground select-none">
+                      {getCurrencySymbol(getLocalCurrency())}
+                    </span>
+                    <Input
+                      type="number"
+                      className="pl-7"
+                      placeholder="0.00"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                  </div>
                 ) : (
                   <Input
                     type={
-                      cm.redacted
+                      cm.redacted || cm.widget === "password"
                         ? "password"
                         : cm.widget === "date"
                           ? "date"
                           : cm.widget === "datetime"
                             ? "datetime-local"
-                            : "text"
+                            : cm.widget === "email"
+                              ? "email"
+                              : cm.widget === "url"
+                                ? "url"
+                                : "text"
+                    }
+                    placeholder={
+                      cm.widget === "email"
+                        ? "user@example.com"
+                        : cm.widget === "url"
+                          ? "https://"
+                          : undefined
                     }
                     value={v}
                     onChange={(e) => setVal(name, e.target.value)}

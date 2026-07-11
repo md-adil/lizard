@@ -4,7 +4,7 @@
 // overrides + virtual FKs. Heuristics are pure functions shared with the server.
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, X, ExternalLink, Mail, Star } from "lucide-react";
 import type { TableInfo, VirtualFk, TableOverride, ColumnInfo, CatalogResponse, SchemaDetail } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -19,7 +19,9 @@ import {
 import { vfkMatchesSource, resolveToSchema, vfkDisplayColumn, vfkTargetColumn } from "@/lib/introspect/virtual-fk";
 import { resolveTableOverride, resolveColumnOverrides } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
-import { toBoolean } from "@/lib/data/widgets";
+import { toBoolean, getLocalCurrency } from "@/lib/data/widgets";
+import { CurrencyCell } from "./currency-cell";
+import { PercentCell } from "./percent-cell";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
 
@@ -254,6 +256,106 @@ export function formatCell(
   optionLabels?: Record<string, string> | null,
 ): { text: string; muted: boolean; icon?: ReactNode } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
+  if (widget === "percent") {
+    return {
+      text: `${value}%`,
+      muted: false,
+      icon: <PercentCell value={value} />,
+    };
+  }
+  if (widget === "rating") {
+    const rate = Math.round(Number(value)) || 0;
+    const cleanRate = Math.min(5, Math.max(0, rate));
+    return {
+      text: `${cleanRate}/5`,
+      muted: false,
+      icon: (
+        <span className="flex items-center gap-0.5" title={`${cleanRate}/5 stars`}>
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <Star
+              key={idx}
+              className={`size-3 shrink-0 ${
+                idx < cleanRate ? "fill-amber-400 text-amber-400" : "text-muted/40"
+              }`}
+            />
+          ))}
+        </span>
+      ),
+    };
+  }
+  if (widget === "currency") {
+    // Generate text representation for searches/exports
+    const amount = Number(value);
+    let text = String(value);
+    if (!isNaN(amount)) {
+      try {
+        const localCode = getLocalCurrency();
+        text = new Intl.NumberFormat(typeof navigator !== "undefined" ? navigator.language : "en-US", {
+          style: "currency",
+          currency: localCode,
+        }).format(amount);
+      } catch {
+        text = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+      }
+    }
+    return {
+      text,
+      muted: false,
+      icon: <CurrencyCell value={value} />,
+    };
+  }
+  if (widget === "password") {
+    return { text: "••••••••", muted: true };
+  }
+  if (widget === "color") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: (
+        <span className="flex items-center gap-1.5">
+          <span
+            className="size-3 rounded-full border border-black/10 shrink-0"
+            style={{ backgroundColor: String(value) }}
+          />
+          <span className="font-mono text-xs">{String(value)}</span>
+        </span>
+      ),
+    };
+  }
+  if (widget === "url") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: (
+        <a
+          href={String(value)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {String(value)}
+          <ExternalLink className="size-3 text-muted-foreground shrink-0" />
+        </a>
+      ),
+    };
+  }
+  if (widget === "email") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: (
+        <a
+          href={`mailto:${String(value)}`}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {String(value)}
+          <Mail className="size-3 text-muted-foreground shrink-0" />
+        </a>
+      ),
+    };
+  }
   if (widget === "select" && optionLabels?.[String(value)]) {
     return { text: optionLabels[String(value)], muted: false };
   }

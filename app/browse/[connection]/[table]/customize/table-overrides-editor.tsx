@@ -19,6 +19,9 @@ import { WidgetSelect, type WidgetOption } from "@/components/browse/widget-sele
 import type { TableMeta } from "@/components/browse/useTableMeta";
 import type { ColumnOverride } from "@/lib/types";
 import { widgets, widgetIcons } from "@/lib/data/widgets";
+import { WidgetsHelpDialog } from "@/components/browse/widgets-help-dialog";
+
+
 
 const WIDGETS: WidgetOption[] = widgets.map((x, i) => {
   const Icon = widgetIcons[x];
@@ -254,11 +257,14 @@ export function TableOverridesEditor({
         </div>
       )}
 
-      <div
-        className="text-[12px] font-semibold uppercase tracking-wider mb-2"
-        style={{ color: "var(--muted-foreground-faint)" }}
-      >
-        Columns
+      <div className="flex items-center gap-1.5 mb-2">
+        <div
+          className="text-[12px] font-semibold uppercase tracking-wider"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
+          Columns
+        </div>
+        <WidgetsHelpDialog />
       </div>
       <div className="space-y-2 mb-6">
         {cols.map((c, i) => {
