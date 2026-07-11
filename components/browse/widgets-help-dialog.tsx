@@ -35,6 +35,10 @@ const WIDGET_DESCRIPTIONS: Record<string, string> = {
   percent: "Percentage slider. Renders a slider + number box in forms and a visual progress bar in the grid.",
   rating: "Star rating. Renders an interactive 5-star picker in forms and filled/empty amber stars in the grid.",
   currency: "Currency text. Renders a numeric field with a '$' symbol prefix in forms and localized currency in the grid.",
+  markdown: "Markdown editor. Renders styled markdown text via 'marked' library in cells and tabbed editor/preview in forms.",
+  avatar: "User avatar. Renders a round profile image uploader/URL, or initials badge.",
+  timezone: "Timezone picker. Renders local timezone list selection with active offsets.",
+  tag: "Custom Tag. Renders dynamically colored tag pills in the grid, and autocompletes with existing database values in forms.",
 };
 
 export function WidgetsHelpDialog() {

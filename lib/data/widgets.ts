@@ -26,6 +26,9 @@ import {
   Percent,
   Star,
   DollarSign,
+  BookOpen,
+  UserCircle,
+  Tag,
 } from "lucide-react";
 
 export const widgets = [
@@ -56,6 +59,10 @@ export const widgets = [
   "percent",
   "rating",
   "currency",
+  "markdown",
+  "avatar",
+  "timezone",
+  "tag",
 ] as const;
 
 export type Widget = (typeof widgets)[number];
@@ -140,4 +147,8 @@ export const widgetIcons: Record<Widget, LucideIcon> = {
   percent: Percent,
   rating: Star,
   currency: DollarSign,
+  markdown: BookOpen,
+  avatar: UserCircle,
+  timezone: Globe,
+  tag: Tag,
 };

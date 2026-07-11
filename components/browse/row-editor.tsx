@@ -12,6 +12,14 @@ import { RefCombobox } from "./ref-combobox";
 import { RedactedValue } from "./redacted-value";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { ToggleInput } from "@/components/ui/toggle-input";
@@ -19,6 +27,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { DataSelect } from "@/components/ui/data-select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Rating } from "@/components/ui/rating";
+import { marked } from "marked";
+import { AvatarCell } from "./avatar-cell";
+import { TimezoneCell } from "./timezone-cell";
+import { tzOptions } from "@/lib/data/timezones";
 
 interface Props {
   meta: TableMeta;
@@ -137,6 +149,119 @@ function ChipInput({ value, onChange }: { value: string; onChange: (v: string) =
         }}
         onBlur={() => commit(draft)}
       />
+    </div>
+  );
+}
+
+interface TagItem {
+  id: string;
+  value: string;
+  isCreate?: boolean;
+}
+
+function TagInput({
+  connection,
+  schema,
+  table,
+  column,
+  value,
+  onChange,
+}: {
+  connection: string;
+  schema: string | undefined;
+  table: string;
+  column: string;
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const fetchTags = async () => {
+      try {
+        const url = `/api/data/${connection}/${table}/tags?column=${column}${
+          schema ? `&schema=${encodeURIComponent(schema)}` : ""
+        }`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data.success) {
+          setSuggestions(data.data || []);
+        }
+      } catch (err) {
+        /* ignore */
+      }
+    };
+    fetchTags();
+    return () => {
+      active = false;
+    };
+  }, [connection, schema, table, column]);
+
+  const filteredSuggestions = useMemo(() => {
+    return suggestions.filter((s) => s.toLowerCase().includes(search.toLowerCase()));
+  }, [suggestions, search]);
+
+  const showCreateOption =
+    search.trim() !== "" &&
+    !suggestions.some((s) => s.toLowerCase() === search.trim().toLowerCase());
+
+  const comboboxItems = useMemo(() => {
+    const items: TagItem[] = filteredSuggestions.map((tag) => ({
+      id: `tag-${tag}`,
+      value: tag,
+    }));
+    if (showCreateOption) {
+      items.unshift({
+        id: `create-${search.trim()}`,
+        value: search.trim(),
+        isCreate: true,
+      });
+    }
+    return items;
+  }, [filteredSuggestions, showCreateOption, search]);
+
+  const activeItem = value ? { id: `tag-${value}`, value } : null;
+
+  return (
+    <div className="w-full">
+      <Combobox
+        items={comboboxItems}
+        value={activeItem}
+        onValueChange={(item: TagItem | null) => {
+          onChange(item?.value || "");
+        }}
+        onInputValueChange={(inputValue) => setSearch(inputValue)}
+        filter={null}
+        isItemEqualToValue={(a, b) => a?.value === b?.value}
+        itemToStringLabel={(item) => item?.value || ""}
+      >
+        <ComboboxInput
+          placeholder="Select or type tag..."
+          className="w-full h-8"
+          showClear={!!value}
+        />
+        <ComboboxContent className="w-full min-w-[220px]">
+          <ComboboxEmpty className="py-2 text-xs text-muted-foreground text-center">
+            No tags found. Type to create one.
+          </ComboboxEmpty>
+          <ComboboxList>
+            {(item: TagItem) =>
+              item.isCreate ? (
+                <ComboboxItem key={item.id} value={item} className="text-primary font-medium">
+                  ＋ Create tag "{item.value}"
+                </ComboboxItem>
+              ) : (
+                <ComboboxItem key={item.id} value={item}>
+                  {item.value}
+                </ComboboxItem>
+              )
+            }
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
     </div>
   );
 }
@@ -290,6 +415,8 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     setValues((s) => ({ ...s, [name]: v }));
     setTouched((s) => new Set(s).add(name));
   };
+
+  const [mdPreviewActive, setMdPreviewActive] = useState<Record<string, boolean>>({});
 
   const [open, setOpen] = useState(true);
   const close = () => {
@@ -465,6 +592,65 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       onChange={(e) => setVal(name, e.target.value)}
                     />
                   </div>
+                ) : cm.widget === "markdown" ? (
+                  <div className="space-y-1.5 w-full">
+                    <div className="flex items-center justify-between border-b pb-1 mb-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">Markdown</span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() =>
+                          setMdPreviewActive((s) => ({ ...s, [name]: !s[name] }))
+                        }
+                      >
+                        {mdPreviewActive[name] ? "Edit" : "Preview"}
+                      </Button>
+                    </div>
+                    {mdPreviewActive[name] ? (
+                      <div
+                        className="p-2.5 rounded-lg border bg-muted/30 max-h-48 overflow-y-auto"
+                        style={{ fontSize: "13px" }}
+                        dangerouslySetInnerHTML={{
+                          __html: String(marked.parse(v || "", { async: false })),
+                        }}
+                      />
+                    ) : (
+                      <Textarea
+                        rows={4}
+                        placeholder="Type markdown here..."
+                        value={v}
+                        onChange={(e) => setVal(name, e.target.value)}
+                      />
+                    )}
+                  </div>
+                ) : cm.widget === "avatar" ? (
+                  <div className="flex items-center gap-3 w-full">
+                    <AvatarCell value={v} size="md" className="shrink-0 border shadow-sm" />
+                    <Input
+                      placeholder="e.g. Image URL or user name/initials"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
+                ) : cm.widget === "timezone" ? (
+                  <DataSelect
+                    items={tzOptions}
+                    value={tzOptions.find((o) => o.value === v) || null}
+                    onChange={(opt) => setVal(name, opt?.value || "")}
+                    placeholder="Select timezone..."
+                    className="w-full"
+                  />
+                ) : cm.widget === "tag" ? (
+                  <TagInput
+                    connection={meta.connection}
+                    schema={meta.resolvedSchema}
+                    table={meta.table.name}
+                    column={name}
+                    value={v}
+                    onChange={(val) => setVal(name, val)}
+                  />
                 ) : (
                   <Input
                     type={

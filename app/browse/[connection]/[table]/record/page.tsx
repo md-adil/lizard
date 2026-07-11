@@ -151,7 +151,7 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
       {cols.map((cm) => {
         const v = row[cm.col.name];
         const label = cm.ref && v != null ? fkLabelFor(fkLabels, cm.col.name, row) : undefined;
-        const f = formatCell(v, cm.widget);
+        const f = formatCell(v, cm.widget, cm.optionLabels);
         const isMedia =
           (cm.widget === "image" || cm.widget === "video" || cm.widget === "audio") &&
           typeof v === "string" &&

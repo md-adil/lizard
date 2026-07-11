@@ -253,10 +253,12 @@ export function Sidebar() {
 
   // follow the URL when browsing; otherwise keep/first connection
   useEffect(() => {
-    if (params.connection && params.connection !== selected) {
-      setSelected(params.connection);
-      setShowHidden(false);
-    } else if (!selected && connections.length > 0) {
+    if (params.connection) {
+      if (params.connection !== selected) {
+        setSelected(params.connection);
+        setShowHidden(false);
+      }
+    } else if (connections.length > 0) {
       setSelected(connections[0].connectionName);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,9 +356,15 @@ export function Sidebar() {
             </p>
           ) : (
             <DataSelect
+              key={`${selected}-${connections.length}`}
               items={connections}
               value={connections.find((c) => c.connectionName === selected) ?? null}
-              onChange={(c) => c && setSelected(c.connectionName)}
+              onChange={(c) => {
+                if (c) {
+                  setSelected(c.connectionName);
+                  router.push(`/browse/${c.connectionName}`);
+                }
+              }}
               getValue={(c) => c.connectionName}
               getLabel={(c) => (
                 <>

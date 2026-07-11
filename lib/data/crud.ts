@@ -961,3 +961,40 @@ export async function deleteRow(
     client.release();
   }
 }
+
+export async function distinctColumnValues(
+  connection: string,
+  schema: string | undefined,
+  tableName: string,
+  columnName: string,
+  search: string,
+) {
+  const { conn, table } = await resolveTable(connection, schema, tableName);
+  assertColumn(table, columnName);
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+  try {
+    const params: unknown[] = [];
+    let where = `WHERE ${dialect.quoteIdent(columnName)} IS NOT NULL`;
+    if (search) {
+      params.push(`%${search}%`);
+      where += ` AND ${dialect.caseInsensitiveLike(
+        dialect.castToText(dialect.quoteIdent(columnName)),
+        dialect.placeholder(params.length)
+      )}`;
+    }
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
+      : dialect.quoteIdent(tableName);
+
+    const res = await client.query(
+      `SELECT DISTINCT ${dialect.quoteIdent(columnName)} AS value
+       FROM ${fqtn} ${where}
+       ORDER BY 1 LIMIT 50`,
+      params,
+    );
+    return res.rows.map(r => String(r.value));
+  } finally {
+    client.release();
+  }
+}

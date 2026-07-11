@@ -22,6 +22,10 @@ import { supportsSchemas } from "@/lib/types";
 import { toBoolean, getLocalCurrency } from "@/lib/data/widgets";
 import { CurrencyCell } from "./currency-cell";
 import { PercentCell } from "./percent-cell";
+import { MarkdownCell } from "./markdown-cell";
+import { AvatarCell } from "./avatar-cell";
+import { TimezoneCell } from "./timezone-cell";
+import { TagCell } from "./tag-cell";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
 
@@ -256,6 +260,36 @@ export function formatCell(
   optionLabels?: Record<string, string> | null,
 ): { text: string; muted: boolean; icon?: ReactNode } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
+
+  if (widget === "markdown") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <MarkdownCell value={value} />,
+    };
+  }
+  if (widget === "avatar") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <AvatarCell value={value} />,
+    };
+  }
+  if (widget === "timezone") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <TimezoneCell value={value} />,
+    };
+  }
+  if (widget === "tag") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <TagCell value={value} />,
+    };
+  }
+
   if (widget === "percent") {
     return {
       text: `${value}%`,
