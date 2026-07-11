@@ -34,7 +34,8 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
             column_default AS column_default, data_type AS data_type,
             column_type AS column_type, extra AS extra,
             NULLIF(column_comment, '') AS column_comment,
-            character_maximum_length AS character_maximum_length
+            character_maximum_length AS character_maximum_length,
+            numeric_precision AS numeric_precision, numeric_scale AS numeric_scale
      FROM information_schema.columns
      WHERE table_schema = ?
      ORDER BY table_name, ordinal_position`,
@@ -92,6 +93,14 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       comment: (c.column_comment as string) ?? null,
       enumValues: parseEnumValues(dataType, columnType),
       maxLength: c.character_maximum_length == null ? null : Number(c.character_maximum_length),
+      numeric:
+        c.numeric_precision == null
+          ? null
+          : {
+              precision: Number(c.numeric_precision),
+              scale: c.numeric_scale == null ? null : Number(c.numeric_scale),
+              unsigned: /unsigned/i.test(columnType),
+            },
     };
     table.columns.push(col);
   }

@@ -19,6 +19,7 @@ import {
 import { vfkMatchesSource, resolveToSchema, vfkDisplayColumn, vfkTargetColumn } from "@/lib/introspect/virtual-fk";
 import { resolveTableOverride, resolveColumnOverrides } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
+import { toBoolean } from "@/lib/data/widgets";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
 
@@ -51,6 +52,8 @@ export interface ColumnMeta {
   redacted: boolean;
   help: string | null;
   options: string[] | null;
+  // raw option value -> display label (e.g. "m" -> "Male"); null when unset.
+  optionLabels: Record<string, string> | null;
   // where a reference picker should search: real FK or virtual FK target.
   // schema is undefined when the target connection doesn't have one (see
   // TableMeta.schema) — it may point at a different connection than the
@@ -86,6 +89,13 @@ export interface TableMeta {
   tableOverride: TableOverride | null;
   virtualFks: VirtualFk[]; // outgoing from this table
   updatedAtColumn: string | null;
+  // whether introspection found a real PK/unique constraint, BEFORE any
+  // pretend-PK override is overlaid onto table.primaryKey below — the
+  // overlay is indistinguishable from a real key by the time it's on
+  // `table`, so anything that needs to know "does this table actually have
+  // one" (e.g. the customize page deciding whether to offer the pretend-PK
+  // picker) must read this instead of `table.primaryKey.length > 0`.
+  hasRealKey: boolean;
 }
 
 export function buildTableMeta(
@@ -112,7 +122,9 @@ export function buildTableMeta(
   const columns: ColumnMeta[] = table.columns.map((col) => {
     const o = cOverrides.find((x) => x.column === col.name);
     const baseWidget = guessWidget(table, col);
-    const widget = (o?.widget as Widget) || baseWidget;
+    // custom options (no native enum/check constraint) activate the select
+    // widget on their own, without also requiring `widget` to be set.
+    const widget = (o?.widget as Widget) || (o?.options?.length ? "select" : baseWidget);
     const realFk = table.foreignKeys.find((fk) => fk.columns.length === 1 && fk.columns[0] === col.name);
     const vfk = vfks.find((v) => vfkDisplayColumn(v) === col.name);
     const ref = realFk
@@ -140,7 +152,8 @@ export function buildTableMeta(
       readonly: o?.readonly ?? guessReadonly(table, col),
       redacted: o?.redacted ?? guessRedacted(col),
       help: o?.help ?? col.comment,
-      options: selectOptions(table, col),
+      options: o?.options?.length ? o.options : selectOptions(table, col),
+      optionLabels: o?.optionLabels ?? null,
       ref,
       required: !col.nullable && col.default === null && !col.isGenerated,
     };
@@ -153,15 +166,26 @@ export function buildTableMeta(
     return (ao ?? a.col.ordinal) - (bo ?? b.col.ordinal);
   });
 
+  const hasRealKey = table.primaryKey.length > 0 || table.uniqueConstraints.length > 0;
+
+  // "pretend" PK for a table with no real PK/unique constraint (see
+  // TableOverride.primaryKey) — every effectiveKey(meta.table) call site
+  // (row click, bulk delete, pk object construction) picks this up for
+  // free. Ignored when the table already has a real key, so it can't
+  // conflict with pkWhere's strict server-side check for that case.
+  const effectiveTable =
+    tOverride?.primaryKey?.length && !hasRealKey ? { ...table, primaryKey: tOverride.primaryKey } : table;
+
   return {
     connection,
     connectionId: conn.connectionId,
     schema: hasSchema ? schema : undefined,
     resolvedSchema: schema,
-    table,
+    table: effectiveTable,
     label: tOverride?.label || humanize(tableName),
     isView: table.kind === "view",
     columns,
+    hasRealKey,
     displayColumn: tOverride?.displayColumn || guessDisplayColumn(table),
     tableOverride: tOverride,
     virtualFks: vfks,
@@ -227,8 +251,12 @@ const INTERVAL_SUFFIX: Record<string, string> = {
 export function formatCell(
   value: unknown,
   widget?: Widget,
+  optionLabels?: Record<string, string> | null,
 ): { text: string; muted: boolean; icon?: ReactNode } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
+  if (widget === "select" && optionLabels?.[String(value)]) {
+    return { text: optionLabels[String(value)], muted: false };
+  }
   if (typeof value === "boolean") {
     return {
       text: String(value),
@@ -240,7 +268,7 @@ export function formatCell(
   // comes back as a raw 0/1 number, not a real JS boolean — trust the widget
   // rather than the runtime type so it still renders as a check/x icon.
   if (widget === "toggle") {
-    const truthy = value === 1 || value === "1";
+    const truthy = toBoolean(value);
     return {
       text: String(truthy),
       muted: !truthy,

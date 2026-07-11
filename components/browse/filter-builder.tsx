@@ -8,6 +8,9 @@ import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TypedInput } from "@/components/ui/typed-input";
+import { NumberInput } from "@/components/ui/number-input";
+import { ToggleInput } from "@/components/ui/toggle-input";
 import { DataSelect } from "@/components/ui/data-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
@@ -73,13 +76,6 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
   jsonb: ["jsonbcontains", "null", "notnull"],
 };
 
-// real booleans, not "true"/"false" strings — the value is bound as-is to
-// the query (MySQL's tinyint(1) columns need a native boolean, not text).
-const BOOLEAN_OPTIONS = [
-  { value: true, label: "true" },
-  { value: false, label: "false" },
-];
-
 // friendlier labels for the date comparison ops
 function opLabel(kind: Kind, op: FilterOp): string {
   if (kind === "date") {
@@ -93,8 +89,24 @@ function opLabel(kind: Kind, op: FilterOp): string {
 
 // cond.value is a real boolean only for "boolean" kind, which never reaches
 // these text-shaped editors — narrows the type for them.
-function strValue(v: string | boolean | undefined): string {
+function strValue(v: string | boolean | number | undefined): string {
   return typeof v === "string" ? v : "";
+}
+
+// same narrowing, but for TypedInput's number-capable editors — unlike
+// strValue this must preserve a real number, or the display collapses to ""
+// on every render right after the user types a valid value (the input then
+// looks like it's rejecting keystrokes, since the DOM value keeps snapping
+// back to empty under them). Boolean values never reach these editors — the
+// "boolean" kind uses its own Select branch instead — so only undefined
+// needs collapsing.
+function editorValue(v: string | boolean | number | undefined): string | number {
+  return v === undefined ? "" : (v as string | number);
+}
+
+// narrows to NumberInput's stricter value type.
+function numValue(v: string | boolean | number | undefined): number | "" {
+  return typeof v === "number" ? v : "";
 }
 
 // ---------- chips (for "in" value lists) ----------
@@ -157,21 +169,40 @@ function ConditionRow({
     if (noValue) return null;
 
     if (cond.op === "between") {
-      const t = kind === "number" ? "number" : kind === "date" ? dateType : "text";
+      if (kind === "number") {
+        return (
+          <div className="flex items-center gap-1">
+            <NumberInput
+              className="w-28"
+              numeric={cm.col.numeric}
+              value={numValue(cond.value)}
+              onChange={(value) => onChange({ ...cond, value })}
+            />
+            <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
+            <NumberInput
+              className="w-28"
+              numeric={cm.col.numeric}
+              value={numValue(cond.value2)}
+              onChange={(value) => onChange({ ...cond, value2: value })}
+            />
+          </div>
+        );
+      }
+      const t = kind === "date" ? dateType : "text";
       return (
         <div className="flex items-center gap-1">
-          <Input
+          <TypedInput
             className="w-28"
             type={t}
-            value={strValue(cond.value)}
-            onChange={(e) => onChange({ ...cond, value: e.target.value })}
+            value={editorValue(cond.value)}
+            onChange={(value) => onChange({ ...cond, value })}
           />
           <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
-          <Input
+          <TypedInput
             className="w-28"
             type={t}
             value={cond.value2 ?? ""}
-            onChange={(e) => onChange({ ...cond, value2: e.target.value })}
+            onChange={(value) => onChange({ ...cond, value2: value })}
           />
         </div>
       );
@@ -197,7 +228,7 @@ function ConditionRow({
                     })
                   }
                 >
-                  {o}
+                  {cm.optionLabels?.[o] ?? o}
                 </button>
               );
             })}
@@ -274,12 +305,9 @@ function ConditionRow({
     // single-value editors
     if (kind === "boolean") {
       return (
-        <DataSelect
-          items={BOOLEAN_OPTIONS}
-          value={BOOLEAN_OPTIONS.find((o) => o.value === cond.value) ?? null}
-          onChange={(o) => onChange({ ...cond, value: o?.value ?? "" })}
-          getValue={(o) => o.value}
-          getLabel={(o) => o.label}
+        <ToggleInput
+          value={typeof cond.value === "boolean" ? cond.value : null}
+          onChange={(v) => onChange({ ...cond, value: v ?? "" })}
           clearable
           className="w-28"
         />
@@ -293,7 +321,7 @@ function ConditionRow({
           value={options.find((o) => o === cond.value) ?? null}
           onChange={(o) => onChange({ ...cond, value: o ?? "" })}
           getValue={(o) => o}
-          getLabel={(o) => o}
+          getLabel={(o) => cm.optionLabels?.[o] ?? o}
           clearable
           className="w-40"
         />
@@ -359,14 +387,25 @@ function ConditionRow({
         />
       );
     }
-    // text / number / date single value
+    if (kind === "number") {
+      return (
+        <NumberInput
+          className="flex-1 min-w-30"
+          numeric={cm.col.numeric}
+          placeholder="value"
+          value={numValue(cond.value)}
+          onChange={(value) => onChange({ ...cond, value })}
+        />
+      );
+    }
+    // text / date single value
     return (
-      <Input
+      <TypedInput
         className="flex-1 min-w-30"
-        type={kind === "number" ? "number" : kind === "date" ? dateType : "text"}
+        type={kind === "date" ? dateType : "text"}
         placeholder="value"
-        value={strValue(cond.value)}
-        onChange={(e) => onChange({ ...cond, value: e.target.value })}
+        value={editorValue(cond.value)}
+        onChange={(value) => onChange({ ...cond, value })}
       />
     );
   };

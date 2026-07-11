@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { effectiveKey } from "@/lib/introspect/heuristics";
+import { toBoolean } from "@/lib/data/widgets";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
@@ -12,14 +13,11 @@ import { RedactedValue } from "./redacted-value";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
+import { ToggleInput } from "@/components/ui/toggle-input";
 import { Textarea } from "@/components/ui/textarea";
 import { DataSelect } from "@/components/ui/data-select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-
-const TOGGLE_OPTIONS = [
-  { value: "true", label: "true" },
-  { value: "false", label: "false" },
-];
 
 interface Props {
   meta: TableMeta;
@@ -32,6 +30,11 @@ interface Props {
 
 function toInputValue(cm: ColumnMeta, v: unknown): string {
   if (v === null || v === undefined) return "";
+  // ToggleInput's value is matched against the literal strings "true"/
+  // "false" — trust the widget rather than `String(v)`, or a MySQL
+  // tinyint(1) column (raw 0/1) would leave an existing row's toggle
+  // unselected on edit.
+  if (cm.widget === "toggle") return toBoolean(v) ? "true" : "false";
   if (cm.widget === "json") return typeof v === "string" ? v : JSON.stringify(v, null, 2);
   // array editor state is held as a JSON string of the element list
   if (cm.widget === "array") return JSON.stringify(Array.isArray(v) ? v : []);
@@ -334,16 +337,15 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     value={v || null}
                     onChange={(o) => setVal(name, o ?? "")}
                     getValue={(o) => o}
-                    getLabel={(o) => o}
+                    getLabel={(o) => cm.optionLabels?.[o] ?? o}
                     clearable
                     clearLabel={cm.col.nullable ? "∅ null" : "— pick —"}
                     className="w-full"
                   />
                 ) : cm.widget === "toggle" ? (
-                  <DataSelect
-                    items={TOGGLE_OPTIONS}
-                    value={TOGGLE_OPTIONS.find((o) => o.value === v) ?? null}
-                    onChange={(o) => setVal(name, o?.value ?? "")}
+                  <ToggleInput
+                    value={v === "true" ? true : v === "false" ? false : null}
+                    onChange={(value) => setVal(name, value === null ? "" : String(value))}
                     clearable={cm.col.nullable}
                     clearLabel="∅ null"
                     className="w-full"
@@ -388,18 +390,22 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />
                     )}
                   </div>
+                ) : cm.widget === "number" && !cm.redacted ? (
+                  <NumberInput
+                    numeric={cm.col.numeric}
+                    value={v === "" ? "" : Number(v)}
+                    onChange={(value) => setVal(name, String(value))}
+                  />
                 ) : (
                   <Input
                     type={
                       cm.redacted
                         ? "password"
-                        : cm.widget === "number"
-                          ? "number"
-                          : cm.widget === "date"
-                            ? "date"
-                            : cm.widget === "datetime"
-                              ? "datetime-local"
-                              : "text"
+                        : cm.widget === "date"
+                          ? "date"
+                          : cm.widget === "datetime"
+                            ? "datetime-local"
+                            : "text"
                     }
                     value={v}
                     onChange={(e) => setVal(name, e.target.value)}

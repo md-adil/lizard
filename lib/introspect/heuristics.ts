@@ -4,7 +4,7 @@ import type { ColumnInfo, TableInfo } from "@/lib/types";
 import { Widget } from "../data/widgets";
 export type { Widget };
 
-const NUMERIC_UDTS = new Set(["int2", "int4", "int8", "float4", "float8", "numeric", "money", "oid"]);
+export const NUMERIC_UDTS = new Set(["int2", "int4", "int8", "float4", "float8", "numeric", "money", "oid"]);
 const RANGE_UDTS = new Set([
   "int4range",
   "int8range",

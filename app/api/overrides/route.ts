@@ -11,6 +11,7 @@ const tableOverrideSchema = z.object({
   hidden: z.boolean().default(false),
   displayColumn: z.string().nullable().default(null),
   label: z.string().nullable().default(null),
+  primaryKey: z.array(z.string()).nullable().default(null),
 });
 
 const columnOverrideSchema = z.object({
@@ -26,6 +27,8 @@ const columnOverrideSchema = z.object({
   redacted: z.boolean().default(false),
   sortOrder: z.number().nullable().default(null),
   help: z.string().nullable().default(null),
+  options: z.array(z.string()).nullable().default(null),
+  optionLabels: z.record(z.string(), z.string()).nullable().default(null),
 });
 
 export async function GET() {

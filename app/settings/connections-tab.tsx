@@ -199,6 +199,12 @@ export function ConnectionsTab() {
         </AlertDialogContent>
       </AlertDialog>
       <ConnectionForm
+        // ConnectionForm is always mounted (only its Dialog's `open` toggles
+        // visibility), so its useState(initial ? ... : BLANK) only runs once
+        // ever — without a key that changes per target, clicking "Edit" on a
+        // different connection (or after Create) reused the same instance
+        // and kept showing stale/blank form state instead of that row's data.
+        key={editing?.id ?? formMode}
         mode={formMode}
         initial={editing ?? undefined}
         onClose={() => {

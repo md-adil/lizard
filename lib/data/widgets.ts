@@ -46,6 +46,13 @@ export const widgets = [
 
 export type Widget = (typeof widgets)[number];
 
+// MySQL's tinyint(1) (normalized to the "toggle" widget) comes back from the
+// driver as a raw 0/1 number, not a real JS boolean — recognize the known
+// truthy representations rather than trusting the runtime type.
+export function toBoolean(value: unknown): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
 export const widgetIcons: Record<Widget, LucideIcon> = {
   auto: Type,
   text: Type,

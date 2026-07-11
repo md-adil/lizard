@@ -101,7 +101,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   const columnsRes = await pool.query(
     `SELECT c.table_schema, c.table_name, c.column_name, c.ordinal_position,
             c.is_nullable, c.column_default, c.data_type, c.udt_name,
-            c.character_maximum_length,
+            c.character_maximum_length, c.numeric_precision, c.numeric_scale,
             (c.is_generated = 'ALWAYS' OR c.identity_generation IS NOT NULL
              OR c.column_default LIKE 'nextval(%') AS is_generated,
             col_description(pc.oid, c.ordinal_position) AS comment,
@@ -169,6 +169,11 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
       comment: c.comment,
       enumValues: c.enum_values ?? null,
       maxLength: c.character_maximum_length,
+      // Postgres has no unsigned integer types.
+      numeric:
+        c.numeric_precision == null
+          ? null
+          : { precision: c.numeric_precision, scale: c.numeric_scale, unsigned: false },
     };
     table.columns.push(col);
   }

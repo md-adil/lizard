@@ -38,6 +38,12 @@ export interface TableOverride {
   hidden: boolean;
   displayColumn: string | null;
   label: string | null;
+  // "pretend" primary key for a table introspection found no PK/unique
+  // constraint on (e.g. a Laravel-style pivot table) — lets editing/delete
+  // work by giving the client (and the server's existing no-real-key
+  // fallback in pkWhere) columns to match a row on. Ignored when the table
+  // already has a real PK/unique constraint.
+  primaryKey: string[] | null;
 }
 
 export interface ColumnOverride {
@@ -52,4 +58,11 @@ export interface ColumnOverride {
   redacted: boolean;
   sortOrder: number | null;
   help: string | null;
+  // explicit allowed values for a column with no native enum/check
+  // constraint — setting this activates the "select" widget even without
+  // also setting `widget` explicitly.
+  options: string[] | null;
+  // raw value -> display label (e.g. "m" -> "Male"), for a column that's
+  // enum-like either natively or via `options` above.
+  optionLabels: Record<string, string> | null;
 }

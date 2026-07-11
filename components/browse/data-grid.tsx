@@ -159,7 +159,7 @@ export function DataGrid({
                 </>
               );
             }
-            const f = formatCell(v, cm.widget);
+            const f = formatCell(v, cm.widget, cm.optionLabels);
             return <span className={f.muted ? "text-muted-foreground" : undefined}>{f.icon ?? f.text}</span>;
           },
         }),
