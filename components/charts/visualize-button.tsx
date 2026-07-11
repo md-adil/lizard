@@ -11,7 +11,7 @@ import { ChartRenderer } from "./chart-renderer";
 import { SpecControls } from "./spec-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function VisualizeButton({ result, source }: { result: QueryResult; source: QueryRequest }) {
@@ -29,6 +29,10 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
     queryFn: async () => (await fetch("/api/dashboards")).json(),
     enabled: open,
   });
+  const dashboardOptions = useMemo(
+    () => [{ value: "new", label: "＋ New dashboard…" }, ...(dashboards?.map((d) => ({ value: d.id, label: d.name })) ?? [])],
+    [dashboards],
+  );
 
   const openModal = () => {
     const best = suggestions[0];
@@ -95,22 +99,12 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
                 <SpecControls spec={spec} result={result} onChange={setSpec} />
                 <div className="mt-5 pt-4 border-t">
                   <label className="label">Add to dashboard</label>
-                  <Select
-                    value={dashboardId || "new"}
-                    onValueChange={(v: string | null) => setDashboardId(v === "new" || !v ? "" : v)}
-                  >
-                    <SelectTrigger className="mb-2 w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="new">＋ New dashboard…</SelectItem>
-                      {dashboards?.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DataSelect
+                    items={dashboardOptions}
+                    value={dashboardOptions.find((o) => o.value === (dashboardId || "new")) ?? null}
+                    onChange={(o) => setDashboardId(!o || o.value === "new" ? "" : o.value)}
+                    className="mb-2 w-full"
+                  />
                   {!dashboardId && (
                     <Input
                       className="mb-2"

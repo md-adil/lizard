@@ -1,16 +1,25 @@
 "use client";
 
 // Phase 8.4 — which alternate views a table can offer, derived from its schema.
+import { Table, Kanban, GalleryHorizontal, Calendar, ListTree, type LucideIcon } from "lucide-react";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
 
 export type ViewType = "table" | "kanban" | "gallery" | "calendar" | "tree";
 
 export const VIEW_LABELS: Record<ViewType, string> = {
-  table: "▤ Table",
-  kanban: "▥ Kanban",
-  gallery: "▦ Gallery",
-  calendar: "▧ Calendar",
-  tree: "▤ Tree",
+  table: "Table",
+  kanban: "Kanban",
+  gallery: "Gallery",
+  calendar: "Calendar",
+  tree: "Tree",
+};
+
+export const VIEW_ICONS: Record<ViewType, LucideIcon> = {
+  table: Table,
+  kanban: Kanban,
+  gallery: GalleryHorizontal,
+  calendar: Calendar,
+  tree: ListTree,
 };
 
 // Columns worth grouping a kanban by: enum / check-IN / boolean / single FK.

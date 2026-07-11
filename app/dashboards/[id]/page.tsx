@@ -12,8 +12,13 @@ import { ResultGrid } from "@/components/ai/result-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+
+const SQL_TARGET_OPTIONS: { value: "single" | "federated"; label: string }[] = [
+  { value: "single", label: "single" },
+  { value: "federated", label: "federated" },
+];
 
 const REFRESH_OPTIONS = [
   { label: "off", value: null },
@@ -301,15 +306,13 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
         ) : (
           <div className="mb-4 space-y-2">
             <div className="flex gap-2 items-center flex-wrap">
-              <Select value={sqlTarget} onValueChange={(v) => setSqlTarget(v as "single" | "federated")}>
-                <SelectTrigger size="sm" className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="single">single</SelectItem>
-                  <SelectItem value="federated">federated</SelectItem>
-                </SelectContent>
-              </Select>
+              <DataSelect
+                items={SQL_TARGET_OPTIONS}
+                value={SQL_TARGET_OPTIONS.find((o) => o.value === sqlTarget) ?? null}
+                onChange={(o) => o && setSqlTarget(o.value)}
+                size="sm"
+                className="w-32"
+              />
               {connections.map((c) => (
                 <button
                   key={c}

@@ -31,7 +31,9 @@ export type FilterOp =
 export interface FilterCondition {
   column: string;
   op: FilterOp;
-  value?: string; // primary operand
+  // primary operand — boolean for real boolean columns (incl. MySQL's
+  // tinyint(1), normalized to the "bool" udtName), string otherwise.
+  value?: string | boolean;
   value2?: string; // upper bound for "between"
   values?: string[]; // operands for "in"
 }
@@ -100,27 +102,35 @@ export function buildFilterClause(
         parts.push(`(${col} IS NOT NULL AND ${dialect.castToText(col)} <> '')`);
         break;
       case "contains":
-        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}%`)));
+        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}%`)));
         break;
       case "ncontains":
-        parts.push(`(${col} IS NULL OR NOT ${dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}%`))})`);
+        parts.push(`(${col} IS NULL OR NOT ${dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}%`))})`);
         break;
       case "startswith":
-        parts.push(dialect.caseInsensitiveLike(col, push(`${escapeLike(f.value!, dialect.likeEscapeChar)}%`)));
+        parts.push(dialect.caseInsensitiveLike(col, push(`${escapeLike(f.value as string, dialect.likeEscapeChar)}%`)));
         break;
       case "endswith":
-        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value!, dialect.likeEscapeChar)}`)));
+        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}`)));
         break;
       // Cast the *parameter* to the column's type, never the column: wrapping
       // the column (`col::text = $1`) is not sargable, so the planner ignores
       // its index and scans the table. Casting a bound constant is free — the
       // planner folds it. Same shape as the gt/lt/between cases below.
+      //
+      // Boolean columns bind the value as-is instead of round-tripping
+      // through a text SQL cast: MySQL's tinyint(1) (normalized to the
+      // "bool" udtName) has no boolean CAST target, and the client already
+      // sends a real JS boolean for these columns, so each driver encodes
+      // it correctly on its own (mysql2 -> 1/0, pg -> native bool).
       case "eq":
-        parts.push(`${col} = ${dialect.cast(dialect.castToText(push(f.value!)), cast)}`);
+        parts.push(`${col} = ${cast === "bool" ? push(f.value) : dialect.cast(dialect.castToText(push(f.value as string)), cast)}`);
         break;
       case "neq":
         // rows where the column is null count as "not equal"
-        parts.push(`(${col} IS NULL OR ${col} <> ${dialect.cast(dialect.castToText(push(f.value!)), cast)})`);
+        parts.push(
+          `(${col} IS NULL OR ${col} <> ${cast === "bool" ? push(f.value) : dialect.cast(dialect.castToText(push(f.value as string)), cast)})`,
+        );
         break;
       case "gt":
       case "gte":

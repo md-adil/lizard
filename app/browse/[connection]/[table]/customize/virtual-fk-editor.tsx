@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ColumnsSelect } from "@/components/browse/columns-select";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useSchemaMeta,
@@ -272,54 +272,41 @@ export function VirtualFkEditor({
               <>
                 <div>
                   <label className="label">Target connection</label>
-                  <Select
-                    value={toConnection}
-                    onValueChange={(name: string | null) => {
-                      name = name ?? "";
+                  <DataSelect
+                    items={catalog.connections}
+                    value={catalog.connections.find((c) => c.connectionName === toConnection) ?? null}
+                    onChange={(picked) => {
+                      const name = picked?.connectionName ?? "";
                       setToConnection(name);
                       setToTable("");
                       // A connection without schemas has exactly one — pick it for
                       // the user, since there's no schema select to do it.
-                      const picked = catalog.connections.find((c) => c.connectionName === name);
                       const hasSchema = !!name && connectionSupportsSchemas(catalog, name);
                       setToSchema(!picked || hasSchema ? "" : (picked.schemas[0]?.name ?? ""));
                     }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="— select —" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {catalog.connections.map((c) => (
-                        <SelectItem key={c.connectionName} value={c.connectionName}>
-                          {c.connectionName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    getValue={(c) => c.connectionName}
+                    getLabel={(c) => c.connectionName}
+                    placeholder="— select —"
+                    className="w-full"
+                  />
                 </div>
                 {toConnHasSchema && (
                   <div>
                     <label className="label">Target schema</label>
-                    <Select
-                      value={toSchema}
+                    <DataSelect
+                      items={[
+                        { value: SAME_SCHEMA, label: "Same schema as row" },
+                        ...(toConn?.schemas.map((s) => ({ value: s.name, label: s.name })) ?? []),
+                      ]}
+                      value={toSchema ? { value: toSchema, label: toSchema } : null}
                       disabled={!toConn}
-                      onValueChange={(val: string | null) => {
-                        setToSchema(val ?? "");
+                      onChange={(o) => {
+                        setToSchema(o?.value ?? "");
                         setToTable("");
                       }}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="— select —" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={SAME_SCHEMA}>Same schema as row</SelectItem>
-                        {toConn?.schemas.map((s) => (
-                          <SelectItem key={s.name} value={s.name}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="— select —"
+                      className="w-full"
+                    />
                   </div>
                 )}
               </>

@@ -2,18 +2,24 @@
 
 // Right-side drawer with an auto-generated form for creating/editing a row.
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
+import { RefCombobox } from "./ref-combobox";
 import { RedactedValue } from "./redacted-value";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
+const TOGGLE_OPTIONS = [
+  { value: "true", label: "true" },
+  { value: "false", label: "false" },
+];
 
 interface Props {
   meta: TableMeta;
@@ -43,109 +49,19 @@ function toInputValue(cm: ColumnMeta, v: unknown): string {
 }
 
 function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string; onChange: (v: string) => void }) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
-  // remember the label for whatever value is currently set, so it reads as
-  // "label (id)" even when the dropdown is closed and the row was pre-loaded.
-  const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const ref = cm.ref!;
-
-  const refsUrl = (q: string) =>
-    dataApiUrl({
-      connection: ref.connection,
-      table: ref.table,
-      path: "refs",
-      schema: ref.schema,
-      params: { column: ref.column, q },
-    });
-
-  const { data: options } = useQuery<{ id: string; label: string }[]>({
-    queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
-    queryFn: async () => {
-      const res = await fetch(refsUrl(search));
-      if (!res.ok) throw new Error("refs failed");
-      return res.json();
-    },
-    enabled: open,
-  });
-
-  // resolve the label of the current value once (exact id lookup) for display
-  useQuery<{ id: string; label: string }[]>({
-    queryKey: ["ref-label", ref.connection, ref.schema, ref.table, ref.column, value],
-    queryFn: async () => {
-      const res = await fetch(refsUrl(value));
-      const body = await res.json();
-      if (res.ok) {
-        const hit = (body as { id: string; label: string }[]).find((o) => o.id === value);
-        if (hit) setPickedLabel(hit.label);
-      }
-      return body;
-    },
-    enabled: !!value && pickedLabel === null,
-  });
-
-  const selected = options?.find((o) => o.id === value);
-  const displayLabel = selected?.label ?? pickedLabel;
-
-  const pick = (id: string, label: string | null) => {
-    onChange(id);
-    setPickedLabel(label);
-    setOpen(false);
-  };
 
   return (
     <>
       <div className="flex gap-1.5">
-        <div className="relative flex-1">
-          <Input
-            placeholder={`Search ${ref.table}…`}
-            value={open ? search : displayLabel ? `${displayLabel} (${value})` : value}
-            onFocus={() => {
-              setOpen(true);
-              setSearch("");
-            }}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {open && (
-            <div
-              className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-md border scrollbar-thin"
-              style={{
-                background: "var(--muted)",
-                borderColor: "var(--input)",
-              }}
-            >
-              {cm.col.nullable && (
-                <Button
-                  variant="ghost"
-                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
-                  type="button"
-                  style={{ color: "var(--muted-foreground-faint)" }}
-                  onMouseDown={() => pick("", null)}
-                >
-                  ∅ null
-                </Button>
-              )}
-              {options?.map((o) => (
-                <Button
-                  variant="ghost"
-                  className="block w-full text-left px-3 py-1.5 text-[13px] hoverable"
-                  type="button"
-                  key={o.id}
-                  onMouseDown={() => pick(o.id, o.label)}
-                >
-                  {o.label} <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
-                </Button>
-              ))}
-              {options?.length === 0 && (
-                <div className="px-3 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                  No matches — try Browse
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <RefCombobox
+          target={ref}
+          value={value}
+          nullable={cm.col.nullable}
+          className="flex-1"
+          onSelect={(id) => onChange(id)}
+        />
         <Button
           variant="secondary"
           type="button"
@@ -159,7 +75,7 @@ function ReferenceInput({ cm, value, onChange }: { cm: ColumnMeta; value: string
         <ReferencePickerModal
           target={ref}
           title={cm.label}
-          onPick={(id, label) => pick(id, label)}
+          onPick={(id) => onChange(id)}
           onClose={() => setBrowsing(false)}
         />
       )}
@@ -413,30 +329,25 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                 ) : cm.widget === "reference" && cm.ref ? (
                   <ReferenceInput cm={cm} value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : cm.widget === "select" && cm.options ? (
-                  <Select value={v || "__null"} onValueChange={(sel) => setVal(name, sel === "__null" ? "" : (sel ?? ""))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__null">{cm.col.nullable ? "∅ null" : "— pick —"}</SelectItem>
-                      {cm.options.map((o) => (
-                        <SelectItem key={o} value={o}>
-                          {o}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DataSelect
+                    items={cm.options}
+                    value={v || null}
+                    onChange={(o) => setVal(name, o ?? "")}
+                    getValue={(o) => o}
+                    getLabel={(o) => o}
+                    clearable
+                    clearLabel={cm.col.nullable ? "∅ null" : "— pick —"}
+                    className="w-full"
+                  />
                 ) : cm.widget === "toggle" ? (
-                  <Select value={v || "__null"} onValueChange={(sel) => setVal(name, sel === "__null" ? "" : (sel ?? ""))}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cm.col.nullable && <SelectItem value="__null">∅ null</SelectItem>}
-                      <SelectItem value="true">true</SelectItem>
-                      <SelectItem value="false">false</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <DataSelect
+                    items={TOGGLE_OPTIONS}
+                    value={TOGGLE_OPTIONS.find((o) => o.value === v) ?? null}
+                    onChange={(o) => setVal(name, o?.value ?? "")}
+                    clearable={cm.col.nullable}
+                    clearLabel="∅ null"
+                    className="w-full"
+                  />
                 ) : cm.widget === "array" ? (
                   <ChipInput value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : cm.widget === "uuid" ? (

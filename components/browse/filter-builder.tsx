@@ -1,22 +1,15 @@
 "use client";
 
-// Advanced, type-aware filter builder for the table browser. A "Filter" button
-// opens a popover: each condition picks a column, gets operators appropriate to
-// that column's kind (text / number / date / boolean / enum / reference), and
-// an adaptive value editor (search-select for references, multi-select for
-// enums, chip lists for "in", two inputs for "between"). Conditions combine
-// with a Match-all / Match-any toggle. Emits only complete conditions.
-import { useState, useRef } from "react";
-import { createPortal } from "react-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/data/filters";
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
-import { dataApiUrl } from "./data-api";
+import { RefCombobox } from "./ref-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
@@ -80,6 +73,13 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
   jsonb: ["jsonbcontains", "null", "notnull"],
 };
 
+// real booleans, not "true"/"false" strings — the value is bound as-is to
+// the query (MySQL's tinyint(1) columns need a native boolean, not text).
+const BOOLEAN_OPTIONS = [
+  { value: true, label: "true" },
+  { value: false, label: "false" },
+];
+
 // friendlier labels for the date comparison ops
 function opLabel(kind: Kind, op: FilterOp): string {
   if (kind === "date") {
@@ -91,92 +91,10 @@ function opLabel(kind: Kind, op: FilterOp): string {
   return OP_LABEL[op];
 }
 
-// ---------- reference value search (id -> label) ----------
-
-function useRefSearch(cm: ColumnMeta, search: string, enabled: boolean) {
-  const ref = cm.ref!;
-  return useQuery<{ id: string; label: string }[]>({
-    queryKey: ["refs", ref.connection, ref.schema, ref.table, ref.column, search],
-    queryFn: async () => {
-      const res = await fetch(
-        dataApiUrl({
-          connection: ref.connection,
-          table: ref.table,
-          path: "refs",
-          schema: ref.schema,
-          params: { column: ref.column, q: search },
-        }),
-      );
-      if (!res.ok) throw new Error("refs failed");
-      return res.json();
-    },
-    enabled,
-  });
-}
-
-function RefSelect({ cm, onSelect }: { cm: ColumnMeta; onSelect: (id: string, label: string) => void }) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { data } = useRefSearch(cm, search, open);
-  return (
-    <div className="relative flex-1 min-w-35">
-      <Input
-        ref={inputRef}
-        placeholder={`Search ${cm.ref!.table}…`}
-        value={search}
-        onFocus={() => {
-          setRect(inputRef.current?.getBoundingClientRect() ?? null);
-          setOpen(true);
-        }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      {open &&
-        rect &&
-        createPortal(
-          <div
-            style={{
-              position: "fixed",
-              top: rect.bottom + 2,
-              left: rect.left,
-              width: rect.width,
-              maxHeight: 208,
-              overflow: "auto",
-              zIndex: 9999,
-              borderRadius: 6,
-              border: "1px solid var(--input)",
-              background: "var(--muted)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-            }}
-            className="scrollbar-thin"
-          >
-            {data?.map((o) => (
-              <Button
-                variant="ghost"
-                className="block w-full text-left px-3 py-1.5 text-[12.5px] hoverable"
-                key={o.id}
-                type="button"
-
-                onMouseDown={() => {
-                  onSelect(o.id, o.label);
-                  setSearch("");
-                }}
-              >
-                {o.label} <span style={{ color: "var(--muted-foreground-faint)" }}>({o.id})</span>
-              </Button>
-            ))}
-            {data?.length === 0 && (
-              <div className="px-3 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                No matches
-              </div>
-            )}
-          </div>,
-          document.body,
-        )}
-    </div>
-  );
+// cond.value is a real boolean only for "boolean" kind, which never reaches
+// these text-shaped editors — narrows the type for them.
+function strValue(v: string | boolean | undefined): string {
+  return typeof v === "string" ? v : "";
 }
 
 // ---------- chips (for "in" value lists) ----------
@@ -245,7 +163,7 @@ function ConditionRow({
           <Input
             className="w-28"
             type={t}
-            value={cond.value ?? ""}
+            value={strValue(cond.value)}
             onChange={(e) => onChange({ ...cond, value: e.target.value })}
           />
           <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
@@ -308,10 +226,11 @@ function ConditionRow({
               onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })}
             />
             <div className="flex items-center gap-1">
-              <RefSelect
-                cm={cm}
+              <RefCombobox
+                target={cm.ref!}
+                className="flex-1 min-w-35"
                 onSelect={(id, label) => {
-                  setRefLabels((m) => ({ ...m, [id]: label }));
+                  setRefLabels((m) => ({ ...m, [id]: label ?? id }));
                   if (!values.includes(id)) onChange({ ...cond, values: [...values, id] });
                 }}
               />
@@ -355,39 +274,29 @@ function ConditionRow({
     // single-value editors
     if (kind === "boolean") {
       return (
-        <Select
-          value={cond.value || "__none"}
-          onValueChange={(v) => onChange({ ...cond, value: v === "__none" ? "" : (v ?? "") })}
-        >
-          <SelectTrigger size="sm" className="w-28">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none">—</SelectItem>
-            <SelectItem value="true">true</SelectItem>
-            <SelectItem value="false">false</SelectItem>
-          </SelectContent>
-        </Select>
+        <DataSelect
+          items={BOOLEAN_OPTIONS}
+          value={BOOLEAN_OPTIONS.find((o) => o.value === cond.value) ?? null}
+          onChange={(o) => onChange({ ...cond, value: o?.value ?? "" })}
+          getValue={(o) => o.value}
+          getLabel={(o) => o.label}
+          clearable
+          className="w-28"
+        />
       );
     }
     if (kind === "enum" && cm.options) {
+      const options = cm.options;
       return (
-        <Select
-          value={cond.value || "__none"}
-          onValueChange={(v) => onChange({ ...cond, value: v === "__none" ? "" : (v ?? "") })}
-        >
-          <SelectTrigger size="sm" className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none">—</SelectItem>
-            {cm.options.map((o) => (
-              <SelectItem key={o} value={o}>
-                {o}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <DataSelect
+          items={options}
+          value={options.find((o) => o === cond.value) ?? null}
+          onChange={(o) => onChange({ ...cond, value: o ?? "" })}
+          getValue={(o) => o}
+          getLabel={(o) => o}
+          clearable
+          className="w-40"
+        />
       );
     }
     if (kind === "reference") {
@@ -407,7 +316,7 @@ function ConditionRow({
           )}
           {cond.value ? (
             <span className="tag" style={{ color: "var(--primary)" }}>
-              {refLabels[cond.value] ?? cond.value}
+              {refLabels[strValue(cond.value)] ?? cond.value}
               <Button
                 variant="ghost"
                 className="ml-1.5"
@@ -418,10 +327,11 @@ function ConditionRow({
               </Button>
             </span>
           ) : (
-            <RefSelect
-              cm={cm}
+            <RefCombobox
+              target={cm.ref!}
+              className="flex-1 min-w-35"
               onSelect={(id, label) => {
-                setRefLabels((m) => ({ ...m, [id]: label }));
+                setRefLabels((m) => ({ ...m, [id]: label ?? id }));
                 onChange({ ...cond, value: id });
               }}
             />
@@ -444,7 +354,7 @@ function ConditionRow({
         <Input
           className="flex-1 min-w-40 code"
           placeholder={'{"key":"value"}'}
-          value={cond.value ?? ""}
+          value={strValue(cond.value)}
           onChange={(e) => onChange({ ...cond, value: e.target.value })}
         />
       );
@@ -455,7 +365,7 @@ function ConditionRow({
         className="flex-1 min-w-30"
         type={kind === "number" ? "number" : kind === "date" ? dateType : "text"}
         placeholder="value"
-        value={cond.value ?? ""}
+        value={strValue(cond.value)}
         onChange={(e) => onChange({ ...cond, value: e.target.value })}
       />
     );
@@ -469,30 +379,23 @@ function ConditionRow({
         onChange={(col) => col && setCol(col.name)}
         className="w-40"
       />
-      <Select
+      <DataSelect
+        items={ops}
         value={cond.op}
-        onValueChange={(v) =>
-          v &&
+        onChange={(op) =>
+          op &&
           onChange({
             ...cond,
-            op: v as FilterOp,
+            op,
             value: "",
             value2: "",
             values: [],
           })
         }
-      >
-        <SelectTrigger size="sm" className="w-36">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ops.map((o) => (
-            <SelectItem key={o} value={o}>
-              {opLabel(kind, o)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        getValue={(o) => o}
+        getLabel={(o) => opLabel(kind, o)}
+        className="w-36"
+      />
       {valueEditor()}
       <Button
         variant="destructive"
@@ -575,7 +478,7 @@ export function FilterPanel({
 
   return (
     <div
-      className="panel p-4 mt-2"
+      className="bg-card p-4 mt-2"
       onKeyDown={(e) => {
         if (e.key === "Enter") emit(set);
       }}
@@ -584,18 +487,12 @@ export function FilterPanel({
         <span className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
           Match
         </span>
-        <div className="flex gap-0.5">
-          {(["and", "or"] as Combinator[]).map((c) => (
-            <button
-              key={c}
-              className="tag"
-              style={set.combinator === c ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-              onClick={() => setCombinator(c)}
-            >
-              {c === "and" ? "all" : "any"}
-            </button>
-          ))}
-        </div>
+        <Tabs value={set.combinator} onValueChange={(v) => setCombinator(v as Combinator)}>
+          <TabsList>
+            <TabsTrigger value="and">all</TabsTrigger>
+            <TabsTrigger value="or">any</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <span className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
           of the conditions
         </span>
@@ -607,7 +504,7 @@ export function FilterPanel({
         )}
       </div>
 
-      <div className="space-y-2 max-h-[50vh] overflow-y-auto scrollbar-thin pr-1">
+      <div className="space-y-2 max-h-[50vh] overflow-y-auto scrollbar-thin p-1 -m-1">
         {set.conditions.length === 0 && (
           <p className="text-[13px] py-2" style={{ color: "var(--muted-foreground-faint)" }}>
             No conditions yet. Add one below.

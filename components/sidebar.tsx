@@ -11,7 +11,7 @@ import { useAuth } from "@/components/auth-context";
 import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -353,19 +353,19 @@ export function Sidebar() {
               No connections yet
             </p>
           ) : (
-            <Select value={selected} onValueChange={(v) => v && setSelected(v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {connections.map((c) => (
-                  <SelectItem key={c.connectionName} value={c.connectionName}>
-                    {c.connectionName}
-                    {c.error ? " ⚠" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DataSelect
+              items={connections}
+              value={connections.find((c) => c.connectionName === selected) ?? null}
+              onChange={(c) => c && setSelected(c.connectionName)}
+              getValue={(c) => c.connectionName}
+              getLabel={(c) => (
+                <>
+                  {c.connectionName}
+                  {c.error ? " ⚠" : ""}
+                </>
+              )}
+              className="w-full"
+            />
           )}
           {conn?.error && (
             <p className="text-[11.5px] mt-1 px-2" style={{ color: "var(--destructive)" }} title={conn.error}>

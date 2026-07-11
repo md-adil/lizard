@@ -10,7 +10,7 @@ import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 
 export interface ConnectionRow {
@@ -264,19 +264,19 @@ export function ConnectionForm({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Engine</label>
-            <Select value={form.engine} onValueChange={(v) => setEngine(v as DbEngine)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DB_ENGINES.map((e) => (
-                  <SelectItem key={e} value={e}>
-                    <EngineIcon engine={e} className="size-4" />
-                    {ENGINE_LABELS[e]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DataSelect
+              items={DB_ENGINES}
+              value={form.engine}
+              onChange={(e) => e && setEngine(e)}
+              getValue={(e) => e}
+              getLabel={(e) => (
+                <>
+                  <EngineIcon engine={e} className="size-4" />
+                  {ENGINE_LABELS[e]}
+                </>
+              )}
+              className="w-full"
+            />
           </div>
           <div>
             <label className="label">Name (identifier, e.g. users_service)</label>

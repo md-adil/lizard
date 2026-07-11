@@ -6,10 +6,22 @@ import { useAuth } from "@/components/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 
 type Role = "admin" | "editor" | "viewer";
 type Access = "read" | "write";
+
+const ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: "admin", label: "admin" },
+  { value: "editor", label: "editor" },
+  { value: "viewer", label: "viewer" },
+];
+
+const ACCESS_OPTIONS: { value: Access | "none"; label: string }[] = [
+  { value: "none", label: "no access" },
+  { value: "read", label: "read" },
+  { value: "write", label: "read + write" },
+];
 
 interface Grant {
   connectionId: string;
@@ -84,19 +96,15 @@ function GrantsEditor({
             <span className="flex-1 truncate" style={{ color: "var(--muted-foreground)" }}>
               {c.name}
             </span>
-            <Select
-              value={g?.access ?? "none"}
-              onValueChange={(v) => setGrant(c.id, v === "none" ? null : (v as Access))}
-            >
-              <SelectTrigger size="sm" className="w-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">no access</SelectItem>
-                <SelectItem value="read">read</SelectItem>
-                <SelectItem value="write">read + write</SelectItem>
-              </SelectContent>
-            </Select>
+            <DataSelect
+              items={ACCESS_OPTIONS}
+              value={ACCESS_OPTIONS.find((o) => o.value === (g?.access ?? "none")) ?? null}
+              onChange={(o) => o && setGrant(c.id, o.value === "none" ? null : o.value)}
+              getValue={(o) => o.value}
+              getLabel={(o) => o.label}
+              size="sm"
+              className="w-auto"
+            />
           </div>
         );
       })}
@@ -178,20 +186,14 @@ function UserCard({
 
         <div className="flex items-center gap-1.5 shrink-0">
           {/* role selector */}
-          <Select
-            value={user.role}
+          <DataSelect
+            items={ROLE_OPTIONS}
+            value={ROLE_OPTIONS.find((o) => o.value === user.role) ?? null}
             disabled={patch.isPending}
-            onValueChange={(v) => patch.mutate({ role: v as Role })}
-          >
-            <SelectTrigger size="sm" className="w-auto">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="admin">admin</SelectItem>
-              <SelectItem value="editor">editor</SelectItem>
-              <SelectItem value="viewer">viewer</SelectItem>
-            </SelectContent>
-          </Select>
+            onChange={(o) => o && patch.mutate({ role: o.value })}
+            size="sm"
+            className="w-auto"
+          />
 
           {/* toggle disabled */}
           {!isSelf && (
@@ -339,16 +341,12 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         </div>
         <div>
           <label className="label">Role</label>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="admin">admin</SelectItem>
-              <SelectItem value="editor">editor</SelectItem>
-              <SelectItem value="viewer">viewer</SelectItem>
-            </SelectContent>
-          </Select>
+          <DataSelect
+            items={ROLE_OPTIONS}
+            value={ROLE_OPTIONS.find((o) => o.value === role) ?? null}
+            onChange={(o) => o && setRole(o.value)}
+            className="w-full"
+          />
         </div>
       </div>
       {error && (

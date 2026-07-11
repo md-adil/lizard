@@ -350,6 +350,52 @@ export function setUserColumnPref(
     .run(userId, connectionId, schema, table, column, hidden ? 1 : 0);
 }
 
+// ---------- per-user, per-table generic preferences ----------
+
+// One JSON blob per (user, connection, schema, table) — e.g. { viewType,
+// groupBy, ... }. Prefer this over a new table+column for every future
+// preference; only reach for a dedicated table when a preference needs its
+// own indexing/query shape (like user_column_prefs, keyed per-column).
+export function getUserTablePrefs(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+): Record<string, unknown> {
+  const row = getDb()
+    .prepare(
+      `SELECT prefs FROM user_table_prefs
+       WHERE user_id=? AND connection_id=? AND schema_name=? AND table_name=?`,
+    )
+    .get(userId, connectionId, schema, table) as { prefs: string } | undefined;
+  if (!row) return {};
+  try {
+    return JSON.parse(row.prefs);
+  } catch {
+    return {};
+  }
+}
+
+export function setUserTablePref(
+  userId: string,
+  connectionId: string,
+  schema: string,
+  table: string,
+  key: string,
+  value: unknown,
+): void {
+  const current = getUserTablePrefs(userId, connectionId, schema, table);
+  current[key] = value;
+  getDb()
+    .prepare(
+      `INSERT INTO user_table_prefs (user_id, connection_id, schema_name, table_name, prefs)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, connection_id, schema_name, table_name)
+       DO UPDATE SET prefs=excluded.prefs`,
+    )
+    .run(userId, connectionId, schema, table, JSON.stringify(current));
+}
+
 // ---------- record comments (Phase 8.9) ----------
 
 // Canonical, order-independent string for a PK object so the same row always

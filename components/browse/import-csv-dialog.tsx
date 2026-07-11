@@ -9,7 +9,7 @@ import type { TableMeta } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { DataSelect } from "@/components/ui/data-select";
 
 const SKIP = "__skip__";
 
@@ -33,6 +33,10 @@ export function ImportCsvDialog({
   const [error, setError] = useState<string | null>(null);
 
   const columns = meta.columns.filter((c) => !c.readonly);
+  const columnOptions = [
+    { value: SKIP, label: "— skip —" },
+    ...columns.map((c) => ({ value: c.col.name, label: c.label })),
+  ];
 
   function onFile(file: File) {
     setError(null);
@@ -121,22 +125,12 @@ export function ImportCsvDialog({
                     {h}
                   </span>
                   <span style={{ color: "var(--muted-foreground-faint)" }}>→</span>
-                  <Select
-                    value={mapping[h] ?? SKIP}
-                    onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v as string }))}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={SKIP}>— skip —</SelectItem>
-                      {columns.map((c) => (
-                        <SelectItem key={c.col.name} value={c.col.name}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DataSelect
+                    items={columnOptions}
+                    value={columnOptions.find((o) => o.value === (mapping[h] ?? SKIP)) ?? null}
+                    onChange={(o) => setMapping((m) => ({ ...m, [h]: o?.value ?? SKIP }))}
+                    className="flex-1"
+                  />
                 </div>
               ))}
             </div>

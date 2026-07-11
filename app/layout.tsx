@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import NextTopLoader from "nextjs-toploader";
+
 import "./globals.css";
 import { Providers } from "./providers";
 import { AppShell } from "@/components/app-shell";
@@ -16,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
       <body className="antialiased">
+        <NextTopLoader color="var(--color-primary)" />
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

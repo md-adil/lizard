@@ -6,9 +6,9 @@
 // width on every th/td (driven by TanStack column sizing held in React
 // state) keeps header/body aligned and drives live column-resize. Sorting
 // stays server-side: header clicks call back to the parent to refetch.
-import { useEffect, useMemo, useRef, useState } from "react";
-import LoadingBar, { type LoadingBarRef } from "react-top-loading-bar";
+import { useEffect, useMemo, useState } from "react";
 import type { FkLabels } from "@/lib/types";
+import { RefetchBar } from "./refetch-bar";
 import { fkLabelFor } from "@/lib/data/fk-labels";
 import {
   useReactTable,
@@ -190,13 +190,6 @@ export function DataGrid({
   const leafColumns = table.getVisibleLeafColumns();
   const totalWidth = table.getTotalSize();
 
-  const showRefetchOverlay = isFetching && !isLoading;
-  const loadingBarRef = useRef<LoadingBarRef>(null);
-  useEffect(() => {
-    if (showRefetchOverlay) loadingBarRef.current?.continuousStart();
-    else loadingBarRef.current?.complete();
-  }, [showRefetchOverlay]);
-
   return (
     <div>
       <div className="flex justify-end mb-2">
@@ -231,13 +224,7 @@ export function DataGrid({
       </div>
 
       <div className="relative">
-        <LoadingBar
-          ref={loadingBarRef}
-          color="var(--primary)"
-          height={2}
-          shadow={false}
-          containerStyle={{ position: "absolute", top: 0, left: 0, width: "100%", zIndex: 10 }}
-        />
+        <RefetchBar isFetching={!!isFetching} isLoading={!!isLoading} />
         <div className="overflow-auto rounded-md border bg-card" style={{ maxHeight }}>
           <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
             <TableHeader>

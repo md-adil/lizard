@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
@@ -17,11 +17,15 @@ import {
 import { RowEditor } from "@/components/browse/row-editor";
 import { DataGrid } from "@/components/browse/data-grid";
 import { useColumnVisibility } from "@/components/browse/use-column-visibility";
+import { useTablePrefs } from "@/components/browse/use-table-prefs";
+import { useGridState } from "@/components/browse/use-grid-state";
+import { RefetchBar } from "@/components/browse/refetch-bar";
 import { SavedViewsBar } from "@/components/browse/saved-views-bar";
 import { TableSearchBar } from "@/components/browse/table-search-bar";
 import {
   availableViews,
   VIEW_LABELS,
+  VIEW_ICONS,
   kanbanGroupColumns,
   dateColumns,
   selfRefColumn,
@@ -35,7 +39,8 @@ import { dataApiUrl } from "@/components/browse/data-api";
 import type { FkLabels, SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { DataSelect } from "@/components/ui/data-select";
 import { Loader2 } from "lucide-react";
 import { useInterval } from "@/hooks/use-interval";
 import { Card } from "@/components/ui/card";
@@ -46,6 +51,14 @@ interface ListResponse {
   total: number | null;
   fkLabels: FkLabels;
 }
+
+const REFRESH_MS_OPTIONS = [
+  { value: 0, label: "Refresh: off" },
+  { value: 5000, label: "Refresh: 5s" },
+  { value: 10000, label: "Refresh: 10s" },
+  { value: 30000, label: "Refresh: 30s" },
+  { value: 60000, label: "Refresh: 1m" },
+];
 
 const EMPTY_ROWS: Record<string, unknown>[] = [];
 const EMPTY_FK_LABELS: FkLabels = {};
@@ -64,15 +77,10 @@ export default function TablePage() {
     error: catalogError,
   } = useTableMeta(params.connection, schema, params.table);
 
-  const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<string | undefined>();
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [filterSet, setFilterSet] = useState<FilterSet>({
-    combinator: "and",
-    conditions: [],
-  });
+  const gridKey = `${params.connection}|${schema ?? ""}|${params.table}`;
+  const { page, sort, sortDir, filterSet, search, setPage, setSort, setSortDir, setFilterSet, setSearch } =
+    useGridState(gridKey);
   const [editing, setEditing] = useState<Record<string, unknown> | null | "new">();
-  const [search, setSearch] = useState("");
   const [viewType, setViewType] = useState<ViewType>("table");
   const [groupBy, setGroupBy] = useState<string | undefined>();
   const [dateField, setDateField] = useState<string | undefined>();
@@ -83,6 +91,34 @@ export default function TablePage() {
     meta?.resolvedSchema,
     params.table,
   );
+  const [tablePrefs, setTablePref, tablePrefsLoaded] = useTablePrefs(
+    meta?.connectionId,
+    meta?.resolvedSchema,
+    params.table,
+  );
+  // apply the persisted view type / group-by / date-field once, after they
+  // load — a ref (not state) so this never re-fires and clobbers a manual
+  // change made afterward. Gated on tablePrefsLoaded, not just `meta`: the
+  // prefs fetch is async, so checking only `meta` would fire (and
+  // permanently mark itself done) on the render before the real values ever
+  // arrive.
+  const appliedSavedPrefs = useRef(false);
+  useEffect(() => {
+    if (appliedSavedPrefs.current || !meta || !tablePrefsLoaded) return;
+    const savedViewType = tablePrefs.viewType;
+    if (typeof savedViewType === "string" && availableViews(meta).includes(savedViewType as ViewType)) {
+      setViewType(savedViewType as ViewType);
+    }
+    const savedGroupBy = tablePrefs.groupBy;
+    if (typeof savedGroupBy === "string" && kanbanGroupColumns(meta).some((c) => c.col.name === savedGroupBy)) {
+      setGroupBy(savedGroupBy);
+    }
+    const savedDateField = tablePrefs.dateField;
+    if (typeof savedDateField === "string" && dateColumns(meta).some((c) => c.col.name === savedDateField)) {
+      setDateField(savedDateField);
+    }
+    appliedSavedPrefs.current = true;
+  }, [meta, tablePrefsLoaded, tablePrefs.viewType, tablePrefs.groupBy, tablePrefs.dateField]);
   const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>([]);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const clearSelection = () => {
@@ -293,14 +329,16 @@ export default function TablePage() {
             currentConfig={viewConfig}
             onApply={applyView}
           />
-          <Button variant="secondary" nativeButton={false} render={<a href={exportHref} download />}>
-            ⬇ Export CSV
-          </Button>
-          {!meta.isView && (
-            <Button variant="secondary" onClick={() => setImporting(true)}>
-              ⬆ Import CSV
+          <ButtonGroup>
+            <Button variant="secondary" nativeButton={false} render={<a href={exportHref} download />}>
+              ⬇ Export CSV
             </Button>
-          )}
+            {!meta.isView && (
+              <Button variant="secondary" onClick={() => setImporting(true)}>
+                ⬆ Import CSV
+              </Button>
+            )}
+          </ButtonGroup>
           <Button
             variant="secondary"
             nativeButton={false}
@@ -343,58 +381,65 @@ export default function TablePage() {
         pagination; alternate views render the currently-loaded page). */}
       <div className="flex items-center gap-3 mb-3">
         {views.length > 1 && (
-          <Tabs value={viewType} onValueChange={(v) => setViewType(v as ViewType)}>
-            <TabsList variant="line">
-              {views.map((v) => (
-                <TabsTrigger key={v} value={v}>
-                  {VIEW_LABELS[v]}
-                </TabsTrigger>
-              ))}
+          <Tabs
+            value={viewType}
+            onValueChange={(v) => {
+              setViewType(v as ViewType);
+              setTablePref("viewType", v);
+            }}
+          >
+            <TabsList>
+              {views.map((v) => {
+                const Icon = VIEW_ICONS[v];
+                return (
+                  <TabsTrigger key={v} value={v} className="gap-1.5">
+                    <Icon className="size-3.5" />
+                    {VIEW_LABELS[v]}
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           </Tabs>
         )}
         {viewType === "kanban" && groupCols.length > 1 && (
-          <Select value={activeGroupBy} onValueChange={(v) => v && setGroupBy(v)}>
-            <SelectTrigger size="sm" className="w-auto">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {groupCols.map((c) => (
-                <SelectItem key={c.col.name} value={c.col.name}>
-                  Group by {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataSelect
+            items={groupCols}
+            value={groupCols.find((c) => c.col.name === activeGroupBy) ?? null}
+            onChange={(c) => {
+              if (!c) return;
+              setGroupBy(c.col.name);
+              setTablePref("groupBy", c.col.name);
+            }}
+            getValue={(c) => c.col.name}
+            getLabel={(c) => `Group by ${c.label}`}
+            size="sm"
+            className="w-auto"
+          />
         )}
         {viewType === "calendar" && dateCols.length > 1 && (
-          <Select value={activeDateField} onValueChange={(v) => v && setDateField(v)}>
-            <SelectTrigger size="sm" className="w-auto">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {dateCols.map((c) => (
-                <SelectItem key={c.col.name} value={c.col.name}>
-                  By {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataSelect
+            items={dateCols}
+            value={dateCols.find((c) => c.col.name === activeDateField) ?? null}
+            onChange={(c) => {
+              if (!c) return;
+              setDateField(c.col.name);
+              setTablePref("dateField", c.col.name);
+            }}
+            getValue={(c) => c.col.name}
+            getLabel={(c) => `By ${c.label}`}
+            size="sm"
+            className="w-auto"
+          />
         )}
         <span className="flex-1" />
         {/* Phase 8.8 — auto-refresh, default off */}
-        <Select value={String(refreshMs)} onValueChange={(v) => v && setRefreshMs(Number(v))}>
-          <SelectTrigger size="sm" className="w-auto" title="Auto-refresh">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="0">Refresh: off</SelectItem>
-            <SelectItem value="5000">Refresh: 5s</SelectItem>
-            <SelectItem value="10000">Refresh: 10s</SelectItem>
-            <SelectItem value="30000">Refresh: 30s</SelectItem>
-            <SelectItem value="60000">Refresh: 1m</SelectItem>
-          </SelectContent>
-        </Select>
+        <DataSelect
+          items={REFRESH_MS_OPTIONS}
+          value={REFRESH_MS_OPTIONS.find((o) => o.value === refreshMs) ?? null}
+          onChange={(o) => o && setRefreshMs(o.value)}
+          size="sm"
+          className="w-auto"
+        />
         {isFetching && refreshMs > 0 && (
           <Loader2 className="size-3.5 animate-spin" style={{ color: "var(--primary)" }} />
         )}
@@ -434,22 +479,29 @@ export default function TablePage() {
           clearSelectionSignal={clearSelectionSignal}
         />
       )}
-      {viewType === "gallery" && <GalleryView meta={meta} rows={data?.rows ?? EMPTY_ROWS} onOpen={openRow} />}
-      {viewType === "kanban" && activeGroupBy && (
-        <KanbanView
-          meta={meta}
-          rows={data?.rows ?? EMPTY_ROWS}
-          fkLabels={data?.fkLabels ?? EMPTY_FK_LABELS}
-          groupBy={activeGroupBy}
-          onOpen={openRow}
-          onChanged={() => refetch()}
-        />
-      )}
-      {viewType === "calendar" && activeDateField && (
-        <CalendarView meta={meta} rows={data?.rows ?? EMPTY_ROWS} dateField={activeDateField} onOpen={openRow} />
-      )}
-      {viewType === "tree" && parentField && (
-        <TreeView meta={meta} rows={data?.rows ?? EMPTY_ROWS} parentField={parentField} onOpen={openRow} />
+      {viewType !== "table" && (
+        <div className="relative">
+          {/* DataGrid carries its own refetch bar; the other views share
+            this one so a refetch is visible no matter which is active. */}
+          <RefetchBar isFetching={isFetching} isLoading={isLoading} />
+          {viewType === "gallery" && <GalleryView meta={meta} rows={data?.rows ?? EMPTY_ROWS} onOpen={openRow} />}
+          {viewType === "kanban" && activeGroupBy && (
+            <KanbanView
+              meta={meta}
+              rows={data?.rows ?? EMPTY_ROWS}
+              fkLabels={data?.fkLabels ?? EMPTY_FK_LABELS}
+              groupBy={activeGroupBy}
+              onOpen={openRow}
+              onChanged={() => refetch()}
+            />
+          )}
+          {viewType === "calendar" && activeDateField && (
+            <CalendarView meta={meta} rows={data?.rows ?? EMPTY_ROWS} dateField={activeDateField} onOpen={openRow} />
+          )}
+          {viewType === "tree" && parentField && (
+            <TreeView meta={meta} rows={data?.rows ?? EMPTY_ROWS} parentField={parentField} onOpen={openRow} />
+          )}
+        </div>
       )}
       {!isLoading && data?.rows.length === 0 && (
         <p className="px-1 py-6 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
