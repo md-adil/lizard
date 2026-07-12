@@ -24,6 +24,16 @@ export interface MatchTarget {
   columns: MatchColumn[];
 }
 
+// Whether `term`, as typed, is a value the database can actually cast into a
+// column of this type — e.g. `CAST('amil' AS int4)` isn't "no match", it's a
+// runtime SQL error, so an incompatible pairing must never reach "exact"
+// mode (see buildMatchClause's cast-the-parameter comparison).
+function isCastCompatible(udtName: string, term: string): boolean {
+  if (NUMERIC_UDTS.has(udtName)) return INT_RE.test(term);
+  if (udtName === "uuid") return UUID_RE.test(term);
+  return true; // text-like types accept any string as a candidate value
+}
+
 // Which columns of `table` are worth searching for a term of this shape, and
 // how each is compared. Two independent things decide the mode:
 //  - a UUID/int-shaped term almost certainly names one specific row by its
@@ -32,10 +42,14 @@ export interface MatchTarget {
 //    not even a range scan) than a LIKE. Everything else defaults to a
 //    word-start LIKE (see buildMatchClause).
 //  - a primary key column — real, or the "pretend"/custom PK override
-//    (`pkColumnNames`) — is *always* compared exactly, regardless of the
-//    term's shape or the key's own type: an id is a whole-value identifier,
-//    never a "starts with" target, whether it's numeric, a uuid, or a
-//    text-based custom key like an order number.
+//    (`pkColumnNames`) — is compared exactly whenever the term is valid for
+//    its type: an id is a whole-value identifier, never a "starts with"
+//    target, whether it's numeric, a uuid, or a text-based custom key like
+//    an order number. A numeric/uuid PK paired with an incompatible term
+//    (e.g. "amil" against an int4 id) falls back to the shape's own default
+//    mode instead — columns reached via the UUID_RE/INT_RE branches below
+//    are always compatible by construction, so this only ever matters for a
+//    PK reached through the word-start/general branch.
 // Empty columns means "skip this table/search" — no query is issued for it.
 export function matchTargetFor(table: TableInfo, term: string, pkColumnNames: string[]): MatchTarget {
   const indexed = new Set(table.indexedColumns);
@@ -59,7 +73,10 @@ export function matchTargetFor(table: TableInfo, term: string, pkColumnNames: st
     defaultMode = "wordstart";
   }
 
-  const columns = shapeColumns.map((c) => ({ col: c, mode: pk.has(c.name) ? ("exact" as const) : defaultMode }));
+  const columns = shapeColumns.map((c) => {
+    const exact = defaultMode === "exact" || (pk.has(c.name) && isCastCompatible(c.udtName, term));
+    return { col: c, mode: exact ? ("exact" as const) : ("wordstart" as const) };
+  });
   return { columns };
 }
 
