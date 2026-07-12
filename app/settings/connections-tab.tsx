@@ -157,6 +157,19 @@ export function ConnectionsTab() {
                 >
                   Edit
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setEditing({
+                      ...c,
+                      name: `${c.name}-copy`,
+                    });
+                    setFormMode("create");
+                  }}
+                >
+                  Duplicate
+                </Button>
                 <Button variant="destructive" size="sm" onClick={() => setRemoving(c)}>
                   Remove
                 </Button>

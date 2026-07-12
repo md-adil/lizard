@@ -8,6 +8,8 @@ import type { ConnectionConfig, QueryResult } from "@/lib/types";
 import { connectionUri } from "@/lib/db/pools";
 import { MAX_ROWS } from "@/lib/guard/guard";
 
+import { quoteIdentifier, quoteLiteral } from "@/lib/utils";
+
 const FEDERATED_TIMEOUT_MS = 20_000;
 
 export async function runFederated(
@@ -24,7 +26,7 @@ export async function runFederated(
     for (const conn of connections) {
       const type = conn.engine === "mysql" ? "mysql" : "postgres";
       await db.run(
-        `ATTACH '${connectionUri(conn, "read").replace(/'/g, "''")}' AS ${conn.name} (TYPE ${type}, READ_ONLY)`,
+        `ATTACH ${quoteLiteral(connectionUri(conn, "read"))} AS ${quoteIdentifier(conn.name)} (TYPE ${type}, READ_ONLY)`,
       );
     }
     // lock the sandbox: no filesystem, no further configuration changes

@@ -5,9 +5,12 @@ import { parseConnectionUri } from "@/lib/parse-uri";
 import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { requireAdmin } from "@/lib/auth/session";
 
-// Probe connectivity without saving. Accepts either explicit fields or a `uri`.
+import { getConnection } from "@/lib/metadata/store";
+
 const schema = z.object({
   uri: z.string().optional(),
+  cloneFrom: z.string().optional(),
+  connectionId: z.string().optional(),
   engine: z.enum(DB_ENGINES as [DbEngine, ...DbEngine[]]).optional(),
   host: z.string().optional(),
   port: z.coerce.number().optional(),
@@ -29,7 +32,25 @@ export async function POST(req: Request) {
     let database = b.database;
     let readUser = b.readUser;
     let readPassword = b.readPassword ?? "";
+    let writeUser = b.writeUser;
+    let writePassword = b.writePassword ?? "";
     let ssl = b.ssl ?? false;
+
+    const connId = b.connectionId || b.cloneFrom;
+    if (connId) {
+      const source = getConnection(connId);
+      if (source) {
+        engine = b.engine ?? source.engine;
+        host = b.host ?? source.host;
+        port = b.port ?? source.port;
+        database = b.database ?? source.database;
+        readUser = b.readUser ?? source.readUser;
+        readPassword = b.readPassword || source.readPassword;
+        writeUser = b.writeUser !== undefined ? b.writeUser : source.writeUser;
+        writePassword = b.writePassword || source.writePassword || "";
+        ssl = b.ssl ?? source.ssl;
+      }
+    }
 
     if (b.uri) {
       const p = parseConnectionUri(b.uri);
@@ -49,14 +70,14 @@ export async function POST(req: Request) {
 
     const read = await probeCredentials({ engine, host, port, database, user: readUser, password: readPassword, ssl });
     let write: string | null = null;
-    if (b.writeUser) {
+    if (writeUser) {
       write = await probeCredentials({
         engine,
         host,
         port,
         database,
-        user: b.writeUser,
-        password: b.writePassword ?? "",
+        user: writeUser,
+        password: writePassword,
         ssl,
       });
     }

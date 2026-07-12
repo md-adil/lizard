@@ -253,3 +253,63 @@ export async function testConnection(conn: ConnectionConfig): Promise<{ read: st
   }
   return { read, write };
 }
+
+export async function discoverDatabases(cfg: {
+  engine: DbEngine;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password?: string;
+  ssl: boolean;
+}): Promise<string[]> {
+  if (cfg.engine === "mysql") {
+    const mysql = await import("mysql2/promise");
+    let conn: any = null;
+    try {
+      conn = await mysql.createConnection({
+        host: cfg.host,
+        port: cfg.port,
+        database: cfg.database || undefined,
+        user: cfg.user,
+        password: cfg.password || "",
+        ssl: cfg.ssl ? { rejectUnauthorized: false } : undefined,
+        connectTimeout: 7_000,
+      });
+      const [rows] = await conn.query(
+        "SELECT schema_name AS name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY 1"
+      );
+      return (rows as { name: string }[]).map((r) => r.name);
+    } catch {
+      return [];
+    } finally {
+      if (conn) await conn.end().catch(() => {});
+    }
+  }
+
+  if (cfg.engine === "postgres") {
+    const pool = new Pool({
+      host: cfg.host,
+      port: cfg.port,
+      database: cfg.database,
+      user: cfg.user,
+      password: cfg.password || "",
+      ssl: cfg.ssl ? { rejectUnauthorized: false } : undefined,
+      max: 1,
+      connectionTimeoutMillis: 7_000,
+      options: "-c statement_timeout=7000",
+    });
+    try {
+      const res = await pool.query(
+        "SELECT datname AS name FROM pg_database WHERE datallowconn = true AND NOT datistemplate ORDER BY 1"
+      );
+      return res.rows.map((r: any) => String(r.name));
+    } catch {
+      return [];
+    } finally {
+      await pool.end().catch(() => {});
+    }
+  }
+
+  return [];
+}

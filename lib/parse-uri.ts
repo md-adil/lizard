@@ -35,9 +35,15 @@ export function parseConnectionUri(raw: string): ParsedUri | null {
   if (!engine) return null;
   const database = decodeURIComponent(u.pathname.replace(/^\//, ""));
   const sslmode = u.searchParams.get("sslmode");
-  // mongodb+srv implies TLS; otherwise honor an explicit sslmode.
+  const sslQuery = u.searchParams.get("ssl");
+  // mongodb+srv implies TLS; otherwise honor an explicit sslmode or ssl parameter.
   const ssl =
-    u.protocol === "mongodb+srv:" || sslmode === "require" || sslmode === "verify-full" || sslmode === "verify-ca";
+    u.protocol === "mongodb+srv:" ||
+    sslmode === "require" ||
+    sslmode === "verify-full" ||
+    sslmode === "verify-ca" ||
+    sslmode === "true" ||
+    sslQuery === "true";
   return {
     engine,
     host: u.hostname || "localhost",

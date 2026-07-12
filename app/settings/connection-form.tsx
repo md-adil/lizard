@@ -3,7 +3,7 @@
 // Create/edit a connection. Supports pasting a full connection URI
 // (postgres://, mysql://, mongodb://), and a "Test connection" probe that runs
 // before saving.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { parseConnectionUri } from "@/lib/parse-uri";
 import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DataSelect } from "@/components/ui/data-select";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DatabaseSelect } from "./database-select";
 
 export interface ConnectionRow {
   id: string;
@@ -72,17 +74,17 @@ export function ConnectionForm({
   const [form, setForm] = useState<FormState>(
     initial
       ? {
-          engine: initial.engine,
-          name: initial.name,
-          host: initial.host,
-          port: String(initial.port),
-          database: initial.database,
-          readUser: initial.readUser,
-          readPassword: "",
-          writeUser: initial.writeUser ?? "",
-          writePassword: "",
-          ssl: initial.ssl,
-        }
+        engine: initial.engine,
+        name: initial.name,
+        host: initial.host,
+        port: String(initial.port),
+        database: initial.database,
+        readUser: initial.readUser,
+        readPassword: "",
+        writeUser: initial.writeUser ?? "",
+        writePassword: "",
+        ssl: initial.ssl,
+      }
       : BLANK,
   );
   const [uri, setUri] = useState("");
@@ -92,6 +94,18 @@ export function ConnectionForm({
     read: string | null;
     write: string | null;
   } | null>(null);
+  const [activeTab, setActiveTab] = useState<"uri" | "manual">(mode === "create" && !initial ? "uri" : "manual");
+  const [useSeparateReadWrite, setUseSeparateReadWrite] = useState<boolean>(
+    initial
+      ? !!initial.writeUser && initial.writeUser !== initial.readUser
+      : false
+  );
+  const isDuplicate = mode === "create" && !!initial;
+  const passwordPlaceholder = mode === "edit"
+    ? "•••• unchanged"
+    : isDuplicate
+      ? "•••• cloned (credentials loaded)"
+      : "";
 
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({
@@ -119,11 +133,11 @@ export function ConnectionForm({
     }
     const p = parseConnectionUri(raw);
     if (!p) {
-      setUriMsg("Not a valid postgres:// , mysql:// or mongodb:// URI");
+      setUriMsg("Not a valid postgres://, mysql:// or mongodb:// URI");
       return;
     }
     setUriMsg(
-      `Parsed ✓ ${ENGINE_LABELS[p.engine]} — read & write credentials filled (adjust write role if it differs)`,
+      `Parsed ✓ ${ENGINE_LABELS[p.engine]} — credentials filled`,
     );
     setForm((f) => ({
       ...f,
@@ -142,23 +156,27 @@ export function ConnectionForm({
 
   const testMutation = useMutation({
     mutationFn: async () => {
+      const wUser = useSeparateReadWrite ? (form.writeUser || null) : form.readUser;
+      const wPass = useSeparateReadWrite ? (form.writePassword || null) : form.readPassword;
       const res = await fetch("/api/connections/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          connectionId: initial ? initial.id : undefined,
           engine: form.engine,
           host: form.host,
           port: Number(form.port),
           database: form.database,
           readUser: form.readUser,
           readPassword: form.readPassword,
-          writeUser: form.writeUser || null,
-          writePassword: form.writePassword || null,
+          writeUser: wUser,
+          writePassword: wPass,
           ssl: form.ssl,
         }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Test failed");
+
       return body as { read: string | null; write: string | null };
     },
     onSuccess: (r) => {
@@ -170,6 +188,8 @@ export function ConnectionForm({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const wUser = useSeparateReadWrite ? (form.writeUser || null) : form.readUser;
+      const wPass = useSeparateReadWrite ? (form.writePassword || null) : form.readPassword;
       const base = {
         engine: form.engine,
         name: form.name,
@@ -185,9 +205,10 @@ export function ConnectionForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...base,
+            cloneFrom: initial ? initial.id : undefined,
             readPassword: form.readPassword,
-            writeUser: form.writeUser || null,
-            writePassword: form.writePassword || null,
+            writeUser: wUser,
+            writePassword: wPass,
           }),
         });
         const body = await res.json();
@@ -197,10 +218,14 @@ export function ConnectionForm({
       // edit: only send passwords the user actually typed (blank = unchanged)
       const patch: Record<string, unknown> = {
         ...base,
-        writeUser: form.writeUser || null,
+        writeUser: wUser,
       };
       if (form.readPassword) patch.readPassword = form.readPassword;
-      if (form.writePassword) patch.writePassword = form.writePassword;
+      if (useSeparateReadWrite) {
+        if (form.writePassword) patch.writePassword = form.writePassword;
+      } else {
+        if (form.readPassword) patch.writePassword = form.readPassword;
+      }
       const res = await fetch(`/api/connections/${initial!.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -241,95 +266,164 @@ export function ConnectionForm({
           </DialogTitle>
         </DialogHeader>
 
-        <div>
-          <label className="label">Paste a connection URI (optional)</label>
-          <Input
-            className="code"
-            placeholder={URI_PLACEHOLDER[form.engine]}
-            value={uri}
-            onChange={(e) => applyUri(e.target.value)}
-          />
-          {uriMsg && (
-            <p
-              className="text-[12px] mt-1"
-              style={{
-                color: uriMsg.startsWith("Parsed") ? "var(--success)" : "var(--warning)",
-              }}
-            >
-              {uriMsg}
-            </p>
-          )}
-        </div>
+        {/* Tab Switcher */}
+        {mode === "create" && (
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "uri" | "manual")}
+            className="mb-4"
+          >
+            <TabsList className="w-full border-b border-border flex justify-start">
+              <TabsTrigger value="uri" className="px-4 py-2">Connection URI</TabsTrigger>
+              <TabsTrigger value="manual" className="px-4 py-2">Manual Fields</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Engine</label>
-            <DataSelect
-              items={DB_ENGINES}
-              value={form.engine}
-              onChange={(e) => e && setEngine(e)}
-              getValue={(e) => e}
-              getLabel={(e) => (
-                <>
-                  <EngineIcon engine={e} className="size-4" />
-                  {ENGINE_LABELS[e]}
-                </>
+        {activeTab === "uri" ? (
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="label">Name (identifier, e.g. users_service)</label>
+              <Input value={form.name} onChange={set("name")} placeholder="users_service" className="w-full" />
+            </div>
+            <div>
+              <label className="label">Connection URI</label>
+              <Input
+                className="code"
+                placeholder={URI_PLACEHOLDER[form.engine]}
+                value={uri}
+                onChange={(e) => applyUri(e.target.value)}
+              />
+              {uriMsg && (
+                <p
+                  className="text-[12px] mt-1"
+                  style={{
+                    color: uriMsg.startsWith("Parsed") ? "var(--success)" : "var(--warning)",
+                  }}
+                >
+                  {uriMsg}
+                </p>
               )}
-              className="w-full"
-            />
+            </div>
           </div>
-          <div>
-            <label className="label">Name (identifier, e.g. users_service)</label>
-            <Input value={form.name} onChange={set("name")} placeholder="users_service" />
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Engine</label>
+              <DataSelect
+                items={DB_ENGINES}
+                value={form.engine}
+                onChange={(e) => e && setEngine(e)}
+                getValue={(e) => e}
+                getLabel={(e) => (
+                  <>
+                    <EngineIcon engine={e} className="size-4" />
+                    {ENGINE_LABELS[e]}
+                  </>
+                )}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="label">Name (identifier, e.g. users_service)</label>
+              <Input value={form.name} onChange={set("name")} placeholder="users_service" />
+            </div>
+            <div>
+              <label className="label">Host</label>
+              <Input value={form.host} onChange={set("host")} />
+            </div>
+            <div>
+              <label className="label">Port</label>
+              <Input value={form.port} onChange={set("port")} />
+            </div>
           </div>
-          <div>
-            <label className="label">Database</label>
-            <Input value={form.database} onChange={set("database")} />
-          </div>
-          <div>
-            <label className="label">Host</label>
-            <Input value={form.host} onChange={set("host")} />
-          </div>
-          <div>
-            <label className="label">Port</label>
-            <Input value={form.port} onChange={set("port")} />
-          </div>
-          <div>
-            <label className="label">Read user (SELECT-only role)</label>
-            <Input value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
-          </div>
-          <div>
-            <label className="label">Read password</label>
-            <Input
-              type="password"
-              value={form.readPassword}
-              onChange={set("readPassword")}
-              placeholder={mode === "edit" ? "•••• unchanged" : ""}
-            />
-          </div>
-          <div>
-            <label className="label">Write user (optional — enables CRUD)</label>
-            <Input value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
-          </div>
-          <div>
-            <label className="label">Write password</label>
-            <Input
-              type="password"
-              value={form.writePassword}
-              onChange={set("writePassword")}
-              placeholder={mode === "edit" ? "•••• unchanged" : ""}
-            />
-          </div>
-        </div>
+        )}
 
-        <label className="flex items-center gap-2 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-          <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
-        </label>
+        {activeTab === "manual" && (
+          <div className="border-t border-border pt-4 mt-2">
+            <h3 className="text-sm font-semibold mb-3">Database Credentials</h3>
+            {!useSeparateReadWrite ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Username</label>
+                  <Input value={form.readUser} onChange={set("readUser")} placeholder="db_user" />
+                </div>
+                <div>
+                  <label className="label">Password</label>
+                  <Input
+                    type="password"
+                    value={form.readPassword}
+                    onChange={set("readPassword")}
+                    placeholder={passwordPlaceholder}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Read user (SELECT-only role)</label>
+                  <Input value={form.readUser} onChange={set("readUser")} placeholder="lizard_read" />
+                </div>
+                <div>
+                  <label className="label">Read password</label>
+                  <Input
+                    type="password"
+                    value={form.readPassword}
+                    onChange={set("readPassword")}
+                    placeholder={passwordPlaceholder}
+                  />
+                </div>
+                <div>
+                  <label className="label">Write user (optional — enables CRUD)</label>
+                  <Input value={form.writeUser} onChange={set("writeUser")} placeholder="lizard_write" />
+                </div>
+                <div>
+                  <label className="label">Write password</label>
+                  <Input
+                    type="password"
+                    value={form.writePassword}
+                    onChange={set("writePassword")}
+                    placeholder={passwordPlaceholder}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer" style={{ color: "var(--muted-foreground)" }}>
+                <input
+                  type="checkbox"
+                  checked={useSeparateReadWrite}
+                  onChange={(e) => setUseSeparateReadWrite(e.target.checked)}
+                />{" "}
+                Use separate read-only user (recommended for production)
+              </label>
+
+              <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer" style={{ color: "var(--muted-foreground)" }}>
+                <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
+              </label>
+            </div>
+
+            <div className="border-t border-border pt-4 mt-4">
+              <DatabaseSelect
+                value={form.database}
+                onChange={(val) => setForm((f) => ({ ...f, database: val }))}
+                connectionId={initial?.id}
+                engine={form.engine}
+                host={form.host}
+                port={form.port}
+                readUser={form.readUser}
+                readPassword={form.readPassword}
+                ssl={form.ssl}
+              />
+            </div>
+          </div>
+        )}
 
         {testResult && (
           <div className="flex items-center gap-2">
             {statusPill("read", testResult.read)}
-            {form.writeUser && statusPill("write", testResult.write)}
+            {(useSeparateReadWrite ? form.writeUser : form.readUser) && statusPill("write", testResult.write)}
             {testResult.read && (
               <span className="text-[12px]" style={{ color: "var(--destructive)" }}>
                 {testResult.read}
@@ -343,7 +437,7 @@ export function ConnectionForm({
           </p>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mt-4">
           <Button
             variant="secondary"
             disabled={testMutation.isPending || !form.host || !form.database || !form.readUser}
