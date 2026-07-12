@@ -4,22 +4,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { TableMeta, ColumnMeta } from "./useTableMeta";
-import { effectiveKey } from "@/lib/introspect/heuristics";
+import { effectiveKey, NUMERIC_UDTS } from "@/lib/introspect/heuristics";
+import { toBoolean, getLocalCurrency, getCurrencySymbol, type Widget } from "@/lib/data/widgets";
 import { dataApiUrl } from "./data-api";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
+import { TagInput } from "./tag-input";
+import { AutocompleteInput } from "./autocomplete-input";
 import { RedactedValue } from "./redacted-value";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
+import { ToggleInput } from "@/components/ui/toggle-input";
 import { Textarea } from "@/components/ui/textarea";
 import { DataSelect } from "@/components/ui/data-select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-
-const TOGGLE_OPTIONS = [
-  { value: "true", label: "true" },
-  { value: "false", label: "false" },
-];
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Rating } from "@/components/ui/rating";
+import { marked } from "marked";
+import { AvatarCell } from "./avatar-cell";
+import { TimezoneCell } from "./timezone-cell";
+import { tzOptions } from "@/lib/data/timezones";
 
 interface Props {
   meta: TableMeta;
@@ -30,11 +35,37 @@ interface Props {
   onClose: () => void;
 }
 
-function toInputValue(cm: ColumnMeta, v: unknown): string {
-  if (v === null || v === undefined) return "";
+// Widgets whose content needs more than half the dialog's width (long-form
+// text, chip lists, media previews) — everything else pairs up two-per-row
+// in the field grid below.
+const WIDE_WIDGETS = new Set<Widget>([
+  "textarea",
+  "json",
+  "html",
+  "markdown",
+  "array",
+  "tag",
+  "image",
+  "video",
+  "audio",
+  "bytea",
+]);
+
+function toInputValue(cm: ColumnMeta, v: unknown): string | string[] {
+  if (v === null || v === undefined) return cm.widget === "tag" ? [] : "";
+  // ToggleInput's value is matched against the literal strings "true"/
+  // "false" — trust the widget rather than `String(v)`, or a MySQL
+  // tinyint(1) column (raw 0/1) would leave an existing row's toggle
+  // unselected on edit.
+  if (cm.widget === "toggle") return toBoolean(v) ? "true" : "false";
   if (cm.widget === "json") return typeof v === "string" ? v : JSON.stringify(v, null, 2);
-  // array editor state is held as a JSON string of the element list
+  // "array" editor state is held as a JSON string of the element list
+  // (ChipInput's convention). "tag" is kept as a real string[] end to end —
+  // the server already normalizes it to an array on every read (see
+  // normalizeTagColumns in lib/data/crud.ts), and TagInput's Combobox needs
+  // the real array, not a serialized form of it.
   if (cm.widget === "array") return JSON.stringify(Array.isArray(v) ? v : []);
+  if (cm.widget === "tag") return Array.isArray(v) ? v.map(String) : [];
   if (cm.widget === "bytea") {
     const b = v as { type?: string; data?: unknown[] };
     if (b && b.type === "Buffer" && Array.isArray(b.data)) return `⬇ ${b.data.length} bytes`;
@@ -141,18 +172,19 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
   const qc = useQueryClient();
   const isCreate = row === null;
   const editable = meta.columns;
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string | string[]>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [jsonErrors, setJsonErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const source = row ?? duplicateFrom ?? null;
-    const init: Record<string, string> = {};
+    const init: Record<string, string | string[]> = {};
     for (const cm of editable) {
       // when duplicating, clear key columns so the DB assigns new ones
       const clear = !!duplicateFrom && !row && effectiveKey(meta.table).includes(cm.col.name);
-      init[cm.col.name] = source && !clear ? toInputValue(cm, source[cm.col.name]) : "";
+      init[cm.col.name] =
+        source && !clear ? toInputValue(cm, source[cm.col.name]) : cm.widget === "tag" ? [] : "";
     }
     setValues(init);
     // duplicated fields count as user-entered so create sends them all
@@ -177,13 +209,14 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
       if (cm.readonly) continue;
       if (!isCreate && !touched.has(name)) continue; // only send changed fields on update
       const raw = values[name] ?? "";
+      const isEmpty = Array.isArray(raw) ? raw.length === 0 : raw === "";
       // inline required-field validation (Phase 8.2) — catch NOT NULL with no
       // default before the round-trip instead of surfacing a DB 23502 error
-      if (raw === "" && cm.required && cm.widget !== "toggle") {
+      if (isEmpty && cm.required && cm.widget !== "toggle") {
         errs[name] = "Required";
         continue;
       }
-      if (raw === "" && cm.widget !== "toggle") {
+      if (isEmpty && cm.widget !== "toggle") {
         if (isCreate && cm.col.default !== null) continue; // let the DB default apply
         data[name] = null;
         continue;
@@ -197,25 +230,43 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
           break;
         case "json":
           try {
-            data[name] = JSON.parse(raw);
+            data[name] = JSON.parse(raw as string);
           } catch {
             errs[name] = "Invalid JSON";
           }
           break;
         case "array": {
-          // held as a JSON string of the element list; empty → null
+          // held as a JSON string of the element list; empty → null. Sent
+          // as a real array — coerceValue (lib/data/crud.ts) is what
+          // decides whether the underlying column needs it stringified
+          // (plain text/varchar) or can take it natively (json/jsonb, or a
+          // real DB array type), same as the "json" widget.
           let arr: unknown[] = [];
           try {
-            arr = raw ? JSON.parse(raw) : [];
+            arr = raw ? JSON.parse(raw as string) : [];
           } catch {
             /* treat as empty */
           }
           data[name] = arr.length ? arr : null;
           break;
         }
+        case "tag": {
+          // held as a real string[] end to end (see toInputValue) — sent as
+          // a real array, same coerceValue handoff as "array" above.
+          const arr = Array.isArray(raw) ? raw : [];
+          data[name] = arr.length ? arr : null;
+          break;
+        }
         case "bytea":
           // binary editing is not supported here; never send it back
           continue;
+        case "autocomplete":
+          // the editor is always a text combobox regardless of the
+          // underlying column type (same display/typing as "text") — but a
+          // numeric column needs a real number on write, same coercion as
+          // the "number" widget above, or the value round-trips as text.
+          data[name] = NUMERIC_UDTS.has(cm.col.udtName) ? Number(raw) : raw;
+          break;
         default:
           data[name] = raw;
       }
@@ -232,19 +283,19 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
         dataApiUrl({ connection: meta.connection, table: meta.table.name, path, schema: meta.schema });
       const res = isCreate
         ? await fetch(url(), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        })
         : await fetch(url("row"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              pk,
-              data,
-              expectedUpdatedAt: meta.updatedAtColumn && row ? row[meta.updatedAtColumn] : undefined,
-            }),
-          });
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pk,
+            data,
+            expectedUpdatedAt: meta.updatedAtColumn && row ? row[meta.updatedAtColumn] : undefined,
+          }),
+        });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Save failed");
       return body;
@@ -282,10 +333,12 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
     onError: (e: Error) => setError(e.message),
   });
 
-  const setVal = (name: string, v: string) => {
+  const setVal = (name: string, v: string | string[]) => {
     setValues((s) => ({ ...s, [name]: v }));
     setTouched((s) => new Set(s).add(name));
   };
+
+  const [mdPreviewActive, setMdPreviewActive] = useState<Record<string, boolean>>({});
 
   const [open, setOpen] = useState(true);
   const close = () => {
@@ -294,21 +347,33 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && close()}>
-      <SheetContent side="right" className="w-150 max-w-full overflow-y-auto scrollbar-thin p-6">
-        <SheetHeader className="mb-5">
-          <SheetTitle>{isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(v) => !v && close()}>
+      <DialogContent
+        className="top-[5vh] translate-y-0 flex flex-col gap-3 resize overflow-auto rounded-xl"
+        style={{
+          width: 880,
+          height: "min(85vh, 900px)",
+          minWidth: 480,
+          minHeight: 320,
+          maxWidth: "95vw",
+          maxHeight: "95vh",
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{isCreate ? `New ${meta.label} row` : `Edit ${meta.label}`}</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-4">
-          {editable.map((cm) => {
-            const name = cm.col.name;
-            const v = values[name] ?? "";
-            const disabled = cm.readonly;
-            return (
-              <div key={name}>
-                <label className="label">
-                  {cm.label}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-1 -mx-1">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+            {editable.map((cm) => {
+              const name = cm.col.name;
+              const raw = values[name] ?? "";
+              const v = typeof raw === "string" ? raw : "";
+              const disabled = cm.readonly;
+              return (
+                <div key={name} className={WIDE_WIDGETS.has(cm.widget) ? "col-span-2" : undefined}>
+                  <label className="label">
+                    {cm.label}
                   {cm.required && !disabled && <span style={{ color: "var(--destructive)" }}> *</span>}
                   <span className="ml-2 code" style={{ color: "var(--muted-foreground-faint)", fontSize: 10.5 }}>
                     {cm.col.udtName}
@@ -334,16 +399,15 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     value={v || null}
                     onChange={(o) => setVal(name, o ?? "")}
                     getValue={(o) => o}
-                    getLabel={(o) => o}
+                    getLabel={(o) => cm.optionLabels?.[o] ?? o}
                     clearable
                     clearLabel={cm.col.nullable ? "∅ null" : "— pick —"}
                     className="w-full"
                   />
                 ) : cm.widget === "toggle" ? (
-                  <DataSelect
-                    items={TOGGLE_OPTIONS}
-                    value={TOGGLE_OPTIONS.find((o) => o.value === v) ?? null}
-                    onChange={(o) => setVal(name, o?.value ?? "")}
+                  <ToggleInput
+                    value={v === "true" ? true : v === "false" ? false : null}
+                    onChange={(value) => setVal(name, value === null ? "" : String(value))}
                     clearable={cm.col.nullable}
                     clearLabel="∅ null"
                     className="w-full"
@@ -388,18 +452,171 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       <MediaPreview kind={cm.widget as MediaKind} value={v} className="mt-2 max-h-40 rounded border" />
                     )}
                   </div>
+                ) : cm.widget === "number" && !cm.redacted ? (
+                  <NumberInput
+                    numeric={cm.col.numeric}
+                    value={v === "" ? "" : Number(v)}
+                    onChange={(value) => setVal(name, String(value))}
+                  />
+                ) : cm.widget === "color" ? (
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="color"
+                      className="w-10 h-10 p-0 border rounded cursor-pointer shrink-0"
+                      value={v || "#000000"}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                    <Input
+                      placeholder="#000000"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                      className="font-mono flex-1"
+                    />
+                  </div>
+                ) : cm.widget === "percent" ? (
+                  <div className="flex gap-3 items-center">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      className="flex-1 cursor-pointer accent-primary h-2 bg-muted rounded-lg appearance-none"
+                      value={Number(v) || 0}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                    <div className="flex items-center gap-1 shrink-0 w-20">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={v}
+                        onChange={(e) => setVal(name, e.target.value)}
+                        className="w-16 text-right"
+                      />
+                      <span className="text-sm font-medium text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                ) : cm.widget === "rating" ? (
+                  <div className="flex items-center gap-2 py-1">
+                    <Rating
+                      value={Number(v) || 0}
+                      onChange={(starValue) => setVal(name, String(starValue))}
+                    />
+                    {(Number(v) || 0) > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setVal(name, "")}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                ) : cm.widget === "currency" ? (
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-muted-foreground select-none">
+                      {getCurrencySymbol(getLocalCurrency())}
+                    </span>
+                    <Input
+                      type="number"
+                      className="pl-7"
+                      placeholder="0.00"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                    />
+                  </div>
+                ) : cm.widget === "markdown" ? (
+                  <div className="space-y-1.5 w-full">
+                    <div className="flex items-center justify-between border-b pb-1 mb-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">Markdown</span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() =>
+                          setMdPreviewActive((s) => ({ ...s, [name]: !s[name] }))
+                        }
+                      >
+                        {mdPreviewActive[name] ? "Edit" : "Preview"}
+                      </Button>
+                    </div>
+                    {mdPreviewActive[name] ? (
+                      <div
+                        className="p-2.5 rounded-lg border bg-muted/30 max-h-48 overflow-y-auto"
+                        style={{ fontSize: "13px" }}
+                        dangerouslySetInnerHTML={{
+                          __html: String(marked.parse(v || "", { async: false })),
+                        }}
+                      />
+                    ) : (
+                      <Textarea
+                        rows={4}
+                        placeholder="Type markdown here..."
+                        value={v}
+                        onChange={(e) => setVal(name, e.target.value)}
+                      />
+                    )}
+                  </div>
+                ) : cm.widget === "avatar" ? (
+                  <div className="flex items-center gap-3 w-full">
+                    <AvatarCell value={v} size="md" className="shrink-0 border shadow-sm" />
+                    <Input
+                      placeholder="e.g. Image URL or user name/initials"
+                      value={v}
+                      onChange={(e) => setVal(name, e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
+                ) : cm.widget === "timezone" ? (
+                  <DataSelect
+                    items={tzOptions}
+                    value={tzOptions.find((o) => o.value === v) || null}
+                    onChange={(opt) => setVal(name, opt?.value || "")}
+                    placeholder="Select timezone..."
+                    className="w-full"
+                  />
+                ) : cm.widget === "tag" ? (
+                  <TagInput
+                    connection={meta.connection}
+                    schema={meta.resolvedSchema}
+                    table={meta.table.name}
+                    column={name}
+                    value={Array.isArray(raw) ? raw : []}
+                    onChange={(arr) => setVal(name, arr)}
+                  />
+                ) : cm.widget === "autocomplete" ? (
+                  <AutocompleteInput
+                    target={{
+                      connection: meta.connection,
+                      schema: meta.resolvedSchema,
+                      table: meta.table.name,
+                      column: name,
+                    }}
+                    value={v}
+                    onChange={(val) => setVal(name, val)}
+                  />
                 ) : (
                   <Input
                     type={
-                      cm.redacted
+                      cm.redacted || cm.widget === "password"
                         ? "password"
-                        : cm.widget === "number"
-                          ? "number"
-                          : cm.widget === "date"
-                            ? "date"
-                            : cm.widget === "datetime"
-                              ? "datetime-local"
-                              : "text"
+                        : cm.widget === "date"
+                          ? "date"
+                          : cm.widget === "datetime"
+                            ? "datetime-local"
+                            : cm.widget === "email"
+                              ? "email"
+                              : cm.widget === "url"
+                                ? "url"
+                                : "text"
+                    }
+                    placeholder={
+                      cm.widget === "email"
+                        ? "user@example.com"
+                        : cm.widget === "url"
+                          ? "https://"
+                          : undefined
                     }
                     value={v}
                     onChange={(e) => setVal(name, e.target.value)}
@@ -415,9 +632,10 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     {cm.help}
                   </p>
                 )}
-              </div>
-            );
-          })}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {error && (
@@ -443,7 +661,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
             </Button>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

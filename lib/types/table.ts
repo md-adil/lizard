@@ -3,6 +3,15 @@
 import type { DbEngine } from "./connection";
 import type { VirtualFk, TableOverride, ColumnOverride } from "./overrides";
 
+// Precision/scale/sign metadata for a numeric-family column — null on the
+// column itself for anything non-numeric, so no dead keys ride along on
+// every text/date/bool/json column just to say "not applicable".
+export interface ColumnNumericInfo {
+  precision: number | null; // total digits (or bits, for plain integers)
+  scale: number | null; // digits after the decimal point; 0 for integers
+  unsigned: boolean; // MySQL-only — Postgres has no unsigned integer types
+}
+
 export interface ColumnInfo {
   name: string;
   dataType: string; // formatted type e.g. "character varying(255)"
@@ -14,6 +23,7 @@ export interface ColumnInfo {
   comment: string | null;
   enumValues: string[] | null;
   maxLength: number | null;
+  numeric: ColumnNumericInfo | null;
 }
 
 export interface ForeignKeyInfo {
@@ -43,6 +53,11 @@ export interface TableInfo {
   foreignKeys: ForeignKeyInfo[];
   uniqueConstraints: string[][];
   checkConstraints: CheckConstraintInfo[];
+  // every column covered by any index (PK, unique, or plain/secondary) —
+  // the cheap-to-search set global search narrows to (see
+  // lib/data/global-search.ts). Not tied to a specific index/constraint,
+  // just "is this column indexed at all".
+  indexedColumns: string[];
 }
 
 export interface SchemaCatalog {

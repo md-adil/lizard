@@ -9,21 +9,12 @@ import { findUpdatedAtColumn, effectiveKey } from "@/lib/introspect/heuristics";
 import { getClient, type DbClient } from "@/lib/db/pools";
 import { getDialect } from "@/app/api/database/registry";
 import type { Dialect } from "@/app/api/database/driver";
-import {
-  getConnection,
-  getColumnOverrides,
-  listTableOverrides,
-  listVirtualFks,
-  logAudit,
-} from "@/lib/metadata/store";
+import { getConnection, getColumnOverrides, listTableOverrides, listVirtualFks, logAudit } from "@/lib/metadata/store";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnectionCatalog } from "@/lib/introspect/catalog";
 import { guessDisplayColumn } from "@/lib/introspect/heuristics";
-import {
-  buildFilterClause,
-  type FilterCondition,
-  type Combinator,
-} from "@/lib/data/filters";
+import { buildFilterClause, type FilterCondition, type Combinator } from "@/lib/data/filters";
+import { matchTargetFor, buildMatchClause } from "@/lib/data/search-match";
 
 export class CrudError extends Error {
   status: number;
@@ -54,45 +45,27 @@ export interface ListParams {
   search?: string; // full-text search across text-like columns (only for small tables)
 }
 
-const TEXT_LIKE_TYPES = new Set([
-  "text",
-  "varchar",
-  "bpchar",
-  "citext",
-  "name",
-  "char",
-]);
-const SEARCH_ROW_LIMIT = 500_000;
-
-// `term ILIKE any of the text columns`, as an OR-chain.
-//
-// Every column gets its own bound value. Postgres would let one `$n` be
-// referenced by all of them, but MySQL's `?` is strictly positional — reusing a
-// single placeholder leaves the extra `?`s unbound, and the statement fails to
-// parse. One value per placeholder is the only form that works on both.
-function buildSearchClause(
-  textCols: { name: string }[],
+// Builds the search WHERE clause for `params.search` — indexed columns only
+// (see lib/data/search-match.ts), so there's no row-count gate here anymore:
+// unlike a full-column ILIKE scan, an indexed lookup doesn't get slower as
+// the table grows.
+function searchClauseFor(
+  conn: ConnectionConfig,
+  table: TableInfo,
   term: string,
   values: unknown[],
   dialect: Dialect,
 ): string {
-  const parts = textCols.map((c) => {
-    values.push(`%${term}%`);
-    return dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(values.length));
-  });
-  return `(${parts.join(" OR ")})`;
+  const target = matchTargetFor(table, term, primaryKeyColumnsFor(conn, table));
+  if (target.columns.length === 0) return "";
+  return buildMatchClause(target, term, values, dialect);
 }
 
-async function resolveTable(
-  connectionName: string,
-  schema: string | undefined,
-  table: string,
-) {
+async function resolveTable(connectionName: string, schema: string | undefined, table: string) {
   const conn = getConnection(connectionName);
   if (!conn) throw new CrudError(`Unknown connection: ${connectionName}`, 404);
   const catalog = await getConnectionCatalog(conn);
-  if (catalog.error)
-    throw new CrudError(`Connection error: ${catalog.error}`, 502);
+  if (catalog.error) throw new CrudError(`Connection error: ${catalog.error}`, 502);
   const targetSchema = schema || (supportsSchemas(conn.engine) ? "public" : conn.database);
   const sch = catalog.schemas.find((s) => s.name === targetSchema);
   const tbl = sch?.tables.find((t) => t.name === table);
@@ -106,55 +79,44 @@ function assertColumn(table: TableInfo, column: string): void {
   }
 }
 
-function displayColumnFor(
-  conn: ConnectionConfig,
-  table: TableInfo,
-): string | null {
-  const override = resolveTableOverride(
-    listTableOverrides(),
-    conn.id,
-    table.schema,
-    table.name,
-  );
-  if (
-    override?.displayColumn &&
-    table.columns.some((c) => c.name === override.displayColumn)
-  ) {
+export function displayColumnFor(conn: ConnectionConfig, table: TableInfo): string | null {
+  const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
+  if (override?.displayColumn && table.columns.some((c) => c.name === override.displayColumn)) {
     return override.displayColumn;
   }
   return guessDisplayColumn(table);
 }
 
+// The table's real primary key, or — when introspection found none — the
+// "pretend" primary key override (see TableOverride.primaryKey, set on the
+// customize page for tables missing a real PK/unique constraint). Search
+// treats either as a whole-value identifier: see matchTargetFor.
+export function primaryKeyColumnsFor(conn: ConnectionConfig, table: TableInfo): string[] {
+  if (table.primaryKey.length > 0) return table.primaryKey;
+  const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
+  return override?.primaryKey ?? [];
+}
+
 // ---------- list ----------
 
 export async function listRows(params: ListParams) {
-  const { conn, table } = await resolveTable(
-    params.connection,
-    params.schema,
-    params.table,
-  );
+  const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");
 
   try {
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
     const { clause: filterClause, values: filterValues } = buildFilterClause(
       table,
       params.filters ?? [],
       params.combinator ?? "and",
       dialect,
+      0,
+      tagCols,
     );
     const allValues: unknown[] = [...filterValues];
 
-    let searchClause = "";
-    if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
-      const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
-      const textCols = table.columns.filter((c) =>
-        TEXT_LIKE_TYPES.has(c.udtName),
-      );
-      if (textCols.length > 0) {
-        searchClause = buildSearchClause(textCols, term, allValues, dialect);
-      }
-    }
+    const searchClause = params.search ? searchClauseFor(conn, table, params.search, allValues, dialect) : "";
 
     const clauses = [filterClause, searchClause].filter(Boolean);
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -167,7 +129,9 @@ export async function listRows(params: ListParams) {
         orderSql += " NULLS LAST";
       }
     } else if (effectiveKey(table).length > 0) {
-      orderSql = `ORDER BY ${effectiveKey(table).map((c) => dialect.quoteIdent(c)).join(", ")}`;
+      orderSql = `ORDER BY ${effectiveKey(table)
+        .map((c) => dialect.quoteIdent(c))
+        .join(", ")}`;
     }
 
     const pageSize = Math.min(Math.max(params.pageSize, 1), 200);
@@ -180,14 +144,12 @@ export async function listRows(params: ListParams) {
     const res = await client.query(sql, allValues);
     const hasMore = res.rows.length > pageSize;
     const rows = hasMore ? res.rows.slice(0, pageSize) : res.rows;
+    normalizeTagColumns(rows, tagCols);
 
     // exact count for small tables, estimate for big ones
     let total: number | null = null;
     if (table.rowEstimate < 100_000) {
-      const countRes = await client.query(
-        `SELECT count(*) AS n FROM ${fqtn} ${whereSql}`,
-        allValues,
-      );
+      const countRes = await client.query(`SELECT count(*) AS n FROM ${fqtn} ${whereSql}`, allValues);
       total = Number(countRes.rows[0].n);
     } else if (!whereSql) {
       total = table.rowEstimate;
@@ -208,33 +170,23 @@ const EXPORT_ROW_LIMIT = 100_000;
 export async function exportRows(
   params: Omit<ListParams, "page" | "pageSize">,
 ): Promise<{ columns: string[]; rows: Record<string, unknown>[]; truncated: boolean }> {
-  const { conn, table } = await resolveTable(
-    params.connection,
-    params.schema,
-    params.table,
-  );
+  const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");
 
   try {
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
     const { clause: filterClause, values: filterValues } = buildFilterClause(
       table,
       params.filters ?? [],
       params.combinator ?? "and",
       dialect,
+      0,
+      tagCols,
     );
     const allValues: unknown[] = [...filterValues];
 
-    let searchClause = "";
-    if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
-      const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
-      const textCols = table.columns.filter((c) =>
-        TEXT_LIKE_TYPES.has(c.udtName),
-      );
-      if (textCols.length > 0) {
-        searchClause = buildSearchClause(textCols, term, allValues, dialect);
-      }
-    }
+    const searchClause = params.search ? searchClauseFor(conn, table, params.search, allValues, dialect) : "";
 
     const clauses = [filterClause, searchClause].filter(Boolean);
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -247,7 +199,9 @@ export async function exportRows(
         orderSql += " NULLS LAST";
       }
     } else if (effectiveKey(table).length > 0) {
-      orderSql = `ORDER BY ${effectiveKey(table).map((c) => dialect.quoteIdent(c)).join(", ")}`;
+      orderSql = `ORDER BY ${effectiveKey(table)
+        .map((c) => dialect.quoteIdent(c))
+        .join(", ")}`;
     }
 
     const fqtn = dialect.supportsSchemas
@@ -281,11 +235,7 @@ export async function listLinkedRows(
   otherTableName: string,
   selfValue: unknown,
 ): Promise<Record<string, unknown>[]> {
-  const { conn, table: junction } = await resolveTable(
-    connection,
-    junctionSchema,
-    junctionTable,
-  );
+  const { conn, table: junction } = await resolveTable(connection, junctionSchema, junctionTable);
   assertColumn(junction, selfFkColumn);
   assertColumn(junction, otherFkColumn);
 
@@ -378,11 +328,12 @@ async function fetchFkLabels(
       constants: [],
     });
   }
-  const vfks = listVirtualFks().filter((v) =>
-    vfkMatchesSource(v, conn.name, table.schema, table.name),
-  );
+  // fromConnection/toConnection store connection ids, not names.
+  const vfks = listVirtualFks().filter((v) => vfkMatchesSource(v, conn.id, table.schema, table.name));
   for (const v of vfks) {
     if (v.pairs.length === 0) continue;
+    // getConnection accepts either an id or a name, so this needs no change
+    // even though v.toConnection is now an id, not a name.
     const target = getConnection(v.toConnection);
     if (!target) continue;
     jobs.push({
@@ -444,8 +395,7 @@ async function fetchFkLabels(
           .find((s) => s.name === job.schema)
           ?.tables.find((t) => t.name === job.table);
         if (!targetTable) return;
-        for (const p of job.pairs)
-          if (!targetTable.columns.some((c) => c.name === p.to)) return;
+        for (const p of job.pairs) if (!targetTable.columns.some((c) => c.name === p.to)) return;
         for (const c of job.constants) {
           if (c.side === "source") {
             if (!table.columns.some((col) => col.name === c.toColumn)) return;
@@ -539,12 +489,7 @@ async function fetchFkLabels(
 
 // ---------- single row ----------
 
-function pkWhere(
-  table: TableInfo,
-  pk: Record<string, unknown>,
-  values: unknown[],
-  dialect: Dialect,
-): string {
+function pkWhere(table: TableInfo, pk: Record<string, unknown>, values: unknown[], dialect: Dialect): string {
   // Falls back to the first unique constraint when there's no declared
   // primary key — Laravel-style pivot tables (user_id, post_id) commonly
   // have a unique composite index instead of a formal PK. And when a table
@@ -564,8 +509,7 @@ function pkWhere(
     return parts.join(" AND ");
   }
   const cols = Object.keys(pk);
-  if (cols.length === 0)
-    throw new CrudError("Table has no primary key or unique constraint; editing is not supported");
+  if (cols.length === 0) throw new CrudError("Table has no primary key or unique constraint; editing is not supported");
   const parts = cols.map((col) => {
     assertColumn(table, col);
     values.push(pk[col]);
@@ -580,12 +524,7 @@ function pkWhere(
 // the full PK here would 404 valid reference lookups. Writes still go through
 // the strict pkWhere below; RowEditor re-derives the real PK from the loaded
 // row before editing/deleting, so this never weakens mutation safety.
-function lookupWhere(
-  table: TableInfo,
-  key: Record<string, unknown>,
-  values: unknown[],
-  dialect: Dialect,
-): string {
+function lookupWhere(table: TableInfo, key: Record<string, unknown>, values: unknown[], dialect: Dialect): string {
   const cols = Object.keys(key);
   if (cols.length === 0) throw new CrudError("No lookup key provided");
   const parts = cols.map((col) => {
@@ -611,12 +550,11 @@ export async function getRow(
     const fqtn = dialect.supportsSchemas
       ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
       : dialect.quoteIdent(tableName);
-    const res = await client.query(
-      `SELECT * FROM ${fqtn} WHERE ${where}`,
-      values,
-    );
+    const res = await client.query(`SELECT * FROM ${fqtn} WHERE ${where}`, values);
     if (res.rows.length === 0) throw new CrudError("Row not found", 404);
     const row = res.rows[0];
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, tableName);
+    normalizeTagColumns([row], tagCols);
     const fkLabels = await fetchFkLabels(conn, table, [row]);
     return { row, fkLabels };
   } finally {
@@ -671,6 +609,45 @@ export async function referenceOptions(
   }
 }
 
+// Distinct existing values of a column, for the "autocomplete" widget —
+// suggests values already used elsewhere in the table instead of a fixed
+// enum. Unlike referenceOptions, the result isn't a constraint: the widget
+// still accepts free text, these are just hints to reduce
+// typos/near-duplicates (e.g. "New York" vs "new york").
+export async function columnSuggestions(
+  connection: string,
+  schema: string | undefined,
+  tableName: string,
+  column: string,
+  search: string,
+) {
+  const { conn, table } = await resolveTable(connection, schema, tableName);
+  assertColumn(table, column);
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+  try {
+    const params: unknown[] = [];
+    const col = dialect.quoteIdent(column);
+    const colExpr = dialect.castToText(col);
+    let where = `WHERE ${col} IS NOT NULL`;
+    if (search) {
+      params.push(`%${search}%`);
+      where += ` AND ${dialect.caseInsensitiveLike(colExpr, dialect.placeholder(params.length))}`;
+    }
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
+      : dialect.quoteIdent(tableName);
+
+    const res = await client.query(
+      `SELECT DISTINCT ${colExpr} AS value FROM ${fqtn} ${where} ORDER BY 1 LIMIT 20`,
+      params,
+    );
+    return (res.rows as { value: string }[]).map((r) => r.value);
+  } finally {
+    client.release();
+  }
+}
+
 // ---------- writes ----------
 
 function friendlyDbError(e: unknown, dialect: Dialect): CrudError {
@@ -682,22 +659,14 @@ function friendlyDbError(e: unknown, dialect: Dialect): CrudError {
   return new CrudError(e instanceof Error ? e.message : String(e), 400);
 }
 
-function writableColumns(
-  table: TableInfo,
-  data: Record<string, unknown>,
-): string[] {
+function writableColumns(table: TableInfo, data: Record<string, unknown>): string[] {
   return Object.keys(data).filter((k) => {
     const col = table.columns.find((c) => c.name === k);
     return col && !col.isGenerated;
   });
 }
 
-function coerceValue(
-  table: TableInfo,
-  column: string,
-  value: unknown,
-  jsonOverrideColumns: Set<string>,
-): unknown {
+function coerceValue(table: TableInfo, column: string, value: unknown, jsonOverrideColumns: Set<string>): unknown {
   if (value === "" || value === undefined) return null;
   const col = table.columns.find((c) => c.name === column);
   if (
@@ -711,19 +680,52 @@ function coerceValue(
   return value;
 }
 
-// Columns whose widget override forces "json" — e.g. a text column storing
-// serialized JSON. These need the same stringify-before-write treatment as a
-// real json/jsonb column even though their introspected udtName is "text".
-function jsonOverrideColumns(
+// One fetch of column overrides, split by widget — avoids callers that need
+// more than one widget's columns (e.g. listRows below wants "tag") hitting
+// the metadata store separately for each.
+//  - json: widget override forces "json" (e.g. a text column storing
+//    serialized JSON) — needs the same stringify-before-write treatment as a
+//    real json/jsonb column even though its introspected udtName is "text".
+//  - tag: widget override is "tag" — the client always treats these as
+//    string[], but the raw driver value is a real array only for a genuine
+//    json/jsonb column; for plain text/varchar it's the JSON *text*
+//    instead. Normalized to string[] on read (see normalizeTagColumns) so
+//    every reader can just assume an array.
+function widgetOverrideColumns(
   connectionId: string,
   schema: string,
   tableName: string,
-): Set<string> {
-  return new Set(
-    getColumnOverrides(connectionId, schema, tableName)
-      .filter((o) => o.widget === "json")
-      .map((o) => o.column),
-  );
+): { json: Set<string>; tag: Set<string> } {
+  const overrides = getColumnOverrides(connectionId, schema, tableName);
+  const json = new Set<string>();
+  const tag = new Set<string>();
+  for (const o of overrides) {
+    if (o.widget === "json") json.add(o.column);
+    else if (o.widget === "tag") tag.add(o.column);
+  }
+  return { json, tag };
+}
+
+function normalizeTagValue(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((v) => String(v));
+  if (typeof raw === "string" && raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v));
+    } catch {
+      /* not JSON — fall through to empty */
+    }
+  }
+  return [];
+}
+
+function normalizeTagColumns(rows: Record<string, unknown>[], cols: Set<string>): void {
+  if (cols.size === 0) return;
+  for (const row of rows) {
+    for (const col of cols) {
+      if (col in row) row[col] = normalizeTagValue(row[col]);
+    }
+  }
 }
 
 export async function createRow(
@@ -737,8 +739,12 @@ export async function createRow(
   const dialect = getDialect(conn.engine);
   const cols = writableColumns(table, data);
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
-  const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
-  const values = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
+  const { json: jsonCols, tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, tableName);
+  // tag columns get the same stringify-if-object treatment as json ones —
+  // a real json/jsonb column accepts the array natively; a plain text
+  // column needs the JSON text, same as the "json" widget override case.
+  const stringifyCols = new Set([...jsonCols, ...tagCols]);
+  const values = cols.map((c) => coerceValue(table, c, data[c], stringifyCols));
   const placeholders = cols.map((_, i) => dialect.placeholder(i + 1));
   const fqtn = dialect.supportsSchemas
     ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
@@ -813,7 +819,11 @@ export async function bulkInsertRows(
     ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
     : dialect.quoteIdent(tableName);
 
-  const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
+  const { json: jsonCols, tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, tableName);
+  // tag columns get the same stringify-if-object treatment as json ones —
+  // a real json/jsonb column accepts the array natively; a plain text
+  // column needs the JSON text, same as the "json" widget override case.
+  const stringifyCols = new Set([...jsonCols, ...tagCols]);
   const client = await getClient(conn, "write");
   let inserted = 0;
   const errors: { row: number; message: string }[] = [];
@@ -825,7 +835,7 @@ export async function bulkInsertRows(
         errors.push({ row: i, message: "No writable columns" });
         continue;
       }
-      const values = cols.map((c) => coerceValue(table, c, rows[i][c], jsonCols));
+      const values = cols.map((c) => coerceValue(table, c, rows[i][c], stringifyCols));
       const placeholders = cols.map((_, j) => dialect.placeholder(j + 1));
       await client.query("SAVEPOINT import_row");
       try {
@@ -870,8 +880,12 @@ export async function updateRow(
   const key = effectiveKey(table);
   const cols = writableColumns(table, data).filter((c) => !key.includes(c));
   if (cols.length === 0) throw new CrudError("No writable columns in payload");
-  const jsonCols = jsonOverrideColumns(conn.id, table.schema, tableName);
-  const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c], jsonCols));
+  const { json: jsonCols, tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, tableName);
+  // tag columns get the same stringify-if-object treatment as json ones —
+  // a real json/jsonb column accepts the array natively; a plain text
+  // column needs the JSON text, same as the "json" widget override case.
+  const stringifyCols = new Set([...jsonCols, ...tagCols]);
+  const values: unknown[] = cols.map((c) => coerceValue(table, c, data[c], stringifyCols));
   const sets = cols.map((c, i) => `${dialect.quoteIdent(c)} = ${dialect.placeholder(i + 1)}`);
   let where = pkWhere(table, pk, values, dialect);
   // optimistic concurrency when the table has a recognisable timestamp column
@@ -957,6 +971,57 @@ export async function deleteRow(
     await client.rollback().catch(() => {});
     if (e instanceof CrudError) throw e;
     throw friendlyDbError(e, dialect);
+  } finally {
+    client.release();
+  }
+}
+
+// Unique tag values for the "tag" widget, whose column stores a JSON array
+// per row (row A: '["red","blue"]', row B: '["blue","green"]'). A plain
+// `SELECT DISTINCT` would only dedupe whole-array strings, not the
+// individual tags within them, so this flattens every row's array and
+// dedupes across rows in code instead — sidesteps needing per-engine
+// JSON-unnesting SQL (Postgres jsonb_array_elements_text vs MySQL
+// JSON_TABLE) for what's fundamentally a small autocomplete list.
+export async function distinctColumnValues(
+  connection: string,
+  schema: string | undefined,
+  tableName: string,
+  columnName: string,
+  search: string,
+) {
+  const { conn, table } = await resolveTable(connection, schema, tableName);
+  assertColumn(table, columnName);
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+  try {
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`
+      : dialect.quoteIdent(tableName);
+
+    const res = await client.query(
+      `SELECT ${dialect.quoteIdent(columnName)} AS value FROM ${fqtn}
+       WHERE ${dialect.quoteIdent(columnName)} IS NOT NULL LIMIT 500`,
+      [],
+    );
+    const seen = new Set<string>();
+    for (const row of res.rows as { value: unknown }[]) {
+      let arr: unknown;
+      try {
+        arr = typeof row.value === "string" ? JSON.parse(row.value) : row.value;
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) {
+        if (typeof item === "string" && item) seen.add(item);
+      }
+    }
+    const q = search.toLowerCase();
+    return [...seen]
+      .filter((v) => !q || v.toLowerCase().includes(q))
+      .sort()
+      .slice(0, 50);
   } finally {
     client.release();
   }

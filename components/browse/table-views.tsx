@@ -10,6 +10,7 @@ import { formatCell } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
 import { kanbanGroupColumns } from "./view-types";
 import { Card } from "@/components/ui/card";
+import { RedactedValue } from "./redacted-value";
 import type { FkLabels } from "@/lib/types";
 import { fkLabelFor } from "@/lib/data/fk-labels";
 import { effectiveKey } from "@/lib/introspect/heuristics";
@@ -45,7 +46,8 @@ function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
   return (
     <div className="space-y-0.5 mt-1">
       {cols.map((cm) => {
-        const f = formatCell(row[cm.col.name], cm.widget);
+        const v = row[cm.col.name];
+        const f = cm.redacted ? null : formatCell(v, cm.widget, cm.optionLabels);
         return (
           <div key={cm.col.name} className="flex gap-2 text-[12px] min-w-0">
             <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
@@ -53,9 +55,9 @@ function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
             </span>
             <span
               className="truncate"
-              style={{ color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)" }}
+              style={{ color: f && !f.muted ? "var(--foreground)" : "var(--muted-foreground-faint)" }}
             >
-              {f.icon ?? f.text}
+              {f ? (f.icon ?? f.text) : <RedactedValue value={v} />}
             </span>
           </div>
         );
@@ -136,6 +138,7 @@ export function KanbanView({
 
   const labelFor = (key: string) => {
     if (key === NULL_KEY) return "∅ none";
+    if (cm?.optionLabels?.[key]) return cm.optionLabels[key];
     if (!cm?.ref) return key;
     // A reference label can depend on more than the grouped value (polymorphic
     // relations key on a discriminator too), so resolve it against a row that

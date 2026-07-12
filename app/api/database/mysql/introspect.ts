@@ -34,7 +34,8 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
             column_default AS column_default, data_type AS data_type,
             column_type AS column_type, extra AS extra,
             NULLIF(column_comment, '') AS column_comment,
-            character_maximum_length AS character_maximum_length
+            character_maximum_length AS character_maximum_length,
+            numeric_precision AS numeric_precision, numeric_scale AS numeric_scale
      FROM information_schema.columns
      WHERE table_schema = ?
      ORDER BY table_name, ordinal_position`,
@@ -59,6 +60,16 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
     [db],
   );
 
+  // every column covered by any index (PK/unique/plain KEY alike) —
+  // information_schema.statistics has one row per (index, column); DISTINCT
+  // collapses a column indexed by multiple indexes to one row.
+  const [indexRes] = await pool.query(
+    `SELECT DISTINCT table_name AS table_name, column_name AS column_name
+     FROM information_schema.statistics
+     WHERE table_schema = ?`,
+    [db],
+  );
+
   const tableMap = new Map<string, TableInfo>();
   for (const t of tablesRes as Row[]) {
     tableMap.set(t.name as string, {
@@ -72,6 +83,7 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       foreignKeys: [],
       uniqueConstraints: [],
       checkConstraints: [],
+      indexedColumns: [],
     });
   }
 
@@ -92,6 +104,14 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       comment: (c.column_comment as string) ?? null,
       enumValues: parseEnumValues(dataType, columnType),
       maxLength: c.character_maximum_length == null ? null : Number(c.character_maximum_length),
+      numeric:
+        c.numeric_precision == null
+          ? null
+          : {
+              precision: Number(c.numeric_precision),
+              scale: c.numeric_scale == null ? null : Number(c.numeric_scale),
+              unsigned: /unsigned/i.test(columnType),
+            },
     };
     table.columns.push(col);
   }
@@ -143,6 +163,11 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       };
       table.foreignKeys.push(fk);
     }
+  }
+
+  for (const r of indexRes as Row[]) {
+    const table = tableMap.get(r.table_name as string);
+    if (table) table.indexedColumns.push(r.column_name as string);
   }
 
   const tables = [...tableMap.values()];

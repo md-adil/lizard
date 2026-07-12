@@ -14,6 +14,11 @@ import type { FkLabels } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
+// Stable reference for the "no meta yet" fallback — a fresh `[]` literal at
+// the call site would be a new array every render, which would look like a
+// change to any downstream useEffect/useMemo keyed on this prop.
+const NO_INDEXED_COLUMNS: string[] = [];
+
 interface ListResponse {
   rows: Record<string, unknown>[];
   hasMore: boolean;
@@ -110,7 +115,8 @@ export function ReferencePickerModal({
         <div className="mb-3">
           <TableSearchBar
             columns={visibleCols}
-            rowEstimate={meta?.table.rowEstimate}
+            target={{ connection: target.connection, schema: target.schema, table: target.table }}
+            indexedColumns={meta?.table.indexedColumns ?? NO_INDEXED_COLUMNS}
             filterSet={filterSet}
             onFilterChange={(s) => {
               setFilterSet(s);

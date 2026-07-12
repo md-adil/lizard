@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { listTableOverrides, listColumnOverrides, setTableOverride, setColumnOverride } from "@/lib/metadata/store";
 import { requireUser, requireEditor } from "@/lib/auth/session";
+import { invalidateSearchTargets } from "@/lib/data/global-search";
 
 const tableOverrideSchema = z.object({
   kind: z.literal("table"),
@@ -11,6 +12,8 @@ const tableOverrideSchema = z.object({
   hidden: z.boolean().default(false),
   displayColumn: z.string().nullable().default(null),
   label: z.string().nullable().default(null),
+  primaryKey: z.array(z.string()).nullable().default(null),
+  searchable: z.boolean().default(false),
 });
 
 const columnOverrideSchema = z.object({
@@ -26,6 +29,8 @@ const columnOverrideSchema = z.object({
   redacted: z.boolean().default(false),
   sortOrder: z.number().nullable().default(null),
   help: z.string().nullable().default(null),
+  options: z.array(z.string()).nullable().default(null),
+  optionLabels: z.record(z.string(), z.string()).nullable().default(null),
 });
 
 export async function GET() {
@@ -43,6 +48,10 @@ export async function POST(req: Request) {
     const body = z.discriminatedUnion("kind", [tableOverrideSchema, columnOverrideSchema]).parse(await req.json());
     if (body.kind === "table") {
       setTableOverride(body);
+      // the resolved searchable-table cache doesn't know this specific write
+      // just changed the flag it's keyed on — cheap to blow away entirely
+      // since it rebuilds lazily on the next search anyway.
+      invalidateSearchTargets();
     } else {
       setColumnOverride(body);
     }

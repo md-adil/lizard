@@ -356,7 +356,8 @@ export default function TablePage() {
       <div className="mt-4 mb-3">
         <TableSearchBar
           columns={meta.columns.filter((c) => !c.hidden)}
-          rowEstimate={meta.table.rowEstimate}
+          target={{ connection: params.connection, schema: meta.schema, table: params.table }}
+          indexedColumns={meta.table.indexedColumns}
           filterSet={filterSet}
           onFilterChange={(s) => {
             setFilterSet(s);

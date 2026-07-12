@@ -6,18 +6,31 @@ import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/dat
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
+import { TagInput } from "./tag-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TypedInput } from "@/components/ui/typed-input";
+import { NumberInput } from "@/components/ui/number-input";
+import { ToggleInput } from "@/components/ui/toggle-input";
 import { DataSelect } from "@/components/ui/data-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
 
+// identifies the table being filtered, so a "tag" widget column's value
+// editor can pull suggestions from that column's own existing values (same
+// source the row-editor's TagInput/AutocompleteInput use).
+export interface FilterTarget {
+  connection: string;
+  schema: string | undefined;
+  table: string;
+}
+
 function kindOf(cm: ColumnMeta): Kind {
   if (cm.ref) return "reference";
   if (cm.options && cm.options.length) return "enum";
-  if (cm.widget === "array") return "array";
+  if (cm.widget === "array" || cm.widget === "tag") return "array";
   if (cm.widget === "json") return "jsonb";
   if (cm.col.udtName === "bool") return "boolean";
   if (cm.col.udtName === "date") return "date";
@@ -73,13 +86,6 @@ const OPS_BY_KIND: Record<Kind, FilterOp[]> = {
   jsonb: ["jsonbcontains", "null", "notnull"],
 };
 
-// real booleans, not "true"/"false" strings — the value is bound as-is to
-// the query (MySQL's tinyint(1) columns need a native boolean, not text).
-const BOOLEAN_OPTIONS = [
-  { value: true, label: "true" },
-  { value: false, label: "false" },
-];
-
 // friendlier labels for the date comparison ops
 function opLabel(kind: Kind, op: FilterOp): string {
   if (kind === "date") {
@@ -93,8 +99,24 @@ function opLabel(kind: Kind, op: FilterOp): string {
 
 // cond.value is a real boolean only for "boolean" kind, which never reaches
 // these text-shaped editors — narrows the type for them.
-function strValue(v: string | boolean | undefined): string {
+function strValue(v: string | boolean | number | undefined): string {
   return typeof v === "string" ? v : "";
+}
+
+// same narrowing, but for TypedInput's number-capable editors — unlike
+// strValue this must preserve a real number, or the display collapses to ""
+// on every render right after the user types a valid value (the input then
+// looks like it's rejecting keystrokes, since the DOM value keeps snapping
+// back to empty under them). Boolean values never reach these editors — the
+// "boolean" kind uses its own Select branch instead — so only undefined
+// needs collapsing.
+function editorValue(v: string | boolean | number | undefined): string | number {
+  return v === undefined ? "" : (v as string | number);
+}
+
+// narrows to NumberInput's stricter value type.
+function numValue(v: string | boolean | number | undefined): number | "" {
+  return typeof v === "number" ? v : "";
 }
 
 // ---------- chips (for "in" value lists) ----------
@@ -127,11 +149,13 @@ function Chips({
 
 function ConditionRow({
   columns,
+  target,
   cond,
   onChange,
   onRemove,
 }: {
   columns: ColumnMeta[];
+  target: FilterTarget;
   cond: FilterCondition;
   onChange: (c: FilterCondition) => void;
   onRemove: () => void;
@@ -157,21 +181,40 @@ function ConditionRow({
     if (noValue) return null;
 
     if (cond.op === "between") {
-      const t = kind === "number" ? "number" : kind === "date" ? dateType : "text";
+      if (kind === "number") {
+        return (
+          <div className="flex items-center gap-1">
+            <NumberInput
+              className="w-28"
+              numeric={cm.col.numeric}
+              value={numValue(cond.value)}
+              onChange={(value) => onChange({ ...cond, value })}
+            />
+            <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
+            <NumberInput
+              className="w-28"
+              numeric={cm.col.numeric}
+              value={numValue(cond.value2)}
+              onChange={(value) => onChange({ ...cond, value2: value })}
+            />
+          </div>
+        );
+      }
+      const t = kind === "date" ? dateType : "text";
       return (
         <div className="flex items-center gap-1">
-          <Input
+          <TypedInput
             className="w-28"
             type={t}
-            value={strValue(cond.value)}
-            onChange={(e) => onChange({ ...cond, value: e.target.value })}
+            value={editorValue(cond.value)}
+            onChange={(value) => onChange({ ...cond, value })}
           />
           <span style={{ color: "var(--muted-foreground-faint)" }}>and</span>
-          <Input
+          <TypedInput
             className="w-28"
             type={t}
             value={cond.value2 ?? ""}
-            onChange={(e) => onChange({ ...cond, value2: e.target.value })}
+            onChange={(value) => onChange({ ...cond, value2: value })}
           />
         </div>
       );
@@ -197,7 +240,7 @@ function ConditionRow({
                     })
                   }
                 >
-                  {o}
+                  {cm.optionLabels?.[o] ?? o}
                 </button>
               );
             })}
@@ -248,6 +291,20 @@ function ConditionRow({
           </div>
         );
       }
+      // "tag" widget "in": same multi-chip combobox the row-editor uses,
+      // suggesting from that column's own existing tag values.
+      if (cm.widget === "tag") {
+        return (
+          <TagInput
+            connection={target.connection}
+            schema={target.schema}
+            table={target.table}
+            column={cm.col.name}
+            value={values}
+            onChange={(arr) => onChange({ ...cond, values: arr })}
+          />
+        );
+      }
       // text/number "in": type + Enter to add chips
       return (
         <div className="min-w-40">
@@ -274,12 +331,9 @@ function ConditionRow({
     // single-value editors
     if (kind === "boolean") {
       return (
-        <DataSelect
-          items={BOOLEAN_OPTIONS}
-          value={BOOLEAN_OPTIONS.find((o) => o.value === cond.value) ?? null}
-          onChange={(o) => onChange({ ...cond, value: o?.value ?? "" })}
-          getValue={(o) => o.value}
-          getLabel={(o) => o.label}
+        <ToggleInput
+          value={typeof cond.value === "boolean" ? cond.value : null}
+          onChange={(v) => onChange({ ...cond, value: v ?? "" })}
           clearable
           className="w-28"
         />
@@ -293,7 +347,7 @@ function ConditionRow({
           value={options.find((o) => o === cond.value) ?? null}
           onChange={(o) => onChange({ ...cond, value: o ?? "" })}
           getValue={(o) => o}
-          getLabel={(o) => o}
+          getLabel={(o) => cm.optionLabels?.[o] ?? o}
           clearable
           className="w-40"
         />
@@ -359,14 +413,25 @@ function ConditionRow({
         />
       );
     }
-    // text / number / date single value
+    if (kind === "number") {
+      return (
+        <NumberInput
+          className="flex-1 min-w-30"
+          numeric={cm.col.numeric}
+          placeholder="value"
+          value={numValue(cond.value)}
+          onChange={(value) => onChange({ ...cond, value })}
+        />
+      );
+    }
+    // text / date single value
     return (
-      <Input
+      <TypedInput
         className="flex-1 min-w-30"
-        type={kind === "number" ? "number" : kind === "date" ? dateType : "text"}
+        type={kind === "date" ? dateType : "text"}
         placeholder="value"
-        value={strValue(cond.value)}
-        onChange={(e) => onChange({ ...cond, value: e.target.value })}
+        value={editorValue(cond.value)}
+        onChange={(value) => onChange({ ...cond, value })}
       />
     );
   };
@@ -416,11 +481,13 @@ function ConditionRow({
 // Reusable filter panel (no trigger button — embed wherever needed).
 export function FilterPanel({
   columns,
+  target,
   value,
   onChange,
   onClose,
 }: {
   columns: ColumnMeta[];
+  target: FilterTarget;
   value: FilterSet;
   onChange: (set: FilterSet) => void;
   onClose?: () => void;
@@ -514,6 +581,7 @@ export function FilterPanel({
           <ConditionRow
             key={i}
             columns={columns}
+            target={target}
             cond={c}
             onChange={(nc) => update(i, nc)}
             onRemove={() => remove(i)}
@@ -560,10 +628,12 @@ export function FilterPanel({
 // Trigger button + inline FilterPanel (standalone, self-contained).
 export function FilterBuilder({
   columns,
+  target,
   value,
   onChange,
 }: {
   columns: ColumnMeta[];
+  target: FilterTarget;
   value: FilterSet;
   onChange: (set: FilterSet) => void;
 }) {
@@ -587,7 +657,9 @@ export function FilterBuilder({
         )}
         <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
       </Button>
-      {open && <FilterPanel columns={columns} value={value} onChange={onChange} onClose={() => setOpen(false)} />}
+      {open && (
+        <FilterPanel columns={columns} target={target} value={value} onChange={onChange} onClose={() => setOpen(false)} />
+      )}
     </div>
   );
 }

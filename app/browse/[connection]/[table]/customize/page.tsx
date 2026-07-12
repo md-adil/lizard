@@ -9,9 +9,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
+import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Chip } from "@/components/ui/chip";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
 import { useSchemaParam, tableHref } from "@/components/browse/use-schema-param";
@@ -33,12 +35,9 @@ export default function CustomizePage() {
   const schema = useSchemaParam();
   const { meta, catalog, schemaMeta, isLoading } = useTableMeta(params.connection, schema, params.table);
 
-  // page-level source scope — governs both the overrides and the
-  // relationship editor's source side. `null` means "not yet touched by the
-  // user" so it falls back to whatever pattern already governs this table
-  // (detected below) instead of always defaulting to the exact schema.
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"settings" | "columns" | "relationships">("settings");
 
   const backHref = tableHref({ connection: params.connection, schema: meta?.schema ?? schema, table: params.table });
 
@@ -46,21 +45,22 @@ export default function CustomizePage() {
   if (!catalog || !meta || !schemaMeta)
     return (
       <Pad>
-        Table {schema ? `${schema}.` : ""}{params.table} not found on “{params.connection}”.{" "}
+        Table {schema ? `${schema}.` : ""}
+        {params.table} not found on “{params.connection}”.{" "}
         <Link href={backHref} className="underline">
           Back
         </Link>
       </Pad>
     );
 
-  // A pattern already governs this table if the winning table override or any
-  // existing relationship resolved through a glob rather than an exact match
-  // — resolveTableOverride/vfkMatchesSource hand back the stored schema string
-  // as-is, so we just check whether that string is a pattern.
+  const patternTableOverride = resolveTableOverride(
+    schemaMeta.tableOverrides.filter((o) => isPattern(o.schema)),
+    meta.connectionId,
+    meta.resolvedSchema,
+    meta.table.name,
+  );
   const detectedPattern =
-    (meta.tableOverride && isPattern(meta.tableOverride.schema) ? meta.tableOverride.schema : null) ??
-    meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ??
-    null;
+    patternTableOverride?.schema ?? meta.virtualFks.find((v) => isPattern(v.fromSchema))?.fromSchema ?? null;
 
   // Schema patterns (multi-tenant "org_*" style overrides) only mean something
   // where schemas do — MySQL/Mongo have exactly one, so there's nothing to
@@ -101,7 +101,9 @@ export default function CustomizePage() {
           <BreadcrumbItem>
             <BreadcrumbLink
               render={
-                <Link href={tableHref({ connection: params.connection, schema: meta.schema, table: meta.table.name })} />
+                <Link
+                  href={tableHref({ connection: params.connection, schema: meta.schema, table: meta.table.name })}
+                />
               }
             >
               {meta.label}
@@ -113,40 +115,54 @@ export default function CustomizePage() {
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-      {hasSchema && (
-        <>
-          <Tabs value={scope} onValueChange={(v) => setExplicitScope(v as "schema" | "pattern")} className="mb-4">
-            <TabsList variant="line">
-              <TabsTrigger value="schema">This schema ({meta.schema})</TabsTrigger>
-              <TabsTrigger value="pattern">Schema pattern</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {scope === "pattern" && (
-            <div className="mb-6">
+      {hasSchema && meta.schema !== "public" && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+              Applies to:
+            </span>
+            <Chip active={scope === "schema"} onClick={() => setExplicitScope("schema")}>
+              This schema ({meta.schema})
+            </Chip>
+            <Chip active={scope === "pattern"} onClick={() => setExplicitScope("pattern")}>
+              Schema pattern
+            </Chip>
+            {scope === "pattern" && (
               <Input
-                placeholder="schema pattern, e.g. org_*"
+                className="w-64"
+                placeholder="e.g. org_*"
                 value={pattern}
                 onChange={(e) => setExplicitPattern(e.target.value)}
               />
-              <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
-                {pattern
-                  ? `matches ${matchedSchemas.length}: ${matchedSchemas.slice(0, 8).join(", ")}${matchedSchemas.length > 8 ? "…" : ""}`
-                  : "everything on this page is saved once and applied to every matching schema. Exact per-schema overrides still win."}
-              </p>
-            </div>
+            )}
+          </div>
+          {scope === "pattern" && (
+            <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
+              {pattern
+                ? `matches ${matchedSchemas.length}: ${matchedSchemas.slice(0, 8).join(", ")}${matchedSchemas.length > 8 ? "…" : ""}`
+                : "everything on this page is saved once and applied to every matching schema. Exact per-schema overrides still win."}
+            </p>
           )}
-        </>
+        </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-8 items-start">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="columns">Columns</TabsTrigger>
+          <TabsTrigger value="relationships">Relationships</TabsTrigger>
+        </TabsList>
+
         <TableOverridesEditor
           meta={meta}
+          tableOverrides={schemaMeta.tableOverrides}
           columnOverrides={schemaMeta.columnOverrides}
+          scope={scope}
           saveSchema={saveSchema}
           onSaved={invalidate}
         />
-        <div>
-          <SectionTitle>Virtual relationships</SectionTitle>
+
+        <TabsContent value="relationships">
           <p className="text-[12.5px] mb-3" style={{ color: "var(--muted-foreground)" }}>
             Link this table to another — composite keys, constant filters, case-insensitive matches. Powers reference
             labels/pickers and tells the AI how to join.
@@ -154,13 +170,14 @@ export default function CustomizePage() {
           <VirtualFkEditor
             meta={meta}
             catalog={catalog}
+            schemaTables={schemaMeta.tables}
             fromSchema={saveSchema}
             fromTable={meta.table.name}
             defaultToSchema={scope === "pattern" ? SAME_SCHEMA : meta.resolvedSchema}
             onSaved={invalidate}
           />
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

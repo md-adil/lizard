@@ -151,7 +151,7 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
       {cols.map((cm) => {
         const v = row[cm.col.name];
         const label = cm.ref && v != null ? fkLabelFor(fkLabels, cm.col.name, row) : undefined;
-        const f = formatCell(v, cm.widget);
+        const f = formatCell(v, cm.widget, cm.optionLabels);
         const isMedia =
           (cm.widget === "image" || cm.widget === "video" || cm.widget === "audio") &&
           typeof v === "string" &&
@@ -784,9 +784,14 @@ function RecordView() {
         }
       }
     }
-    // reverse virtual FKs (any connection → this table)
+    // reverse virtual FKs (any connection → this table). fromConnection/
+    // toConnection store connection ids now, not names — resolve to the
+    // name every downstream consumer (routing, connectionSupportsSchemas)
+    // still expects.
+    const connectionNameById = new Map(catalog.connections.map((c) => [c.connectionId, c.connectionName]));
+    const thisConnectionId = catalog.connections.find((c) => c.connectionName === params.connection)?.connectionId;
     for (const v of schemaMeta.virtualFks) {
-      if (v.toConnection !== params.connection || v.toTable !== params.table) continue;
+      if (v.toConnection !== thisConnectionId || v.toTable !== params.table) continue;
       // $schema resolves to the record's own schema; else must match literally
       const targetSchemaMatches = v.toSchema === SAME_SCHEMA || v.toSchema === concreteSchema;
       if (!targetSchemaMatches) continue;
@@ -794,9 +799,11 @@ function RecordView() {
       const fkColumn = vfkDisplayColumn(v);
       // can't enumerate a concrete back-link when the source side is a pattern
       if (!fkColumn || isPattern(fromSchema) || isPattern(v.fromTable)) continue;
+      const fromConnectionName = connectionNameById.get(v.fromConnection);
+      if (!fromConnectionName) continue;
       hasMany.push({
-        connection: v.fromConnection,
-        schema: connectionSupportsSchemas(catalog, v.fromConnection) ? fromSchema : undefined,
+        connection: fromConnectionName,
+        schema: connectionSupportsSchemas(catalog, fromConnectionName) ? fromSchema : undefined,
         table: v.fromTable,
         fkColumn,
         sourceConstants: v.constants.filter((c) => c.side === "source"),

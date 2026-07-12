@@ -8,16 +8,17 @@ import { Search, X, Loader2 } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterSet } from "@/lib/data/filters";
 import { isComplete } from "@/lib/data/filters";
-import { FilterPanel } from "./filter-builder";
+import { FilterPanel, type FilterTarget } from "./filter-builder";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 
-const TEXT_LIKE = new Set(["text", "varchar", "bpchar", "citext", "name", "char"]);
-const SEARCH_ROW_LIMIT = 500_000;
-
 interface Props {
   columns: ColumnMeta[];
-  rowEstimate?: number;
+  target: FilterTarget;
+  // Which columns the server will actually search (lib/data/search-match.ts
+  // restricts to indexed columns only — no row-count gate needed anymore,
+  // since an indexed lookup doesn't get slower as the table grows).
+  indexedColumns: string[];
   filterSet: FilterSet;
   onFilterChange: (set: FilterSet) => void;
   search: string;
@@ -27,7 +28,8 @@ interface Props {
 
 export function TableSearchBar({
   columns,
-  rowEstimate = 0,
+  target,
+  indexedColumns,
   filterSet,
   onFilterChange,
   search,
@@ -37,8 +39,8 @@ export function TableSearchBar({
   const [searchInput, setSearchInput] = useState(search);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const textColCount = columns.filter((c) => TEXT_LIKE.has(c.col.udtName)).length;
-  const tooLarge = rowEstimate >= SEARCH_ROW_LIMIT;
+  const indexedColSet = new Set(indexedColumns);
+  const searchableColCount = columns.filter((c) => indexedColSet.has(c.col.name)).length;
   const activeCount = filterSet.conditions.filter(isComplete).length;
 
   const commit = () => onSearchChange(searchInput);
@@ -67,21 +69,22 @@ export function TableSearchBar({
           <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{filterOpen ? "▲" : "▼"}</span>
         </Button>
 
-        {/* search input group: icon + input + clear + search button joined */}
-        <div className="flex flex-1" style={{ opacity: tooLarge || textColCount === 0 ? 0.5 : 1 }}>
+        {/* search input group: icon + input + clear + search button joined.
+            No manual opacity here — InputGroup/Input already dim themselves
+            on :disabled (has-disabled:opacity-50), stacking another 0.5 on
+            top made the placeholder nearly unreadable. */}
+        <div className="flex flex-1">
           <InputGroup className="rounded-r-none">
             <InputGroupAddon align="inline-start">
               <Search className="size-3.5" />
             </InputGroupAddon>
             <InputGroupInput
               placeholder={
-                tooLarge
-                  ? "Search disabled — table too large, use filters"
-                  : textColCount === 0
-                    ? "No text columns to search"
-                    : `Search ${textColCount} text column${textColCount !== 1 ? "s" : ""}…`
+                searchableColCount === 0
+                  ? "No indexed columns to search"
+                  : `Search ${searchableColCount} indexed column${searchableColCount !== 1 ? "s" : ""}…`
               }
-              disabled={tooLarge || textColCount === 0}
+              disabled={searchableColCount === 0}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && commit()}
@@ -97,7 +100,7 @@ export function TableSearchBar({
 
           <Button
             className="rounded-l-none border-l-0"
-            disabled={tooLarge || textColCount === 0 || isLoading}
+            disabled={searchableColCount === 0 || isLoading}
             title="Search (Enter)"
             onClick={commit}
           >
@@ -110,6 +113,7 @@ export function TableSearchBar({
       {filterOpen && (
         <FilterPanel
           columns={columns}
+          target={target}
           value={filterSet}
           onChange={onFilterChange}
           onClose={() => setFilterOpen(false)}

@@ -38,7 +38,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ connecti
 
     const response: SchemaDetail = {
       ...schemaObj,
-      virtualFks: listVirtualFksForConnection(connection),
+      virtualFks: listVirtualFksForConnection(conn.connectionId),
       tableOverrides: listTableOverridesForConnection(conn.connectionId),
       columnOverrides: listColumnOverridesForConnection(conn.connectionId),
     };

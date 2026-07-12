@@ -101,7 +101,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   const columnsRes = await pool.query(
     `SELECT c.table_schema, c.table_name, c.column_name, c.ordinal_position,
             c.is_nullable, c.column_default, c.data_type, c.udt_name,
-            c.character_maximum_length,
+            c.character_maximum_length, c.numeric_precision, c.numeric_scale,
             (c.is_generated = 'ALWAYS' OR c.identity_generation IS NOT NULL
              OR c.column_default LIKE 'nextval(%') AS is_generated,
             col_description(pc.oid, c.ordinal_position) AS comment,
@@ -138,6 +138,23 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     [schemaNames],
   );
 
+  // every column covered by any index (not just PK/unique — plain/secondary
+  // indexes too) — a.attnum > 0 excludes system columns; expression-index
+  // entries have no matching pg_attribute row (indkey holds 0 for those
+  // positions) and are silently dropped by the join, which is fine — an
+  // expression isn't a literal column global search could point at anyway.
+  const indexRes = await pool.query(
+    `SELECT n.nspname AS schema, rel.relname AS table,
+            array_agg(DISTINCT a.attname::text) AS columns
+     FROM pg_index idx
+     JOIN pg_class rel ON rel.oid = idx.indrelid
+     JOIN pg_namespace n ON n.oid = rel.relnamespace
+     JOIN pg_attribute a ON a.attrelid = idx.indrelid AND a.attnum = ANY(idx.indkey) AND a.attnum > 0
+     WHERE n.nspname = ANY($1)
+     GROUP BY n.nspname, rel.relname`,
+    [schemaNames],
+  );
+
   // assemble
   const tableMap = new Map<string, TableInfo>();
   for (const t of tablesRes.rows) {
@@ -152,6 +169,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
       foreignKeys: [],
       uniqueConstraints: [],
       checkConstraints: [],
+      indexedColumns: [],
     });
   }
 
@@ -169,6 +187,11 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
       comment: c.comment,
       enumValues: c.enum_values ?? null,
       maxLength: c.character_maximum_length,
+      // Postgres has no unsigned integer types.
+      numeric:
+        c.numeric_precision == null
+          ? null
+          : { precision: c.numeric_precision, scale: c.numeric_scale, unsigned: false },
     };
     table.columns.push(col);
   }
@@ -192,6 +215,11 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     } else if (con.contype === "c") {
       table.checkConstraints.push(parseCheck(con.conname, con.definition, con.columns));
     }
+  }
+
+  for (const r of indexRes.rows) {
+    const table = tableMap.get(`${r.schema}.${r.table}`);
+    if (table && r.columns) table.indexedColumns = r.columns;
   }
 
   const bySchema = new Map<string, SchemaCatalog>();

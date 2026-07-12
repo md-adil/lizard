@@ -13,10 +13,12 @@ export interface VfkConstant {
 
 export interface VirtualFk {
   id: string;
-  fromConnection: string; // connection name
+  // connection id, not name — a name is mutable (rename in Settings), which
+  // would silently orphan this relationship if it were the join key instead.
+  fromConnection: string;
   fromSchema: string;
   fromTable: string;
-  toConnection: string;
+  toConnection: string; // connection id, same reasoning
   // toSchema may be a literal, or the sentinel "$schema" meaning "resolve in the
   toSchema: string;
   toTable: string;
@@ -38,6 +40,16 @@ export interface TableOverride {
   hidden: boolean;
   displayColumn: string | null;
   label: string | null;
+  // "pretend" primary key for a table introspection found no PK/unique
+  // constraint on (e.g. a Laravel-style pivot table) — lets editing/delete
+  // work by giving the client (and the server's existing no-real-key
+  // fallback in pkWhere) columns to match a row on. Ignored when the table
+  // already has a real PK/unique constraint.
+  primaryKey: string[] | null;
+  // opts this table into cross-table global search (see lib/data/global-search.ts)
+  // — off by default, since scanning every table is the exact unbounded
+  // fan-out that feature is designed to avoid.
+  searchable: boolean;
 }
 
 export interface ColumnOverride {
@@ -52,4 +64,11 @@ export interface ColumnOverride {
   redacted: boolean;
   sortOrder: number | null;
   help: string | null;
+  // explicit allowed values for a column with no native enum/check
+  // constraint — setting this activates the "select" widget even without
+  // also setting `widget` explicitly.
+  options: string[] | null;
+  // raw value -> display label (e.g. "m" -> "Male"), for a column that's
+  // enum-like either natively or via `options` above.
+  optionLabels: Record<string, string> | null;
 }

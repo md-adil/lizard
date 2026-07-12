@@ -55,8 +55,8 @@ function connectionBlock(conn: ConnectionCatalog): string {
   return lines.join("\n");
 }
 
-function virtualFkLine(fk: VirtualFk): string {
-  return `VIRTUAL FK: ${fk.fromConnection}.${fk.fromSchema}.${fk.fromTable} → ${vfkSummary(fk)}${fk.label ? ` (${fk.label})` : ""}`;
+function virtualFkLine(fk: VirtualFk, connectionName: (id: string) => string): string {
+  return `VIRTUAL FK: ${connectionName(fk.fromConnection)}.${fk.fromSchema}.${fk.fromTable} → ${vfkSummary(fk, connectionName)}${fk.label ? ` (${fk.label})` : ""}`;
 }
 
 // Serialize the catalog into a compact text schema. If the result exceeds the
@@ -68,8 +68,11 @@ export function serializeCatalog(catalog: Catalog, options: SerializeOptions = {
     ? catalog.connections.filter((c) => options.connections!.includes(c.connectionName))
     : catalog.connections;
 
-  const scopedNames = new Set(scope.map((c) => c.connectionName));
-  const fks = catalog.virtualFks.filter((fk) => scopedNames.has(fk.fromConnection) && scopedNames.has(fk.toConnection));
+  // fromConnection/toConnection store connection ids, not names.
+  const scopedIds = new Set(scope.map((c) => c.connectionId));
+  const fks = catalog.virtualFks.filter((fk) => scopedIds.has(fk.fromConnection) && scopedIds.has(fk.toConnection));
+  const connectionNameById = new Map(catalog.connections.map((c) => [c.connectionId, c.connectionName]));
+  const resolveConnectionName = (id: string) => connectionNameById.get(id) ?? id;
 
   let body = scope.map(connectionBlock).join("\n\n");
 
@@ -114,7 +117,7 @@ export function serializeCatalog(catalog: Catalog, options: SerializeOptions = {
   }
 
   const fkSection = fks.length
-    ? `\n\nDeclared cross-service links (use these to join across connections):\n${fks.map(virtualFkLine).join("\n")}`
+    ? `\n\nDeclared cross-service links (use these to join across connections):\n${fks.map((fk) => virtualFkLine(fk, resolveConnectionName)).join("\n")}`
     : "";
 
   return `${body}${fkSection}`;

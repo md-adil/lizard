@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 interface AuditRow {
   id: number;
@@ -28,39 +29,43 @@ export default function AuditPage() {
       <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
         Every query and write Lizard has executed, newest first.
       </p>
-      <Card className="overflow-x-auto scrollbar-thin">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Action</th>
-              <th>Connections</th>
-              <th>SQL</th>
-              <th>Rows</th>
-              <th>ms</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card className="p-0 overflow-x-auto scrollbar-thin">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>When</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Connections</TableHead>
+              <TableHead>SQL</TableHead>
+              <TableHead>Rows</TableHead>
+              <TableHead>ms</TableHead>
+              <TableHead>Error</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {data?.map((r) => (
-              <tr key={r.id}>
-                <td style={{ color: "var(--muted-foreground)" }}>{r.created_at}</td>
-                <td>
+              <TableRow key={r.id}>
+                <TableCell style={{ color: "var(--muted-foreground)" }}>{r.created_at}</TableCell>
+                <TableCell>
                   <span className="tag">{r.action}</span>
-                </td>
-                <td className="code">{r.connections ? JSON.parse(r.connections).join(", ") : ""}</td>
-                <td className="code" title={r.sql ?? ""}>
+                </TableCell>
+                <TableCell className="code">{r.connections ? JSON.parse(r.connections).join(", ") : ""}</TableCell>
+                <TableCell className="code max-w-md truncate" title={r.sql ?? ""}>
                   {r.sql}
-                </td>
-                <td>{r.row_count ?? ""}</td>
-                <td style={{ color: "var(--muted-foreground)" }}>{r.duration_ms ?? ""}</td>
-                <td style={{ color: "var(--destructive)" }} title={r.error ?? ""}>
+                </TableCell>
+                <TableCell>{r.row_count ?? ""}</TableCell>
+                <TableCell style={{ color: "var(--muted-foreground)" }}>{r.duration_ms ?? ""}</TableCell>
+                <TableCell
+                  className="max-w-xs truncate"
+                  style={{ color: "var(--destructive)" }}
+                  title={r.error ?? ""}
+                >
                   {r.error ? r.error.slice(0, 60) : ""}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {data?.length === 0 && (
           <p className="px-5 py-8 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
             Nothing logged yet.

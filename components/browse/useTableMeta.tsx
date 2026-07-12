@@ -4,7 +4,7 @@
 // overrides + virtual FKs. Heuristics are pure functions shared with the server.
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, X, ExternalLink, Mail, Star } from "lucide-react";
 import type { TableInfo, VirtualFk, TableOverride, ColumnInfo, CatalogResponse, SchemaDetail } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -19,6 +19,13 @@ import {
 import { vfkMatchesSource, resolveToSchema, vfkDisplayColumn, vfkTargetColumn } from "@/lib/introspect/virtual-fk";
 import { resolveTableOverride, resolveColumnOverrides } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
+import { toBoolean, getLocalCurrency } from "@/lib/data/widgets";
+import { CurrencyCell } from "./currency-cell";
+import { PercentCell } from "./percent-cell";
+import { MarkdownCell } from "./markdown-cell";
+import { AvatarCell } from "./avatar-cell";
+import { TimezoneCell } from "./timezone-cell";
+import { TagCell } from "./tag-cell";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
 
@@ -51,6 +58,8 @@ export interface ColumnMeta {
   redacted: boolean;
   help: string | null;
   options: string[] | null;
+  // raw option value -> display label (e.g. "m" -> "Male"); null when unset.
+  optionLabels: Record<string, string> | null;
   // where a reference picker should search: real FK or virtual FK target.
   // schema is undefined when the target connection doesn't have one (see
   // TableMeta.schema) — it may point at a different connection than the
@@ -86,6 +95,13 @@ export interface TableMeta {
   tableOverride: TableOverride | null;
   virtualFks: VirtualFk[]; // outgoing from this table
   updatedAtColumn: string | null;
+  // whether introspection found a real PK/unique constraint, BEFORE any
+  // pretend-PK override is overlaid onto table.primaryKey below — the
+  // overlay is indistinguishable from a real key by the time it's on
+  // `table`, so anything that needs to know "does this table actually have
+  // one" (e.g. the customize page deciding whether to offer the pretend-PK
+  // picker) must read this instead of `table.primaryKey.length > 0`.
+  hasRealKey: boolean;
 }
 
 export function buildTableMeta(
@@ -105,14 +121,18 @@ export function buildTableMeta(
   const schema = schemaMeta.name;
   const tOverride = resolveTableOverride(schemaMeta.tableOverrides, conn.connectionId, schema, tableName);
   const cOverrides = resolveColumnOverrides(schemaMeta.columnOverrides, conn.connectionId, schema, tableName);
-  const vfks = schemaMeta.virtualFks.filter((v) => vfkMatchesSource(v, connection, schema, tableName));
+  // fromConnection/toConnection on a VirtualFk store the connection id, not
+  // its (mutable) name — match against conn.connectionId, not the name param.
+  const vfks = schemaMeta.virtualFks.filter((v) => vfkMatchesSource(v, conn.connectionId, schema, tableName));
 
   const hasSchema = connectionSupportsSchemas(catalog, connection);
 
   const columns: ColumnMeta[] = table.columns.map((col) => {
     const o = cOverrides.find((x) => x.column === col.name);
     const baseWidget = guessWidget(table, col);
-    const widget = (o?.widget as Widget) || baseWidget;
+    // custom options (no native enum/check constraint) activate the select
+    // widget on their own, without also requiring `widget` to be set.
+    const widget = (o?.widget as Widget) || (o?.options?.length ? "select" : baseWidget);
     const realFk = table.foreignKeys.find((fk) => fk.columns.length === 1 && fk.columns[0] === col.name);
     const vfk = vfks.find((v) => vfkDisplayColumn(v) === col.name);
     const ref = realFk
@@ -125,12 +145,20 @@ export function buildTableMeta(
           column: realFk.referencedColumns[0],
         }
       : vfk
-        ? {
-            connection: vfk.toConnection,
-            schema: connectionSupportsSchemas(catalog, vfk.toConnection) ? resolveToSchema(vfk, schema) : undefined,
-            table: vfk.toTable,
-            column: vfkTargetColumn(vfk)!,
-          }
+        ? (() => {
+            // vfk.toConnection is a connection id — every downstream consumer
+            // of ref.connection (routing, dataApiUrl, connectionSupportsSchemas)
+            // expects a name, so resolve it here, once, at the boundary.
+            const toConnName = catalog.connections.find((c) => c.connectionId === vfk.toConnection)?.connectionName;
+            return toConnName
+              ? {
+                  connection: toConnName,
+                  schema: connectionSupportsSchemas(catalog, toConnName) ? resolveToSchema(vfk, schema) : undefined,
+                  table: vfk.toTable,
+                  column: vfkTargetColumn(vfk)!,
+                }
+              : null;
+          })()
         : null;
     return {
       col,
@@ -140,7 +168,8 @@ export function buildTableMeta(
       readonly: o?.readonly ?? guessReadonly(table, col),
       redacted: o?.redacted ?? guessRedacted(col),
       help: o?.help ?? col.comment,
-      options: selectOptions(table, col),
+      options: o?.options?.length ? o.options : selectOptions(table, col),
+      optionLabels: o?.optionLabels ?? null,
       ref,
       required: !col.nullable && col.default === null && !col.isGenerated,
     };
@@ -153,15 +182,26 @@ export function buildTableMeta(
     return (ao ?? a.col.ordinal) - (bo ?? b.col.ordinal);
   });
 
+  const hasRealKey = table.primaryKey.length > 0 || table.uniqueConstraints.length > 0;
+
+  // "pretend" PK for a table with no real PK/unique constraint (see
+  // TableOverride.primaryKey) — every effectiveKey(meta.table) call site
+  // (row click, bulk delete, pk object construction) picks this up for
+  // free. Ignored when the table already has a real key, so it can't
+  // conflict with pkWhere's strict server-side check for that case.
+  const effectiveTable =
+    tOverride?.primaryKey?.length && !hasRealKey ? { ...table, primaryKey: tOverride.primaryKey } : table;
+
   return {
     connection,
     connectionId: conn.connectionId,
     schema: hasSchema ? schema : undefined,
     resolvedSchema: schema,
-    table,
+    table: effectiveTable,
     label: tOverride?.label || humanize(tableName),
     isView: table.kind === "view",
     columns,
+    hasRealKey,
     displayColumn: tOverride?.displayColumn || guessDisplayColumn(table),
     tableOverride: tOverride,
     virtualFks: vfks,
@@ -227,8 +267,146 @@ const INTERVAL_SUFFIX: Record<string, string> = {
 export function formatCell(
   value: unknown,
   widget?: Widget,
+  optionLabels?: Record<string, string> | null,
 ): { text: string; muted: boolean; icon?: ReactNode } {
   if (value === null || value === undefined) return { text: "∅", muted: true };
+
+  if (widget === "markdown") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <MarkdownCell value={value} />,
+    };
+  }
+  if (widget === "avatar") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <AvatarCell value={value} />,
+    };
+  }
+  if (widget === "timezone") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: <TimezoneCell value={value} />,
+    };
+  }
+  if (widget === "tag") {
+    // normalized to string[] server-side (see normalizeTagColumns in
+    // lib/data/crud.ts) — every tag column value is an array by the time it
+    // reaches the client.
+    const tags = value as string[];
+    return {
+      text: tags.join(", "),
+      muted: false,
+      icon: <TagCell value={tags} />,
+    };
+  }
+
+  if (widget === "percent") {
+    return {
+      text: `${value}%`,
+      muted: false,
+      icon: <PercentCell value={value} />,
+    };
+  }
+  if (widget === "rating") {
+    const rate = Math.round(Number(value)) || 0;
+    const cleanRate = Math.min(5, Math.max(0, rate));
+    return {
+      text: `${cleanRate}/5`,
+      muted: false,
+      icon: (
+        <span className="flex items-center gap-0.5" title={`${cleanRate}/5 stars`}>
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <Star
+              key={idx}
+              className={`size-3 shrink-0 ${
+                idx < cleanRate ? "fill-amber-400 text-amber-400" : "text-muted/40"
+              }`}
+            />
+          ))}
+        </span>
+      ),
+    };
+  }
+  if (widget === "currency") {
+    // Generate text representation for searches/exports
+    const amount = Number(value);
+    let text = String(value);
+    if (!isNaN(amount)) {
+      try {
+        const localCode = getLocalCurrency();
+        text = new Intl.NumberFormat(typeof navigator !== "undefined" ? navigator.language : "en-US", {
+          style: "currency",
+          currency: localCode,
+        }).format(amount);
+      } catch {
+        text = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+      }
+    }
+    return {
+      text,
+      muted: false,
+      icon: <CurrencyCell value={value} />,
+    };
+  }
+  if (widget === "password") {
+    return { text: "••••••••", muted: true };
+  }
+  if (widget === "color") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: (
+        <span className="flex items-center gap-1.5">
+          <span
+            className="size-3 rounded-full border border-black/10 shrink-0"
+            style={{ backgroundColor: String(value) }}
+          />
+          <span className="font-mono text-xs">{String(value)}</span>
+        </span>
+      ),
+    };
+  }
+  if (widget === "url") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: (
+        <a
+          href={String(value)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {String(value)}
+          <ExternalLink className="size-3 text-muted-foreground shrink-0" />
+        </a>
+      ),
+    };
+  }
+  if (widget === "email") {
+    return {
+      text: String(value),
+      muted: false,
+      icon: (
+        <a
+          href={`mailto:${String(value)}`}
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {String(value)}
+          <Mail className="size-3 text-muted-foreground shrink-0" />
+        </a>
+      ),
+    };
+  }
+  if (widget === "select" && optionLabels?.[String(value)]) {
+    return { text: optionLabels[String(value)], muted: false };
+  }
   if (typeof value === "boolean") {
     return {
       text: String(value),
@@ -240,7 +418,7 @@ export function formatCell(
   // comes back as a raw 0/1 number, not a real JS boolean — trust the widget
   // rather than the runtime type so it still renders as a check/x icon.
   if (widget === "toggle") {
-    const truthy = value === 1 || value === "1";
+    const truthy = toBoolean(value);
     return {
       text: String(truthy),
       muted: !truthy,

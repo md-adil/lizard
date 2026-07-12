@@ -164,11 +164,13 @@ export function listVirtualFks(): VirtualFk[] {
 // the per-schema catalog endpoint so a page for connection A doesn't pull in
 // every other connection's relationships. `fromSchema`/`toSchema` may still
 // be glob patterns, so callers filter down to an exact schema/table
-// themselves (see vfkMatchesSource).
-export function listVirtualFksForConnection(connectionName: string): VirtualFk[] {
+// themselves (see vfkMatchesSource). from_connection/to_connection store the
+// connection's stable id (not its mutable name) — renaming a connection must
+// not orphan the relationships pointing at it.
+export function listVirtualFksForConnection(connectionId: string): VirtualFk[] {
   const rows = getDb()
     .prepare("SELECT * FROM virtual_fks WHERE from_connection = ? OR to_connection = ?")
-    .all(connectionName, connectionName) as Record<string, unknown>[];
+    .all(connectionId, connectionId) as Record<string, unknown>[];
   return rows.map(mapVirtualFkRow);
 }
 
@@ -201,6 +203,18 @@ export function deleteVirtualFk(id: string): void {
 
 // ---------- overrides ----------
 
+// JSON-encoded array/object columns (primary_key, options, option_labels)
+// are all NULL-or-valid-JSON — never partially written — so a parse failure
+// only means "nothing stored yet".
+function parseJsonColumn<T>(raw: unknown): T | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 export function getTableOverride(connectionId: string, schema: string, table: string): TableOverride | null {
   const r = getDb()
     .prepare("SELECT * FROM table_overrides WHERE connection_id=? AND schema_name=? AND table_name=?")
@@ -213,6 +227,8 @@ export function getTableOverride(connectionId: string, schema: string, table: st
     hidden: !!r.hidden,
     displayColumn: (r.display_column as string) || null,
     label: (r.label as string) || null,
+    primaryKey: parseJsonColumn<string[]>(r.primary_key),
+    searchable: !!r.searchable,
   };
 }
 
@@ -224,6 +240,8 @@ function mapTableOverrideRow(r: Record<string, unknown>): TableOverride {
     hidden: !!r.hidden,
     displayColumn: (r.display_column as string) || null,
     label: (r.label as string) || null,
+    primaryKey: parseJsonColumn<string[]>(r.primary_key),
+    searchable: !!r.searchable,
   };
 }
 
@@ -245,12 +263,22 @@ export function listTableOverridesForConnection(connectionId: string): TableOver
 export function setTableOverride(o: TableOverride): void {
   getDb()
     .prepare(
-      `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label, primary_key, searchable)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name)
-       DO UPDATE SET hidden=excluded.hidden, display_column=excluded.display_column, label=excluded.label`,
+       DO UPDATE SET hidden=excluded.hidden, display_column=excluded.display_column, label=excluded.label,
+                     primary_key=excluded.primary_key, searchable=excluded.searchable`,
     )
-    .run(o.connectionId, o.schema, o.table, o.hidden ? 1 : 0, o.displayColumn, o.label);
+    .run(
+      o.connectionId,
+      o.schema,
+      o.table,
+      o.hidden ? 1 : 0,
+      o.displayColumn,
+      o.label,
+      o.primaryKey ? JSON.stringify(o.primaryKey) : null,
+      o.searchable ? 1 : 0,
+    );
 }
 
 function mapColumnOverrideRow(r: Record<string, unknown>): ColumnOverride {
@@ -266,6 +294,8 @@ function mapColumnOverrideRow(r: Record<string, unknown>): ColumnOverride {
     redacted: !!r.redacted,
     sortOrder: r.sort_order as number | null,
     help: (r.help as string) || null,
+    options: parseJsonColumn<string[]>(r.options),
+    optionLabels: parseJsonColumn<Record<string, string>>(r.option_labels),
   };
 }
 
@@ -291,11 +321,12 @@ export function getColumnOverrides(connectionId: string, schema: string, table: 
 export function setColumnOverride(o: ColumnOverride): void {
   getDb()
     .prepare(
-      `INSERT INTO column_overrides (connection_id, schema_name, table_name, column_name, label, widget, hidden, readonly, redacted, sort_order, help)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO column_overrides (connection_id, schema_name, table_name, column_name, label, widget, hidden, readonly, redacted, sort_order, help, options, option_labels)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name, column_name)
        DO UPDATE SET label=excluded.label, widget=excluded.widget, hidden=excluded.hidden,
-                     readonly=excluded.readonly, redacted=excluded.redacted, sort_order=excluded.sort_order, help=excluded.help`,
+                     readonly=excluded.readonly, redacted=excluded.redacted, sort_order=excluded.sort_order, help=excluded.help,
+                     options=excluded.options, option_labels=excluded.option_labels`,
     )
     .run(
       o.connectionId,
@@ -309,6 +340,8 @@ export function setColumnOverride(o: ColumnOverride): void {
       o.redacted ? 1 : 0,
       o.sortOrder,
       o.help,
+      o.options ? JSON.stringify(o.options) : null,
+      o.optionLabels ? JSON.stringify(o.optionLabels) : null,
     );
 }
 

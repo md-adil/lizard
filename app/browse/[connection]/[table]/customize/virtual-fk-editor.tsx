@@ -5,7 +5,7 @@
 // asks for the target and the join. Composite keys and constant filters are
 // always available.
 import { useState, useMemo } from "react";
-import type { VfkPair, VfkConstant } from "@/lib/types";
+import type { VfkPair, VfkConstant, TableInfo } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import {
 export function VirtualFkEditor({
   meta,
   catalog,
+  schemaTables,
   fromSchema,
   fromTable,
   defaultToSchema,
@@ -54,6 +55,9 @@ export function VirtualFkEditor({
 }: {
   meta: TableMeta;
   catalog: CatalogResponse;
+  // Every table in this table's own schema — scanned for real FKs pointing
+  // back at this table, so the "incoming" list below has something to read.
+  schemaTables: TableInfo[];
   // Source side, fixed by the page scope (a concrete schema or a glob pattern).
   fromSchema: string;
   fromTable: string;
@@ -61,7 +65,6 @@ export function VirtualFkEditor({
   defaultToSchema: string;
   onSaved: () => void;
 }) {
-  const [adding, setAdding] = useState(false);
   // simple: target locked to the current connection + schema (missing-FK case).
   // advanced: pick a target in any connection/schema (cross-service).
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
@@ -90,10 +93,7 @@ export function VirtualFkEditor({
   const targetColumns = targetTable?.columns ?? [];
   // O(1) name lookups for the join-pair pickers below instead of re-scanning
   // the column list (which can run into the hundreds) on every render.
-  const sourceColumnsByName = useMemo(
-    () => new Map(meta.table.columns.map((c) => [c.name, c])),
-    [meta.table.columns],
-  );
+  const sourceColumnsByName = useMemo(() => new Map(meta.table.columns.map((c) => [c.name, c])), [meta.table.columns]);
   const targetColumnsByName = useMemo(() => new Map(targetColumns.map((c) => [c.name, c])), [targetColumns]);
 
   const pairsFilled = pairs.length > 0 && pairs.every((p) => p.from && p.to);
@@ -144,16 +144,22 @@ export function VirtualFkEditor({
 
   async function submit() {
     setError(null);
+    if (!toConn) {
+      setError("Pick a target connection");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/virtual-fks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fromConnection: meta.connection,
+          // stable connection ids, not names — a rename must not orphan this
+          // relationship (see the VirtualFk type comment).
+          fromConnection: meta.connectionId,
           fromSchema,
           fromTable,
-          toConnection,
+          toConnection: toConn.connectionId,
           toSchema,
           toTable,
           pairs,
@@ -167,7 +173,6 @@ export function VirtualFkEditor({
         return;
       }
       reset();
-      setAdding(false);
       onSaved();
     } finally {
       setSaving(false);
@@ -184,326 +189,383 @@ export function VirtualFkEditor({
     }
   }
 
+  // vfk.toConnection is a connection id — resolve it to a display name for
+  // the existing-relationships list (vfkSummary stays catalog-free/pure).
+  const connectionNameById = new Map(catalog.connections.map((c) => [c.connectionId, c.connectionName]));
+  const resolveConnectionName = (id: string) => connectionNameById.get(id) ?? id;
+
+  // Real FKs on *other* tables in this schema that point back at this table —
+  // read-only, same reasoning as the outgoing native FK list below (DB-enforced,
+  // not editable here).
+  const incomingFks = schemaTables
+    .filter((t) => t.name !== meta.table.name)
+    .flatMap((t) =>
+      t.foreignKeys
+        .filter((fk) => fk.referencedSchema === meta.resolvedSchema && fk.referencedTable === meta.table.name)
+        .map((fk) => ({ fromTable: t.name, fk })),
+    );
+
   return (
-    <div>
-      {meta.virtualFks.map((v) => (
-        <Card
-          key={v.id}
-          size="sm"
-          className={`px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2 transition-opacity ${
-            deletingId === v.id ? "opacity-50 pointer-events-none" : ""
-          }`}
+    <div className="grid md:grid-cols-2 gap-6 items-start">
+      <Card className="p-4 gap-3">
+        <div>
+          <div className="text-[11px] mb-1.5" style={{ color: "var(--muted-foreground-faint)" }}>
+            Target
+          </div>
+          <Tabs value={mode} onValueChange={(v) => switchMode(v as "simple" | "advanced")}>
+            <TabsList variant="default">
+              <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
+              <TabsTrigger value="advanced">Advanced (cross-service)</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+          Links{" "}
+          <span className="code">
+            {fromSchema}.{fromTable}
+          </span>{" "}
+          to a target table. Source scope follows this page.
+        </p>
+
+        <div
+          className={`grid gap-3 ${showTargetScope ? (toConnHasSchema ? "grid-cols-3" : "grid-cols-2") : "grid-cols-1"}`}
         >
-          <div className="min-w-0">
-            {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
-            <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
-              {v.fromSchema}.{v.fromTable} → {vfkSummary(v)}
-            </span>
-          </div>
-          {deletingId === v.id ? (
-            <span className="text-[12px] text-muted-foreground animate-pulse shrink-0 self-center">Deleting…</span>
-          ) : (
-            <AlertDialog>
-              <AlertDialogTrigger
-                render={
-                  <Button variant="secondary" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
-                    ✕
-                  </Button>
-                }
-              />
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Relationship</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to delete this relationship? This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction variant="destructive" onClick={() => remove(v.id)}>
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </Card>
-      ))}
-
-      {saving && (
-        <Card size="sm" className="px-3 py-2.5 mb-2 opacity-50 animate-pulse flex-row items-center gap-2">
-          <div className="flex-1 space-y-1">
-            <div className="h-4 bg-muted rounded w-1/4" />
-            <div className="h-3 bg-muted rounded w-3/4" />
-          </div>
-        </Card>
-      )}
-
-      {!adding ? (
-        <Button variant="secondary" className="mt-1" onClick={() => setAdding(true)}>
-          + Add relationship
-        </Button>
-      ) : (
-        <Card className="p-4 mt-2 gap-3">
-          <div>
-            <div className="text-[11px] mb-1.5" style={{ color: "var(--muted-foreground-faint)" }}>
-              Target
-            </div>
-            <Tabs value={mode} onValueChange={(v) => switchMode(v as "simple" | "advanced")}>
-              <TabsList variant="default">
-                <TabsTrigger value="simple">Simple (same schema)</TabsTrigger>
-                <TabsTrigger value="advanced">Advanced (cross-service)</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
-            Links{" "}
-            <span className="code">
-              {fromSchema}.{fromTable}
-            </span>{" "}
-            to a target table. Source scope follows this page.
-          </p>
-
-          <div
-            className={`grid gap-3 ${showTargetScope ? (toConnHasSchema ? "grid-cols-3" : "grid-cols-2") : "grid-cols-1"}`}
-          >
-            {showTargetScope && (
-              <>
+          {showTargetScope && (
+            <>
+              <div>
+                <label className="label">Target connection</label>
+                <DataSelect
+                  items={catalog.connections}
+                  value={catalog.connections.find((c) => c.connectionName === toConnection) ?? null}
+                  onChange={(picked) => {
+                    const name = picked?.connectionName ?? "";
+                    setToConnection(name);
+                    setToTable("");
+                    // A connection without schemas has exactly one — pick it for
+                    // the user, since there's no schema select to do it.
+                    const hasSchema = !!name && connectionSupportsSchemas(catalog, name);
+                    setToSchema(!picked || hasSchema ? "" : (picked.schemas[0]?.name ?? ""));
+                  }}
+                  getValue={(c) => c.connectionName}
+                  getLabel={(c) => c.connectionName}
+                  placeholder="— select —"
+                  className="w-full"
+                />
+              </div>
+              {toConnHasSchema && (
                 <div>
-                  <label className="label">Target connection</label>
+                  <label className="label">Target schema</label>
                   <DataSelect
-                    items={catalog.connections}
-                    value={catalog.connections.find((c) => c.connectionName === toConnection) ?? null}
-                    onChange={(picked) => {
-                      const name = picked?.connectionName ?? "";
-                      setToConnection(name);
+                    items={[
+                      { value: SAME_SCHEMA, label: "Same schema as row" },
+                      ...(toConn?.schemas.map((s) => ({ value: s.name, label: s.name })) ?? []),
+                    ]}
+                    value={toSchema ? { value: toSchema, label: toSchema } : null}
+                    disabled={!toConn}
+                    onChange={(o) => {
+                      setToSchema(o?.value ?? "");
                       setToTable("");
-                      // A connection without schemas has exactly one — pick it for
-                      // the user, since there's no schema select to do it.
-                      const hasSchema = !!name && connectionSupportsSchemas(catalog, name);
-                      setToSchema(!picked || hasSchema ? "" : (picked.schemas[0]?.name ?? ""));
                     }}
-                    getValue={(c) => c.connectionName}
-                    getLabel={(c) => c.connectionName}
                     placeholder="— select —"
                     className="w-full"
                   />
                 </div>
-                {toConnHasSchema && (
-                  <div>
-                    <label className="label">Target schema</label>
-                    <DataSelect
-                      items={[
-                        { value: SAME_SCHEMA, label: "Same schema as row" },
-                        ...(toConn?.schemas.map((s) => ({ value: s.name, label: s.name })) ?? []),
-                      ]}
-                      value={toSchema ? { value: toSchema, label: toSchema } : null}
-                      disabled={!toConn}
-                      onChange={(o) => {
-                        setToSchema(o?.value ?? "");
-                        setToTable("");
-                      }}
-                      placeholder="— select —"
-                      className="w-full"
-                    />
-                  </div>
-                )}
-              </>
-            )}
-            <div>
-              <label className="label">{showTargetScope ? "Target table" : "References table"}</label>
-              <Combobox
-                items={targetSchemaMeta?.tables.map((t) => t.name) ?? []}
-                value={toTable}
-                onValueChange={(val) => {
-                  if (val) pickTable(val);
-                }}
-                disabled={!toSchema}
-              >
-                <ComboboxInput placeholder="— select table —" className="w-full" disabled={!toSchema} />
-                <ComboboxContent>
-                  <ComboboxEmpty>No tables found</ComboboxEmpty>
-                  <ComboboxList>
-                    {(t) => (
-                      <ComboboxItem key={t} value={t}>
-                        {t}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-            </div>
-          </div>
-
+              )}
+            </>
+          )}
           <div>
-            <label className="label">Join on</label>
-            <div className="space-y-2">
-              {pairs.map((p, i) => (
+            <label className="label">{showTargetScope ? "Target table" : "References table"}</label>
+            <Combobox
+              items={targetSchemaMeta?.tables.map((t) => t.name) ?? []}
+              value={toTable}
+              onValueChange={(val) => {
+                if (val) pickTable(val);
+              }}
+              disabled={!toSchema}
+            >
+              <ComboboxInput placeholder="— select table —" className="w-full" disabled={!toSchema} />
+              <ComboboxContent>
+                <ComboboxEmpty>No tables found</ComboboxEmpty>
+                <ComboboxList>
+                  {(t) => (
+                    <ComboboxItem key={t} value={t}>
+                      {t}
+                    </ComboboxItem>
+                  )}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Join on</label>
+          <div className="space-y-2">
+            {pairs.map((p, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <ColumnsSelect
+                  items={meta.table.columns}
+                  value={sourceColumnsByName.get(p.from) ?? null}
+                  onChange={(col) => setPair(i, { from: col?.name ?? "" })}
+                  placeholder="— this column —"
+                  className="flex-1"
+                />
+                <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
+                  =
+                </span>
+                <ColumnsSelect
+                  items={targetColumns}
+                  value={targetColumnsByName.get(p.to) ?? null}
+                  onChange={(col) => setPair(i, { to: col?.name ?? "" })}
+                  placeholder="— target column —"
+                  className="flex-1"
+                  disabled={!targetTable}
+                />
+                <Button
+                  variant="secondary"
+                  size="icon-sm"
+                  className="shrink-0"
+                  disabled={pairs.length === 1}
+                  onClick={() => setPairs((s) => s.filter((_, idx) => idx !== i))}
+                >
+                  ✕
+                </Button>
+              </div>
+            ))}
+            <Button variant="secondary" size="sm" onClick={() => setPairs((s) => [...s, { from: "", to: "" }])}>
+              + Add column (composite key)
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Constant filters (optional)</label>
+          <div className="space-y-2">
+            {constants.map((c, i) => {
+              const sourceColItems = meta.table.columns.map((sc) => ({
+                id: `source::${sc.name}`,
+                label: sc.name,
+              }));
+              const targetColItems = targetColumns.map((tc) => ({
+                id: `target::${tc.name}`,
+                label: tc.name,
+              }));
+              const allConstantItems = [...sourceColItems, ...targetColItems];
+
+              return (
                 <div key={i} className="flex items-center gap-2">
-                  <ColumnsSelect
-                    items={meta.table.columns}
-                    value={sourceColumnsByName.get(p.from) ?? null}
-                    onChange={(col) => setPair(i, { from: col?.name ?? "" })}
-                    placeholder="— this column —"
-                    className="flex-1"
-                  />
+                  <Combobox
+                    items={allConstantItems}
+                    value={c.toColumn ? `${c.side || "target"}::${c.toColumn}` : ""}
+                    onValueChange={(val: any) => {
+                      if (!val) {
+                        setConst(i, { toColumn: "", side: "target" });
+                      } else {
+                        const [side, col] = val.split("::");
+                        setConst(i, { toColumn: col, side: side as "source" | "target" });
+                      }
+                    }}
+                    disabled={!targetTable}
+                  >
+                    <ComboboxInput placeholder="— select column —" className="flex-1" disabled={!targetTable} />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No columns found</ComboboxEmpty>
+                      <ComboboxList>
+                        <ComboboxGroup items={sourceColItems}>
+                          <ComboboxLabel>Source: {fromTable}</ComboboxLabel>
+                          <ComboboxCollection>
+                            {(item: any) => (
+                              <ComboboxItem key={item.id} value={item.id}>
+                                {item.label}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxCollection>
+                        </ComboboxGroup>
+                        {targetTable && (
+                          <>
+                            <ComboboxSeparator />
+                            <ComboboxGroup items={targetColItems}>
+                              <ComboboxLabel>Target: {toTable}</ComboboxLabel>
+                              <ComboboxCollection>
+                                {(item: any) => (
+                                  <ComboboxItem key={item.id} value={item.id}>
+                                    {item.label}
+                                  </ComboboxItem>
+                                )}
+                              </ComboboxCollection>
+                            </ComboboxGroup>
+                          </>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                   <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
                     =
                   </span>
-                  <ColumnsSelect
-                    items={targetColumns}
-                    value={targetColumnsByName.get(p.to) ?? null}
-                    onChange={(col) => setPair(i, { to: col?.name ?? "" })}
-                    placeholder="— target column —"
+                  <Input
                     className="flex-1"
-                    disabled={!targetTable}
+                    placeholder="value, e.g. user"
+                    value={c.value}
+                    onChange={(e) => setConst(i, { value: e.target.value })}
                   />
                   <Button
                     variant="secondary"
                     size="icon-sm"
                     className="shrink-0"
-                    disabled={pairs.length === 1}
-                    onClick={() => setPairs((s) => s.filter((_, idx) => idx !== i))}
+                    onClick={() => setConstants((s) => s.filter((_, idx) => idx !== i))}
                   >
                     ✕
                   </Button>
                 </div>
-              ))}
-              <Button variant="secondary" size="sm" onClick={() => setPairs((s) => [...s, { from: "", to: "" }])}>
-                + Add column (composite key)
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Constant filters (optional)</label>
-            <div className="space-y-2">
-              {constants.map((c, i) => {
-                const sourceColItems = meta.table.columns.map((sc) => ({
-                  id: `source::${sc.name}`,
-                  label: sc.name,
-                }));
-                const targetColItems = targetColumns.map((tc) => ({
-                  id: `target::${tc.name}`,
-                  label: tc.name,
-                }));
-                const allConstantItems = [...sourceColItems, ...targetColItems];
-
-                return (
-                  <div key={i} className="flex items-center gap-2">
-                    <Combobox
-                      items={allConstantItems}
-                      value={c.toColumn ? `${c.side || "target"}::${c.toColumn}` : ""}
-                      onValueChange={(val: any) => {
-                        if (!val) {
-                          setConst(i, { toColumn: "", side: "target" });
-                        } else {
-                          const [side, col] = val.split("::");
-                          setConst(i, { toColumn: col, side: side as "source" | "target" });
-                        }
-                      }}
-                      disabled={!targetTable}
-                    >
-                      <ComboboxInput placeholder="— select column —" className="flex-1" disabled={!targetTable} />
-                      <ComboboxContent>
-                        <ComboboxEmpty>No columns found</ComboboxEmpty>
-                        <ComboboxList>
-                          <ComboboxGroup items={sourceColItems}>
-                            <ComboboxLabel>Source: {fromTable}</ComboboxLabel>
-                            <ComboboxCollection>
-                              {(item: any) => (
-                                <ComboboxItem key={item.id} value={item.id}>
-                                  {item.label}
-                                </ComboboxItem>
-                              )}
-                            </ComboboxCollection>
-                          </ComboboxGroup>
-                          {targetTable && (
-                            <>
-                              <ComboboxSeparator />
-                              <ComboboxGroup items={targetColItems}>
-                                <ComboboxLabel>Target: {toTable}</ComboboxLabel>
-                                <ComboboxCollection>
-                                  {(item: any) => (
-                                    <ComboboxItem key={item.id} value={item.id}>
-                                      {item.label}
-                                    </ComboboxItem>
-                                  )}
-                                </ComboboxCollection>
-                              </ComboboxGroup>
-                            </>
-                          )}
-                        </ComboboxList>
-                      </ComboboxContent>
-                    </Combobox>
-                    <span className="shrink-0" style={{ color: "var(--muted-foreground-faint)" }}>
-                      =
-                    </span>
-                    <Input
-                      className="flex-1"
-                      placeholder="value, e.g. user"
-                      value={c.value}
-                      onChange={(e) => setConst(i, { value: e.target.value })}
-                    />
-                    <Button
-                      variant="secondary"
-                      size="icon-sm"
-                      className="shrink-0"
-                      onClick={() => setConstants((s) => s.filter((_, idx) => idx !== i))}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                );
-              })}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setConstants((s) => [...s, { toColumn: "", side: "target", value: "" }])}
-              >
-                + Add constant filter
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Label (optional)</label>
-              <Input placeholder="e.g. Owner" value={label} onChange={(e) => setLabel(e.target.value)} />
-            </div>
-            <div>
-              <label className="label">AI join hint (optional)</label>
-              <Input
-                placeholder="free-text for complex joins"
-                value={joinHint}
-                onChange={(e) => setJoinHint(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {error && (
-            <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button disabled={!canAdd || saving} onClick={submit}>
-              {saving ? "Adding…" : "Add relationship"}
-            </Button>
+              );
+            })}
             <Button
               variant="secondary"
-              onClick={() => {
-                reset();
-                setAdding(false);
-              }}
+              size="sm"
+              onClick={() => setConstants((s) => [...s, { toColumn: "", side: "target", value: "" }])}
             >
-              Cancel
+              + Add constant filter
             </Button>
           </div>
-        </Card>
-      )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Label (optional)</label>
+            <Input placeholder="e.g. Owner" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">AI join hint (optional)</label>
+            <Input
+              placeholder="free-text for complex joins"
+              value={joinHint}
+              onChange={(e) => setJoinHint(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {error && (
+          <p className="text-[12px]" style={{ color: "var(--destructive)" }}>
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button disabled={!canAdd || saving} onClick={submit}>
+            {saving ? "Adding…" : "Add relationship"}
+          </Button>
+          <Button variant="secondary" onClick={reset}>
+            Reset
+          </Button>
+        </div>
+      </Card>
+
+      <div>
+        {/* user-added (custom) relationships lead — the whole point of this
+            tab is managing these, so they shouldn't be buried below the
+            read-only native/incoming sections every table already has. */}
+        <div
+          className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
+          Virtual relationships
+        </div>
+        {meta.virtualFks.length === 0 && !saving && (
+          <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
+            No relationships yet.
+          </p>
+        )}
+        {meta.virtualFks.map((v) => (
+          <Card
+            key={v.id}
+            size="sm"
+            className={`px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2 transition-opacity ${
+              deletingId === v.id ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
+            <div className="min-w-0">
+              {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
+              <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
+                {v.fromSchema}.{v.fromTable} → {vfkSummary(v, resolveConnectionName)}
+              </span>
+            </div>
+            {deletingId === v.id ? (
+              <span className="text-[12px] text-muted-foreground animate-pulse shrink-0 self-center">Deleting…</span>
+            ) : (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button variant="secondary" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
+                      ✕
+                    </Button>
+                  }
+                />
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Relationship</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete this relationship? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction variant="destructive" onClick={() => remove(v.id)}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </Card>
+        ))}
+
+        {saving && (
+          <Card size="sm" className="px-3 py-2.5 mb-2 opacity-50 animate-pulse flex-row items-center gap-2">
+            <div className="flex-1 space-y-1">
+              <div className="h-4 bg-muted rounded w-1/4" />
+              <div className="h-3 bg-muted rounded w-3/4" />
+            </div>
+          </Card>
+        )}
+
+        {meta.table.foreignKeys.length > 0 && (
+          <div className="mt-4">
+            <div
+              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+              style={{ color: "var(--muted-foreground-faint)" }}
+            >
+              Native foreign keys (from the database)
+            </div>
+            {meta.table.foreignKeys.map((fk) => (
+              <Card key={fk.constraintName} size="sm" className="px-3 py-2.5 mb-2">
+                <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
+                  {fk.columns.join(", ")} → {fk.referencedSchema}.{fk.referencedTable} (
+                  {fk.referencedColumns.join(", ")})
+                </span>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {incomingFks.length > 0 && (
+          <div className="mt-4">
+            <div
+              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+              style={{ color: "var(--muted-foreground-faint)" }}
+            >
+              Incoming foreign keys (from other tables)
+            </div>
+            {incomingFks.map(({ fromTable, fk }) => (
+              <Card key={`${fk.constraintName}-${fromTable}`} size="sm" className="px-3 py-2.5 mb-2">
+                <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
+                  {fromTable}.{fk.columns.join(", ")} → {fk.referencedColumns.join(", ")}
+                </span>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

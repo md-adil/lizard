@@ -27,9 +27,11 @@ export function isPattern(s: string): boolean {
   return picomatch.scan(s).isGlob;
 }
 
-// Does this virtual FK apply when browsing connection.schema.table?
-export function vfkMatchesSource(v: VirtualFk, connection: string, schema: string, table: string): boolean {
-  return v.fromConnection === connection && matchesGlob(v.fromSchema, schema) && matchesGlob(v.fromTable, table);
+// Does this virtual FK apply when browsing connectionId.schema.table?
+// fromConnection/toConnection store the connection's stable id, not its
+// (mutable, renameable) name — callers must resolve a name to an id first.
+export function vfkMatchesSource(v: VirtualFk, connectionId: string, schema: string, table: string): boolean {
+  return v.fromConnection === connectionId && matchesGlob(v.fromSchema, schema) && matchesGlob(v.fromTable, table);
 }
 
 // Concrete target schema for a source row in `sourceSchema`.
@@ -48,7 +50,10 @@ export function vfkTargetColumn(v: VirtualFk): string | undefined {
 }
 
 // Compact human summary, e.g. "billing.$schema.customers ON user_id = id".
-export function vfkSummary(v: VirtualFk): string {
+// `toConnectionName` resolves v.toConnection (an id) to a display name —
+// callers own that lookup since it needs the catalog, which this file
+// deliberately stays free of (pure helpers, no I/O — see file header).
+export function vfkSummary(v: VirtualFk, toConnectionName: (id: string) => string): string {
   const pairs = v.pairs.map((p) => `${p.from} = ${p.to}`).join(", ");
   const consts = v.constants
     .map((c) => {
@@ -56,7 +61,7 @@ export function vfkSummary(v: VirtualFk): string {
       return `${tbl}.${c.toColumn}='${c.value}'`;
     })
     .join(", ");
-  const target = `${v.toConnection}.${v.toSchema}.${v.toTable}`;
+  const target = `${toConnectionName(v.toConnection)}.${v.toSchema}.${v.toTable}`;
   return [`${target} ON ${pairs}`, consts ? `WHERE ${consts}` : "", v.joinHint ? `HINT: ${v.joinHint}` : ""]
     .filter(Boolean)
     .join(" ");
