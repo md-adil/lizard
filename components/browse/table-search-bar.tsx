@@ -69,8 +69,11 @@ export function TableSearchBar({
           <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{filterOpen ? "▲" : "▼"}</span>
         </Button>
 
-        {/* search input group: icon + input + clear + search button joined */}
-        <div className="flex flex-1" style={{ opacity: searchableColCount === 0 ? 0.5 : 1 }}>
+        {/* search input group: icon + input + clear + search button joined.
+            No manual opacity here — InputGroup/Input already dim themselves
+            on :disabled (has-disabled:opacity-50), stacking another 0.5 on
+            top made the placeholder nearly unreadable. */}
+        <div className="flex flex-1">
           <InputGroup className="rounded-r-none">
             <InputGroupAddon align="inline-start">
               <Search className="size-3.5" />
