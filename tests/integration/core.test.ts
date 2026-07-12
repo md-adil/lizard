@@ -14,7 +14,7 @@ const { runGuardedQuery } = await import("@/lib/execute");
 
 beforeAll(() => {
   initMetadataDb();
-  addConnection({
+  const users = addConnection({
     name: "users_service",
     engine: "postgres",
     host: "localhost",
@@ -27,7 +27,7 @@ beforeAll(() => {
     ssl: false,
     allowedSchemas: null,
   });
-  addConnection({
+  const orders = addConnection({
     name: "orders_service",
     engine: "postgres",
     host: "localhost",
@@ -41,10 +41,11 @@ beforeAll(() => {
     allowedSchemas: null,
   });
   addVirtualFk({
-    fromConnection: "orders_service",
+    // stable connection ids, not names — see the VirtualFk type comment.
+    fromConnection: orders.id,
     fromSchema: "public",
     fromTable: "orders",
-    toConnection: "users_service",
+    toConnection: users.id,
     toSchema: "public",
     toTable: "customers",
     pairs: [{ from: "customer_id", to: "id" }],

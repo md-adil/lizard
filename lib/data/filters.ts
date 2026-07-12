@@ -197,8 +197,13 @@ export function buildFilterClause(
             const sym = f.op === "arraycontains" ? "?&" : "?|";
             parts.push(`${dialect.cast(col, "jsonb")} ${sym} ${dialect.cast(push(arr), "text[]")}`);
           } else if (dialect.engine === "mysql") {
+            // meta_tags-style columns are often plain TEXT/VARCHAR (not a
+            // native JSON column) carrying legacy data that predates the
+            // "tag" widget — JSON_CONTAINS/JSON_OVERLAPS throw on a row
+            // whose value isn't valid JSON instead of just not matching, so
+            // gate on JSON_VALID first (MySQL short-circuits AND per-row).
             const fn = f.op === "arraycontains" ? "JSON_CONTAINS" : "JSON_OVERLAPS";
-            parts.push(`${fn}(${col}, ${push(JSON.stringify(arr))})`);
+            parts.push(`(JSON_VALID(${col}) AND ${fn}(${col}, ${push(JSON.stringify(arr))}))`);
           }
           break;
         }

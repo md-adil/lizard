@@ -164,11 +164,13 @@ export function listVirtualFks(): VirtualFk[] {
 // the per-schema catalog endpoint so a page for connection A doesn't pull in
 // every other connection's relationships. `fromSchema`/`toSchema` may still
 // be glob patterns, so callers filter down to an exact schema/table
-// themselves (see vfkMatchesSource).
-export function listVirtualFksForConnection(connectionName: string): VirtualFk[] {
+// themselves (see vfkMatchesSource). from_connection/to_connection store the
+// connection's stable id (not its mutable name) — renaming a connection must
+// not orphan the relationships pointing at it.
+export function listVirtualFksForConnection(connectionId: string): VirtualFk[] {
   const rows = getDb()
     .prepare("SELECT * FROM virtual_fks WHERE from_connection = ? OR to_connection = ?")
-    .all(connectionName, connectionName) as Record<string, unknown>[];
+    .all(connectionId, connectionId) as Record<string, unknown>[];
   return rows.map(mapVirtualFkRow);
 }
 

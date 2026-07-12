@@ -46,11 +46,20 @@ export function serializeCatalog(catalog: Catalog, scope?: string[]): string {
       }
     }
   }
+  // fromConnection/toConnection store connection ids, not names — resolve to
+  // names for both the `scope` filter (a list of names) and display.
+  const connectionNameById = new Map(catalog.connections.map((c) => [c.connectionId, c.connectionName]));
+  const resolveConnectionName = (id: string) => connectionNameById.get(id) ?? id;
   const vfks = catalog.virtualFks.filter(
-    (v) => !scope || scope.length === 0 || (scope.includes(v.fromConnection) && scope.includes(v.toConnection)),
+    (v) =>
+      !scope ||
+      scope.length === 0 ||
+      (scope.includes(resolveConnectionName(v.fromConnection)) && scope.includes(resolveConnectionName(v.toConnection))),
   );
   for (const v of vfks) {
-    parts.push(`VIRTUAL FK: ${v.fromConnection}.${v.fromSchema}.${v.fromTable} → ${vfkSummary(v)}`);
+    parts.push(
+      `VIRTUAL FK: ${resolveConnectionName(v.fromConnection)}.${v.fromSchema}.${v.fromTable} → ${vfkSummary(v, resolveConnectionName)}`,
+    );
   }
   return parts.join("\n");
 }

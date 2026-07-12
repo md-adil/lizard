@@ -198,9 +198,39 @@ export function DataGrid({
             <Columns3 className="size-3.5" />
             Columns
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="min-w-52">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              <div className="flex items-center justify-between gap-2 px-2 py-1">
+                <DropdownMenuLabel className="p-0 whitespace-nowrap">Toggle columns</DropdownMenuLabel>
+                <div className="flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[11px]"
+                    onClick={() =>
+                      table
+                        .getAllLeafColumns()
+                        .filter((c) => c.id !== "__select")
+                        .forEach((c) => c.toggleVisibility(true))
+                    }
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[11px]"
+                    onClick={() =>
+                      table
+                        .getAllLeafColumns()
+                        .filter((c) => c.id !== "__select")
+                        .forEach((c) => c.toggleVisibility(false))
+                    }
+                  >
+                    None
+                  </Button>
+                </div>
+              </div>
               <DropdownMenuSeparator />
               {table
                 .getAllLeafColumns()

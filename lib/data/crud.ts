@@ -332,9 +332,12 @@ async function fetchFkLabels(
       constants: [],
     });
   }
-  const vfks = listVirtualFks().filter((v) => vfkMatchesSource(v, conn.name, table.schema, table.name));
+  // fromConnection/toConnection store connection ids, not names.
+  const vfks = listVirtualFks().filter((v) => vfkMatchesSource(v, conn.id, table.schema, table.name));
   for (const v of vfks) {
     if (v.pairs.length === 0) continue;
+    // getConnection accepts either an id or a name, so this needs no change
+    // even though v.toConnection is now an id, not a name.
     const target = getConnection(v.toConnection);
     if (!target) continue;
     jobs.push({

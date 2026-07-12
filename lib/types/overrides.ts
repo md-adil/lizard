@@ -13,10 +13,12 @@ export interface VfkConstant {
 
 export interface VirtualFk {
   id: string;
-  fromConnection: string; // connection name
+  // connection id, not name — a name is mutable (rename in Settings), which
+  // would silently orphan this relationship if it were the join key instead.
+  fromConnection: string;
   fromSchema: string;
   fromTable: string;
-  toConnection: string;
+  toConnection: string; // connection id, same reasoning
   // toSchema may be a literal, or the sentinel "$schema" meaning "resolve in the
   toSchema: string;
   toTable: string;

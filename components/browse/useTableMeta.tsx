@@ -121,7 +121,9 @@ export function buildTableMeta(
   const schema = schemaMeta.name;
   const tOverride = resolveTableOverride(schemaMeta.tableOverrides, conn.connectionId, schema, tableName);
   const cOverrides = resolveColumnOverrides(schemaMeta.columnOverrides, conn.connectionId, schema, tableName);
-  const vfks = schemaMeta.virtualFks.filter((v) => vfkMatchesSource(v, connection, schema, tableName));
+  // fromConnection/toConnection on a VirtualFk store the connection id, not
+  // its (mutable) name — match against conn.connectionId, not the name param.
+  const vfks = schemaMeta.virtualFks.filter((v) => vfkMatchesSource(v, conn.connectionId, schema, tableName));
 
   const hasSchema = connectionSupportsSchemas(catalog, connection);
 
@@ -143,12 +145,20 @@ export function buildTableMeta(
           column: realFk.referencedColumns[0],
         }
       : vfk
-        ? {
-            connection: vfk.toConnection,
-            schema: connectionSupportsSchemas(catalog, vfk.toConnection) ? resolveToSchema(vfk, schema) : undefined,
-            table: vfk.toTable,
-            column: vfkTargetColumn(vfk)!,
-          }
+        ? (() => {
+            // vfk.toConnection is a connection id — every downstream consumer
+            // of ref.connection (routing, dataApiUrl, connectionSupportsSchemas)
+            // expects a name, so resolve it here, once, at the boundary.
+            const toConnName = catalog.connections.find((c) => c.connectionId === vfk.toConnection)?.connectionName;
+            return toConnName
+              ? {
+                  connection: toConnName,
+                  schema: connectionSupportsSchemas(catalog, toConnName) ? resolveToSchema(vfk, schema) : undefined,
+                  table: vfk.toTable,
+                  column: vfkTargetColumn(vfk)!,
+                }
+              : null;
+          })()
         : null;
     return {
       col,

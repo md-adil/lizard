@@ -21,7 +21,7 @@ describe("Virtual FK summary and formatting", () => {
       joinHint: null,
     };
 
-    const summary = vfkSummary(vfk);
+    const summary = vfkSummary(vfk, (id) => id);
     expect(summary).toContain("comments.commentable_type='App\\Models\\Post'");
     expect(summary).toContain("posts.status='published'");
     expect(summary).toContain("local.public.posts ON commentable_id = id");
