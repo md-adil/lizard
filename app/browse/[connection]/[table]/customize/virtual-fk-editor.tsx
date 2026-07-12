@@ -5,7 +5,7 @@
 // asks for the target and the join. Composite keys and constant filters are
 // always available.
 import { useState, useMemo } from "react";
-import type { VfkPair, VfkConstant } from "@/lib/types";
+import type { VfkPair, VfkConstant, TableInfo } from "@/lib/types";
 import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import {
 export function VirtualFkEditor({
   meta,
   catalog,
+  schemaTables,
   fromSchema,
   fromTable,
   defaultToSchema,
@@ -54,6 +55,9 @@ export function VirtualFkEditor({
 }: {
   meta: TableMeta;
   catalog: CatalogResponse;
+  // Every table in this table's own schema — scanned for real FKs pointing
+  // back at this table, so the "incoming" list below has something to read.
+  schemaTables: TableInfo[];
   // Source side, fixed by the page scope (a concrete schema or a glob pattern).
   fromSchema: string;
   fromTable: string;
@@ -89,10 +93,7 @@ export function VirtualFkEditor({
   const targetColumns = targetTable?.columns ?? [];
   // O(1) name lookups for the join-pair pickers below instead of re-scanning
   // the column list (which can run into the hundreds) on every render.
-  const sourceColumnsByName = useMemo(
-    () => new Map(meta.table.columns.map((c) => [c.name, c])),
-    [meta.table.columns],
-  );
+  const sourceColumnsByName = useMemo(() => new Map(meta.table.columns.map((c) => [c.name, c])), [meta.table.columns]);
   const targetColumnsByName = useMemo(() => new Map(targetColumns.map((c) => [c.name, c])), [targetColumns]);
 
   const pairsFilled = pairs.length > 0 && pairs.every((p) => p.from && p.to);
@@ -192,6 +193,17 @@ export function VirtualFkEditor({
   // the existing-relationships list (vfkSummary stays catalog-free/pure).
   const connectionNameById = new Map(catalog.connections.map((c) => [c.connectionId, c.connectionName]));
   const resolveConnectionName = (id: string) => connectionNameById.get(id) ?? id;
+
+  // Real FKs on *other* tables in this schema that point back at this table —
+  // read-only, same reasoning as the outgoing native FK list below (DB-enforced,
+  // not editable here).
+  const incomingFks = schemaTables
+    .filter((t) => t.name !== meta.table.name)
+    .flatMap((t) =>
+      t.foreignKeys
+        .filter((fk) => fk.referencedSchema === meta.resolvedSchema && fk.referencedTable === meta.table.name)
+        .map((fk) => ({ fromTable: t.name, fk })),
+    );
 
   return (
     <div className="grid md:grid-cols-2 gap-6 items-start">
@@ -450,6 +462,15 @@ export function VirtualFkEditor({
       </Card>
 
       <div>
+        {/* user-added (custom) relationships lead — the whole point of this
+            tab is managing these, so they shouldn't be buried below the
+            read-only native/incoming sections every table already has. */}
+        <div
+          className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+          style={{ color: "var(--muted-foreground-faint)" }}
+        >
+          Virtual relationships
+        </div>
         {meta.virtualFks.length === 0 && !saving && (
           <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
             No relationships yet.
@@ -506,6 +527,43 @@ export function VirtualFkEditor({
               <div className="h-3 bg-muted rounded w-3/4" />
             </div>
           </Card>
+        )}
+
+        {meta.table.foreignKeys.length > 0 && (
+          <div className="mt-4">
+            <div
+              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+              style={{ color: "var(--muted-foreground-faint)" }}
+            >
+              Native foreign keys (from the database)
+            </div>
+            {meta.table.foreignKeys.map((fk) => (
+              <Card key={fk.constraintName} size="sm" className="px-3 py-2.5 mb-2">
+                <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
+                  {fk.columns.join(", ")} → {fk.referencedSchema}.{fk.referencedTable} (
+                  {fk.referencedColumns.join(", ")})
+                </span>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {incomingFks.length > 0 && (
+          <div className="mt-4">
+            <div
+              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+              style={{ color: "var(--muted-foreground-faint)" }}
+            >
+              Incoming foreign keys (from other tables)
+            </div>
+            {incomingFks.map(({ fromTable, fk }) => (
+              <Card key={`${fk.constraintName}-${fromTable}`} size="sm" className="px-3 py-2.5 mb-2">
+                <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
+                  {fromTable}.{fk.columns.join(", ")} → {fk.referencedColumns.join(", ")}
+                </span>
+              </Card>
+            ))}
+          </div>
         )}
       </div>
     </div>

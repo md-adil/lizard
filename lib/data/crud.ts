@@ -14,6 +14,7 @@ import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnectionCatalog } from "@/lib/introspect/catalog";
 import { guessDisplayColumn } from "@/lib/introspect/heuristics";
 import { buildFilterClause, type FilterCondition, type Combinator } from "@/lib/data/filters";
+import { matchTargetFor, buildMatchClause } from "@/lib/data/search-match";
 
 export class CrudError extends Error {
   status: number;
@@ -44,21 +45,20 @@ export interface ListParams {
   search?: string; // full-text search across text-like columns (only for small tables)
 }
 
-const TEXT_LIKE_TYPES = new Set(["text", "varchar", "bpchar", "citext", "name", "char"]);
-const SEARCH_ROW_LIMIT = 500_000;
-
-// `term ILIKE any of the text columns`, as an OR-chain.
-//
-// Every column gets its own bound value. Postgres would let one `$n` be
-// referenced by all of them, but MySQL's `?` is strictly positional — reusing a
-// single placeholder leaves the extra `?`s unbound, and the statement fails to
-// parse. One value per placeholder is the only form that works on both.
-function buildSearchClause(textCols: { name: string }[], term: string, values: unknown[], dialect: Dialect): string {
-  const parts = textCols.map((c) => {
-    values.push(`%${term}%`);
-    return dialect.caseInsensitiveLike(dialect.quoteIdent(c.name), dialect.placeholder(values.length));
-  });
-  return `(${parts.join(" OR ")})`;
+// Builds the search WHERE clause for `params.search` — indexed columns only
+// (see lib/data/search-match.ts), so there's no row-count gate here anymore:
+// unlike a full-column ILIKE scan, an indexed lookup doesn't get slower as
+// the table grows.
+function searchClauseFor(
+  conn: ConnectionConfig,
+  table: TableInfo,
+  term: string,
+  values: unknown[],
+  dialect: Dialect,
+): string {
+  const target = matchTargetFor(table, term, primaryKeyColumnsFor(conn, table));
+  if (target.columns.length === 0) return "";
+  return buildMatchClause(target, term, values, dialect);
 }
 
 async function resolveTable(connectionName: string, schema: string | undefined, table: string) {
@@ -79,12 +79,22 @@ function assertColumn(table: TableInfo, column: string): void {
   }
 }
 
-function displayColumnFor(conn: ConnectionConfig, table: TableInfo): string | null {
+export function displayColumnFor(conn: ConnectionConfig, table: TableInfo): string | null {
   const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
   if (override?.displayColumn && table.columns.some((c) => c.name === override.displayColumn)) {
     return override.displayColumn;
   }
   return guessDisplayColumn(table);
+}
+
+// The table's real primary key, or — when introspection found none — the
+// "pretend" primary key override (see TableOverride.primaryKey, set on the
+// customize page for tables missing a real PK/unique constraint). Search
+// treats either as a whole-value identifier: see matchTargetFor.
+export function primaryKeyColumnsFor(conn: ConnectionConfig, table: TableInfo): string[] {
+  if (table.primaryKey.length > 0) return table.primaryKey;
+  const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
+  return override?.primaryKey ?? [];
 }
 
 // ---------- list ----------
@@ -106,14 +116,7 @@ export async function listRows(params: ListParams) {
     );
     const allValues: unknown[] = [...filterValues];
 
-    let searchClause = "";
-    if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
-      const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
-      const textCols = table.columns.filter((c) => TEXT_LIKE_TYPES.has(c.udtName));
-      if (textCols.length > 0) {
-        searchClause = buildSearchClause(textCols, term, allValues, dialect);
-      }
-    }
+    const searchClause = params.search ? searchClauseFor(conn, table, params.search, allValues, dialect) : "";
 
     const clauses = [filterClause, searchClause].filter(Boolean);
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -183,14 +186,7 @@ export async function exportRows(
     );
     const allValues: unknown[] = [...filterValues];
 
-    let searchClause = "";
-    if (params.search && table.rowEstimate < SEARCH_ROW_LIMIT) {
-      const term = params.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
-      const textCols = table.columns.filter((c) => TEXT_LIKE_TYPES.has(c.udtName));
-      if (textCols.length > 0) {
-        searchClause = buildSearchClause(textCols, term, allValues, dialect);
-      }
-    }
+    const searchClause = params.search ? searchClauseFor(conn, table, params.search, allValues, dialect) : "";
 
     const clauses = [filterClause, searchClause].filter(Boolean);
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";

@@ -232,7 +232,7 @@ export function buildFilterClause(
 }
 
 // escape LIKE metacharacters in user input for contains/startswith/endswith
-function escapeLike(s: string, escapeChar: string): string {
+export function escapeLike(s: string, escapeChar: string): string {
   const re = new RegExp(`[${escapeChar.replace(/\\/g, "\\\\")}%_]`, "g");
   return s.replace(re, (m) => `${escapeChar}${m}`);
 }

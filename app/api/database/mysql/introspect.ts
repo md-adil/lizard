@@ -60,6 +60,16 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
     [db],
   );
 
+  // every column covered by any index (PK/unique/plain KEY alike) —
+  // information_schema.statistics has one row per (index, column); DISTINCT
+  // collapses a column indexed by multiple indexes to one row.
+  const [indexRes] = await pool.query(
+    `SELECT DISTINCT table_name AS table_name, column_name AS column_name
+     FROM information_schema.statistics
+     WHERE table_schema = ?`,
+    [db],
+  );
+
   const tableMap = new Map<string, TableInfo>();
   for (const t of tablesRes as Row[]) {
     tableMap.set(t.name as string, {
@@ -73,6 +83,7 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       foreignKeys: [],
       uniqueConstraints: [],
       checkConstraints: [],
+      indexedColumns: [],
     });
   }
 
@@ -152,6 +163,11 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       };
       table.foreignKeys.push(fk);
     }
+  }
+
+  for (const r of indexRes as Row[]) {
+    const table = tableMap.get(r.table_name as string);
+    if (table) table.indexedColumns.push(r.column_name as string);
   }
 
   const tables = [...tableMap.values()];

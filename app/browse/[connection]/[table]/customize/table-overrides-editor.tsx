@@ -169,6 +169,7 @@ export function TableOverridesEditor({
   const [tableLabel, setTableLabel] = useState(tableOv?.label ?? "");
   const [displayCol, setDisplayCol] = useState(tableOv?.displayColumn ?? "");
   const [hidden, setHidden] = useState(tableOv?.hidden ?? false);
+  const [searchable, setSearchable] = useState(tableOv?.searchable ?? false);
   // meta.hasRealKey reflects introspection, unaffected by any pretend-PK
   // override already overlaid onto meta.table.primaryKey — using
   // meta.table.primaryKey.length here instead would make the picker
@@ -178,6 +179,7 @@ export function TableOverridesEditor({
   const [cols, setCols] = useState(columnsInit);
   const [saved, setSaved] = useState(false);
   const [optionsDialogFor, setOptionsDialogFor] = useState<string | null>(null);
+  const [colFilter, setColFilter] = useState("");
 
   // Re-seed every field when the scope itself is toggled (schema <-> pattern)
   // — the mount-time useState defaults above only apply once, so without this
@@ -193,6 +195,7 @@ export function TableOverridesEditor({
     setTableLabel(tableOv?.label ?? "");
     setDisplayCol(tableOv?.displayColumn ?? "");
     setHidden(tableOv?.hidden ?? false);
+    setSearchable(tableOv?.searchable ?? false);
     setPkCols(tableOv?.primaryKey ?? []);
     setCols(columnsInit());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -222,6 +225,7 @@ export function TableOverridesEditor({
           displayColumn: displayCol || null,
           label: tableLabel || null,
           primaryKey: !hasRealKey && pkCols.length ? pkCols : null,
+          searchable,
         }),
       });
       for (const c of cols) {
@@ -276,9 +280,13 @@ export function TableOverridesEditor({
               />
             </div>
           </div>
-          <label className="flex items-center gap-2 text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
+          <label className="flex items-center gap-2 text-[13px] mb-2" style={{ color: "var(--muted-foreground)" }}>
             <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
             Hide this table from the sidebar
+          </label>
+          <label className="flex items-center gap-2 text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
+            <input type="checkbox" checked={searchable} onChange={(e) => setSearchable(e.target.checked)} />
+            Include in global search (⌘K)
           </label>
 
           {!hasRealKey && (
@@ -310,87 +318,140 @@ export function TableOverridesEditor({
       </TabsContent>
 
       <TabsContent value="columns">
-        <WidgetsHelpDialog />
+        <div className="flex items-center justify-between mb-3">
+          <Input
+            placeholder="Filter columns…"
+            value={colFilter}
+            onChange={(e) => setColFilter(e.target.value)}
+            className="max-w-56"
+          />
+          <WidgetsHelpDialog />
+        </div>
         <div className="grid grid-cols-1  lg:grid-cols-2 xl:grid-cols-3 gap-2 mb-6">
-          {cols.map((c, i) => {
-            // "col type is enum": either natively (a real enum/check-IN
-            // constraint) or because the widget dropdown was set to "select".
-            const options = c.nativeOptions ?? c.customOptions;
-            const isEnum = c.nativeOptions !== null || c.widget === "select" || c.customOptions.length > 0;
-            return (
-              <Card key={c.name} size="sm" className="px-3 py-2.5 gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="code text-[12px] flex-1 truncate" title={c.name}>
-                    {c.name}
-                  </span>
-                  <Button variant="secondary" size="icon-sm" onClick={() => move(i, -1)}>
-                    ↑
-                  </Button>
-                  <Button variant="secondary" size="icon-sm" onClick={() => move(i, 1)}>
-                    ↓
-                  </Button>
-                </div>
-                <div className="flex gap-1">
-                  <Input
-                    placeholder="Label"
-                    value={c.label}
-                    onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
-                  />
-                  <WidgetSelect
-                    items={WIDGETS}
-                    value={WIDGETS.find((w) => w.value === c.widget) ?? WIDGETS[0]}
-                    onChange={(w) => setCols((s) => s.map((x, j) => (j === i ? { ...x, widget: w.value } : x)))}
-                    className="w-full"
-                  />
-                </div>
-                <div
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={c.hidden}
-                      onChange={(e) =>
-                        setCols((s) => s.map((x, j) => (j === i ? { ...x, hidden: e.target.checked } : x)))
-                      }
-                    />
-                    hidden
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={c.readonly}
-                      onChange={(e) =>
-                        setCols((s) => s.map((x, j) => (j === i ? { ...x, readonly: e.target.checked } : x)))
-                      }
-                    />
-                    readonly
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={c.redacted}
-                      onChange={(e) =>
-                        setCols((s) => s.map((x, j) => (j === i ? { ...x, redacted: e.target.checked } : x)))
-                      }
-                    />
-                    redacted
-                  </label>
-                  {isEnum && (
-                    <button
-                      type="button"
-                      className="hoverable"
-                      style={{ color: "var(--primary)" }}
-                      onClick={() => setOptionsDialogFor(c.name)}
+          {cols
+            .map((c, i) => ({ c, i }))
+            .filter(
+              ({ c }) =>
+                !colFilter ||
+                c.name.toLowerCase().includes(colFilter.toLowerCase()) ||
+                c.label.toLowerCase().includes(colFilter.toLowerCase()),
+            )
+            .map(({ c, i }) => {
+              // "col type is enum": either natively (a real enum/check-IN
+              // constraint) or because the widget dropdown was set to "select".
+              const options = c.nativeOptions ?? c.customOptions;
+              const isEnum = c.nativeOptions !== null || c.widget === "select" || c.customOptions.length > 0;
+              const nativeCol = meta.columns.find((x) => x.col.name === c.name)?.col;
+              const realFk = meta.table.foreignKeys.find((fk) => fk.columns.length === 1 && fk.columns[0] === c.name);
+              const isUnique = meta.table.uniqueConstraints.some((uc) => uc.includes(c.name));
+              return (
+                <Card key={c.name} size="sm" className="px-3 py-2.5 gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="code text-[12px] flex-1 truncate"
+                      title={nativeCol?.comment ? `${c.name} — ${nativeCol.comment}` : c.name}
                     >
-                      Options{options.length ? ` (${options.length})` : ""}…
-                    </button>
+                      {c.name}
+                    </span>
+                    {nativeCol && (
+                      <span
+                        className="code shrink-0"
+                        style={{ fontSize: 10, color: "var(--muted-foreground-faint)" }}
+                        title={`${nativeCol.dataType}${nativeCol.nullable ? "" : " · not null"}`}
+                      >
+                        {nativeCol.udtName}
+                        {nativeCol.maxLength ? `(${nativeCol.maxLength})` : ""}
+                      </span>
+                    )}
+                    <Button variant="secondary" size="icon-sm" onClick={() => move(i, -1)}>
+                      ↑
+                    </Button>
+                    <Button variant="secondary" size="icon-sm" onClick={() => move(i, 1)}>
+                      ↓
+                    </Button>
+                  </div>
+                  {(realFk || isUnique || nativeCol?.default) && (
+                    <div
+                      className="flex flex-wrap gap-x-2 gap-y-0.5 code"
+                      style={{ fontSize: 10.5, color: "var(--muted-foreground-faint)" }}
+                    >
+                      {realFk && (
+                        <span
+                          className="truncate"
+                          title={`FK → ${realFk.referencedSchema}.${realFk.referencedTable}.${realFk.referencedColumns[0]}`}
+                        >
+                          FK → {realFk.referencedTable}.{realFk.referencedColumns[0]}
+                        </span>
+                      )}
+                      {isUnique && <span>UNIQUE</span>}
+                      {nativeCol?.default && (
+                        <span className="truncate max-w-40" title={`default: ${nativeCol.default}`}>
+                          default: {nativeCol.default}
+                        </span>
+                      )}
+                    </div>
                   )}
-                </div>
-              </Card>
-            );
-          })}
+                  <div className="flex gap-1">
+                    <Input
+                      placeholder="Label"
+                      value={c.label}
+                      onChange={(e) => setCols((s) => s.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                    />
+                    <WidgetSelect
+                      items={WIDGETS}
+                      value={WIDGETS.find((w) => w.value === c.widget) ?? WIDGETS[0]}
+                      onChange={(w) => setCols((s) => s.map((x, j) => (j === i ? { ...x, widget: w.value } : x)))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={c.hidden}
+                        onChange={(e) =>
+                          setCols((s) => s.map((x, j) => (j === i ? { ...x, hidden: e.target.checked } : x)))
+                        }
+                      />
+                      hidden
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={c.readonly}
+                        onChange={(e) =>
+                          setCols((s) => s.map((x, j) => (j === i ? { ...x, readonly: e.target.checked } : x)))
+                        }
+                      />
+                      readonly
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={c.redacted}
+                        onChange={(e) =>
+                          setCols((s) => s.map((x, j) => (j === i ? { ...x, redacted: e.target.checked } : x)))
+                        }
+                      />
+                      redacted
+                    </label>
+                    {isEnum && (
+                      <button
+                        type="button"
+                        className="hoverable"
+                        style={{ color: "var(--primary)" }}
+                        onClick={() => setOptionsDialogFor(c.name)}
+                      >
+                        Options{options.length ? ` (${options.length})` : ""}…
+                      </button>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
         </div>
 
         <SaveButton save={save} saved={saved} />

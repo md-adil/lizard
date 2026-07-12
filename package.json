@@ -24,6 +24,7 @@
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
     "kysely": "^0.29.2",
+    "lru-cache": "^11.5.2",
     "lucide-react": "^1.23.0",
     "marked": "^18.0.6",
     "mysql2": "^3.22.6",

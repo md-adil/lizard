@@ -163,7 +163,6 @@ export default function CustomizePage() {
         />
 
         <TabsContent value="relationships">
-          <SectionTitle>Virtual relationships</SectionTitle>
           <p className="text-[12.5px] mb-3" style={{ color: "var(--muted-foreground)" }}>
             Link this table to another — composite keys, constant filters, case-insensitive matches. Powers reference
             labels/pickers and tells the AI how to join.
@@ -171,6 +170,7 @@ export default function CustomizePage() {
           <VirtualFkEditor
             meta={meta}
             catalog={catalog}
+            schemaTables={schemaMeta.tables}
             fromSchema={saveSchema}
             fromTable={meta.table.name}
             defaultToSchema={scope === "pattern" ? SAME_SCHEMA : meta.resolvedSchema}

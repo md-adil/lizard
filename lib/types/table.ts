@@ -53,6 +53,11 @@ export interface TableInfo {
   foreignKeys: ForeignKeyInfo[];
   uniqueConstraints: string[][];
   checkConstraints: CheckConstraintInfo[];
+  // every column covered by any index (PK, unique, or plain/secondary) —
+  // the cheap-to-search set global search narrows to (see
+  // lib/data/global-search.ts). Not tied to a specific index/constraint,
+  // just "is this column indexed at all".
+  indexedColumns: string[];
 }
 
 export interface SchemaCatalog {

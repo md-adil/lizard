@@ -138,6 +138,23 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     [schemaNames],
   );
 
+  // every column covered by any index (not just PK/unique — plain/secondary
+  // indexes too) — a.attnum > 0 excludes system columns; expression-index
+  // entries have no matching pg_attribute row (indkey holds 0 for those
+  // positions) and are silently dropped by the join, which is fine — an
+  // expression isn't a literal column global search could point at anyway.
+  const indexRes = await pool.query(
+    `SELECT n.nspname AS schema, rel.relname AS table,
+            array_agg(DISTINCT a.attname::text) AS columns
+     FROM pg_index idx
+     JOIN pg_class rel ON rel.oid = idx.indrelid
+     JOIN pg_namespace n ON n.oid = rel.relnamespace
+     JOIN pg_attribute a ON a.attrelid = idx.indrelid AND a.attnum = ANY(idx.indkey) AND a.attnum > 0
+     WHERE n.nspname = ANY($1)
+     GROUP BY n.nspname, rel.relname`,
+    [schemaNames],
+  );
+
   // assemble
   const tableMap = new Map<string, TableInfo>();
   for (const t of tablesRes.rows) {
@@ -152,6 +169,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
       foreignKeys: [],
       uniqueConstraints: [],
       checkConstraints: [],
+      indexedColumns: [],
     });
   }
 
@@ -197,6 +215,11 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     } else if (con.contype === "c") {
       table.checkConstraints.push(parseCheck(con.conname, con.definition, con.columns));
     }
+  }
+
+  for (const r of indexRes.rows) {
+    const table = tableMap.get(`${r.schema}.${r.table}`);
+    if (table && r.columns) table.indexedColumns = r.columns;
   }
 
   const bySchema = new Map<string, SchemaCatalog>();

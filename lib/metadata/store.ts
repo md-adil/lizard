@@ -228,6 +228,7 @@ export function getTableOverride(connectionId: string, schema: string, table: st
     displayColumn: (r.display_column as string) || null,
     label: (r.label as string) || null,
     primaryKey: parseJsonColumn<string[]>(r.primary_key),
+    searchable: !!r.searchable,
   };
 }
 
@@ -240,6 +241,7 @@ function mapTableOverrideRow(r: Record<string, unknown>): TableOverride {
     displayColumn: (r.display_column as string) || null,
     label: (r.label as string) || null,
     primaryKey: parseJsonColumn<string[]>(r.primary_key),
+    searchable: !!r.searchable,
   };
 }
 
@@ -261,11 +263,11 @@ export function listTableOverridesForConnection(connectionId: string): TableOver
 export function setTableOverride(o: TableOverride): void {
   getDb()
     .prepare(
-      `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label, primary_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label, primary_key, searchable)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name)
        DO UPDATE SET hidden=excluded.hidden, display_column=excluded.display_column, label=excluded.label,
-                     primary_key=excluded.primary_key`,
+                     primary_key=excluded.primary_key, searchable=excluded.searchable`,
     )
     .run(
       o.connectionId,
@@ -275,6 +277,7 @@ export function setTableOverride(o: TableOverride): void {
       o.displayColumn,
       o.label,
       o.primaryKey ? JSON.stringify(o.primaryKey) : null,
+      o.searchable ? 1 : 0,
     );
 }
 

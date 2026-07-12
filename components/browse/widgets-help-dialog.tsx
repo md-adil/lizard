@@ -34,8 +34,10 @@ const WIDGET_DESCRIPTIONS: Record<string, string> = {
   email: "Email link. Renders a text input in forms and a clickable mailto: link with icon in the grid.",
   percent: "Percentage slider. Renders a slider + number box in forms and a visual progress bar in the grid.",
   rating: "Star rating. Renders an interactive 5-star picker in forms and filled/empty amber stars in the grid.",
-  currency: "Currency text. Renders a numeric field with a '$' symbol prefix in forms and localized currency in the grid.",
-  markdown: "Markdown editor. Renders styled markdown text via 'marked' library in cells and tabbed editor/preview in forms.",
+  currency:
+    "Currency text. Renders a numeric field with a '$' symbol prefix in forms and localized currency in the grid.",
+  markdown:
+    "Markdown editor. Renders styled markdown text via 'marked' library in cells and tabbed editor/preview in forms.",
   avatar: "User avatar. Renders a round profile image uploader/URL, or initials badge.",
   timezone: "Timezone picker. Renders local timezone list selection with active offsets.",
   tag: "Custom Tag. Renders dynamically colored tag pills in the grid, and autocompletes with existing database values in forms.",
@@ -44,16 +46,18 @@ const WIDGET_DESCRIPTIONS: Record<string, string> = {
 export function WidgetsHelpDialog() {
   return (
     <Dialog>
-      <DialogTrigger render={
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          className="text-muted-foreground hover:text-foreground shrink-0 animate-in fade-in-0 duration-200"
-          title="Widget Guide"
-        >
-          <HelpCircle className="size-3.5" />
-        </Button>
-      } />
+      <DialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground hover:text-foreground shrink-0 animate-in fade-in-0 duration-200"
+            title="Widget Guide"
+          >
+            <HelpCircle className="size-3.5" />
+          </Button>
+        }
+      />
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Widget Guide</DialogTitle>

@@ -46,6 +46,10 @@ export interface TableOverride {
   // fallback in pkWhere) columns to match a row on. Ignored when the table
   // already has a real PK/unique constraint.
   primaryKey: string[] | null;
+  // opts this table into cross-table global search (see lib/data/global-search.ts)
+  // — off by default, since scanning every table is the exact unbounded
+  // fan-out that feature is designed to avoid.
+  searchable: boolean;
 }
 
 export interface ColumnOverride {

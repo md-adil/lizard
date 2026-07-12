@@ -357,7 +357,7 @@ export default function TablePage() {
         <TableSearchBar
           columns={meta.columns.filter((c) => !c.hidden)}
           target={{ connection: params.connection, schema: meta.schema, table: params.table }}
-          rowEstimate={meta.table.rowEstimate}
+          indexedColumns={meta.table.indexedColumns}
           filterSet={filterSet}
           onFilterChange={(s) => {
             setFilterSet(s);
