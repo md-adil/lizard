@@ -80,7 +80,7 @@ const SK_WIDTHS = [72, 55, 88, 64, 91, 48, 76, 60, 83, 44];
 // initial width heuristic: short types narrow, references/text wider
 function defaultWidth(cm: ColumnMeta): number {
   if (["bool", "int2", "int4", "int8", "date"].includes(cm.col.udtName)) return 120;
-  if (cm.widget === "reference") return 230;
+  if (cm.ref) return 230;
   if (cm.widget === "datetime") return 180;
   if (cm.widget === "textarea" || cm.widget === "json") return 300;
   return 170;

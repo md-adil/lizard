@@ -106,15 +106,20 @@ function isDateLikeUdt(udtName: string): boolean {
 
 // The ORDER BY to use when a request specifies no explicit sort: the
 // customize-page "Grid settings" default sort column if one is set, else the
-// table's last (highest-ordinal) date/timestamp column, descending — an
-// unsorted browse is far more often "show me the newest rows" than "show me
-// primary-key order" — else null (caller falls back to PK order).
+// table's last (highest-ordinal) *indexed* date/timestamp column, descending
+// — an unsorted browse is far more often "show me the newest rows" than
+// "show me primary-key order" — else null (caller falls back to PK order).
+// The auto-pick requires an index: sorting by an unindexed column forces a
+// full-table sort on every unsorted browse, which is exactly the silent
+// slow-query risk this fallback shouldn't introduce on its own. (The
+// admin-configured override above isn't gated on this — that's a deliberate
+// per-table choice, not a blanket heuristic applied everywhere.)
 function defaultSortFor(conn: ConnectionConfig, table: TableInfo): { column: string; dir: "asc" | "desc" } | null {
   const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
   if (override?.defaultSort && table.columns.some((c) => c.name === override.defaultSort)) {
     return { column: override.defaultSort, dir: override.defaultSortDir ?? "asc" };
   }
-  const dateCols = table.columns.filter((c) => isDateLikeUdt(c.udtName));
+  const dateCols = table.columns.filter((c) => isDateLikeUdt(c.udtName) && table.indexedColumns.includes(c.name));
   const lastDateCol = dateCols[dateCols.length - 1];
   return lastDateCol ? { column: lastDateCol.name, dir: "desc" } : null;
 }

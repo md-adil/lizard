@@ -73,7 +73,9 @@ export function guessRedacted(col: ColumnInfo): boolean {
 }
 
 export function guessWidget(table: TableInfo, col: ColumnInfo): Widget {
-  if (table.foreignKeys.some((fk) => fk.columns.length === 1 && fk.columns[0] === col.name)) return "reference";
+  // A single-column FK is flagged via ColumnMeta.ref (see useTableMeta.tsx),
+  // not a dedicated widget — every consumer that cares already checks `ref`,
+  // so the column just gets its normal type-based widget here.
   if (col.enumValues && col.enumValues.length > 0) return "select";
   const check = table.checkConstraints.find((c) => c.inColumn === col.name && c.inValues);
   if (check) return "select";

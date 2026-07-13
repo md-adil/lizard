@@ -12,6 +12,7 @@ import { RefCombobox } from "./ref-combobox";
 import { TagInput } from "./tag-input";
 import { AutocompleteInput } from "./autocomplete-input";
 import { RedactedValue } from "./redacted-value";
+import { RedactedInput } from "./redacted-input";
 import { MediaPreview, type MediaKind } from "./media-preview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -391,7 +392,7 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                       "(assigned by database)"
                     )}
                   </div>
-                ) : cm.widget === "reference" && cm.ref ? (
+                ) : cm.ref ? (
                   <ReferenceInput cm={cm} value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : cm.widget === "select" && cm.options ? (
                   <DataSelect
@@ -596,20 +597,20 @@ export function RowEditor({ meta, row, duplicateFrom, onClose }: Props) {
                     value={v}
                     onChange={(val) => setVal(name, val)}
                   />
+                ) : cm.redacted ? (
+                  <RedactedInput value={v} onChange={(nv) => setVal(name, nv)} />
                 ) : (
                   <Input
                     type={
-                      cm.redacted || cm.widget === "password"
-                        ? "password"
-                        : cm.widget === "date"
-                          ? "date"
-                          : cm.widget === "datetime"
-                            ? "datetime-local"
-                            : cm.widget === "email"
-                              ? "email"
-                              : cm.widget === "url"
-                                ? "url"
-                                : "text"
+                      cm.widget === "date"
+                        ? "date"
+                        : cm.widget === "datetime"
+                          ? "datetime-local"
+                          : cm.widget === "email"
+                            ? "email"
+                            : cm.widget === "url"
+                              ? "url"
+                              : "text"
                     }
                     placeholder={
                       cm.widget === "email"

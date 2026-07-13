@@ -166,7 +166,7 @@ export function buildTableMeta(
     return {
       col,
       label: o?.label || humanize(col.name),
-      widget: ref ? "reference" : widget,
+      widget,
       hidden: o?.hidden ?? false,
       hiddenInGrid: o?.hiddenInGrid ?? false,
       readonly: o?.readonly ?? guessReadonly(table, col),
@@ -355,9 +355,6 @@ export function formatCell(
       muted: false,
       icon: <CurrencyCell value={value} />,
     };
-  }
-  if (widget === "password") {
-    return { text: "••••••••", muted: true };
   }
   if (widget === "color") {
     return {
