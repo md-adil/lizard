@@ -5,6 +5,12 @@ import { Widget } from "../data/widgets";
 export type { Widget };
 
 export const NUMERIC_UDTS = new Set(["int2", "int4", "int8", "float4", "float8", "numeric", "money", "oid"]);
+// Columns whose native JS type is already a string, so a JS string needs no
+// SQL cast to be compared against one. MySQL's text types all normalize into
+// this set (varchar/char → "varchar", the four TEXT sizes → "text"); Postgres
+// enums keep their own type name and are deliberately absent, since a string
+// still has to be cast to reach them.
+export const TEXT_UDTS = new Set(["varchar", "text", "bpchar", "char", "name", "citext", "enum"]);
 const RANGE_UDTS = new Set([
   "int4range",
   "int8range",
