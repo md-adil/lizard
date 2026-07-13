@@ -36,7 +36,7 @@ export function arrayElementUdt(col: ColumnInfo): string {
   return col.udtName.startsWith("_") ? col.udtName.slice(1) : col.udtName;
 }
 const READONLY_NAME_PATTERNS = /^(created_at|updated_at|inserted_at|modified_at)$/i;
-const RED ACTED_NAME_PATTERNS = /password|passwd|pwd|secret|token|api_key|apikey|access_key|private_key|credential/i;
+const REDACTED_NAME_PATTERNS = /password|passwd|pwd|secret|token|api_key|apikey|access_key|private_key|credential/i;
 const DISPLAY_NAME_CANDIDATES = ["name", "title", "label", "email", "username", "slug"];
 
 // A table's real primary key if it has one, otherwise its first unique
