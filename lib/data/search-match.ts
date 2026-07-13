@@ -5,7 +5,7 @@
 // scan regardless of table size, which is exactly what indexed-only
 // scoping is meant to avoid), narrowed further by what the term looks like.
 import type { ColumnInfo, TableInfo } from "@/lib/types";
-import { NUMERIC_UDTS } from "@/lib/introspect/heuristics";
+import { NUMERIC_UDTS, TEXT_UDTS } from "@/lib/introspect/heuristics";
 import type { Dialect } from "@/app/api/database/driver";
 import { escapeLike } from "@/lib/data/filters";
 
@@ -100,7 +100,15 @@ export function buildMatchClause(target: MatchTarget, term: string, values: unkn
       // the column (`col::text = $1`) isn't sargable, so the planner can't
       // use an index on it. Casting a bound constant is free; the planner
       // folds it, and the comparison can still seek the index directly.
-      return `${dialect.quoteIdent(col.name)} = ${dialect.cast(dialect.castToText(push(term)), col.udtName)}`;
+      //
+      // A text column needs no cast at all: the term is already a string. On
+      // MySQL the cast is actively harmful there, since its result carries the
+      // connection's collation rather than the column's and the two then refuse
+      // to compare ("illegal mix of collations"). Bound bare, the parameter
+      // adopts the column's own collation.
+      const bound = push(term);
+      const rhs = TEXT_UDTS.has(col.udtName) ? bound : dialect.cast(dialect.castToText(bound), col.udtName);
+      return `${dialect.quoteIdent(col.name)} = ${rhs}`;
     }
     const c = dialect.quoteIdent(col.name);
     const startsField = dialect.caseInsensitiveLike(c, push(`${escaped}%`));

@@ -415,31 +415,37 @@ async function fetchFkLabels(
         // and turns each label lookup into a full scan.
         const targetExpr = (col: string) => `t.${targetDialect.quoteIdent(col)}`;
 
-        const targetCols = job.pairs.map((p) => {
-          return targetTable.columns.find((c) => c.name === p.to)!;
-        });
-
-        const valuesRows = tuples.map((tuple, rowIndex) => {
-          const cols = tuple.map((val, colIndex) => {
+        // The keys are an IN filter, not a joined table: every projected value
+        // comes from `t` itself, so the keys only ever needed to narrow it.
+        //
+        // Bind them bare. A parameter compared against a bare column is
+        // *coercible* — the engine adopts the column's own type and collation.
+        // Wrapping it in a cast (`CAST(? AS CHAR)`) instead gives the value the
+        // connection's default collation with implicit coercibility, and MySQL
+        // then refuses to compare it against an implicitly-collated column of
+        // any other collation: "illegal mix of collations". Which is every
+        // utf8mb4_unicode_ci column on a MySQL 8 server, whose connection
+        // default is utf8mb4_0900_ai_ci.
+        const rowExprs = tuples.map((tuple) => {
+          const cols = tuple.map((val) => {
             params.push(val);
-            const placeholder = targetDialect.placeholder(params.length);
-            const targetCol = targetCols[colIndex];
-            const castPlaceholder = targetDialect.cast(placeholder, targetCol.udtName);
-            return rowIndex === 0 ? `${castPlaceholder} AS k${colIndex}` : castPlaceholder;
+            return targetDialect.placeholder(params.length);
           });
-          return `SELECT ${cols.join(", ")}`;
+          return cols.length === 1 ? cols[0] : `(${cols.join(", ")})`;
         });
-        const keysSubquery = `(${valuesRows.join(" UNION ALL ")})`;
+        const keyExpr = job.pairs.length === 1
+          ? targetExpr(job.pairs[0].to)
+          : `(${job.pairs.map((p) => targetExpr(p.to)).join(", ")})`;
+        const keyClause = `${keyExpr} IN (${rowExprs.join(", ")})`;
 
         const keyCols = job.pairs.map((_, i) => `k${i}`);
-        const onClause = job.pairs.map((p, i) => `${targetExpr(p.to)} = vfk_keys.k${i}`).join(" AND ");
         const selectKeys = job.pairs.map((p, i) => `${targetExpr(p.to)} AS k${i}`);
         const targetConstants = job.constants.filter((c) => !c.side || c.side === "target");
         const constClause = targetConstants.map((c) => {
           params.push(c.value);
           return `${targetExpr(c.toColumn)} = ${targetDialect.placeholder(params.length)}`;
         });
-        const where = constClause.length ? `WHERE ${constClause.join(" AND ")}` : "";
+        const where = `WHERE ${[keyClause, ...constClause].join(" AND ")}`;
 
         const client = await getClient(job.targetConn, "read");
         try {
@@ -452,8 +458,6 @@ async function fetchFkLabels(
           const res = await client.query(
             `SELECT ${selectKeys.join(", ")}, ${selectDisplay} AS label
              FROM ${fqTable} t
-             JOIN ${keysSubquery} vfk_keys
-               ON ${onClause}
              ${where}`,
             params,
           );

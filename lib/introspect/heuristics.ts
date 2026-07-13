@@ -5,6 +5,12 @@ import { Widget } from "../data/widgets";
 export type { Widget };
 
 export const NUMERIC_UDTS = new Set(["int2", "int4", "int8", "float4", "float8", "numeric", "money", "oid"]);
+// Columns whose native JS type is already a string, so a JS string needs no
+// SQL cast to be compared against one. MySQL's text types all normalize into
+// this set (varchar/char → "varchar", the four TEXT sizes → "text"); Postgres
+// enums keep their own type name and are deliberately absent, since a string
+// still has to be cast to reach them.
+export const TEXT_UDTS = new Set(["varchar", "text", "bpchar", "char", "name", "citext", "enum"]);
 const RANGE_UDTS = new Set([
   "int4range",
   "int8range",
@@ -30,7 +36,7 @@ export function arrayElementUdt(col: ColumnInfo): string {
   return col.udtName.startsWith("_") ? col.udtName.slice(1) : col.udtName;
 }
 const READONLY_NAME_PATTERNS = /^(created_at|updated_at|inserted_at|modified_at)$/i;
-const REDACTED_NAME_PATTERNS = /password|passwd|pwd|secret|token|api_key|apikey|access_key|private_key|credential/i;
+const RED ACTED_NAME_PATTERNS = /password|passwd|pwd|secret|token|api_key|apikey|access_key|private_key|credential/i;
 const DISPLAY_NAME_CANDIDATES = ["name", "title", "label", "email", "username", "slug"];
 
 // A table's real primary key if it has one, otherwise its first unique
