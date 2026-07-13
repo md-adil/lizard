@@ -17,6 +17,7 @@ import {
 import { RowEditor } from "@/components/browse/row-editor";
 import { DataGrid } from "@/components/browse/data-grid";
 import { useColumnVisibility } from "@/components/browse/use-column-visibility";
+import { useColumnWidths } from "@/components/browse/use-column-widths";
 import { useTablePrefs } from "@/components/browse/use-table-prefs";
 import { useGridState } from "@/components/browse/use-grid-state";
 import { RefetchBar } from "@/components/browse/refetch-bar";
@@ -101,6 +102,7 @@ export default function TablePage() {
     meta?.resolvedSchema,
     params.table,
   );
+  const [columnSizing, setColumnSizing] = useColumnWidths(meta?.connectionId, meta?.resolvedSchema, params.table);
   const [tablePrefs, setTablePref, tablePrefsLoaded] = useTablePrefs(
     meta?.connectionId,
     meta?.resolvedSchema,
@@ -227,18 +229,19 @@ export default function TablePage() {
   const activeDateColItem = dateColItems.find((c) => c.col.name === activeDateField) ?? null;
 
   const rowKey = effectiveKey(meta.table);
-  const openRow = (row: Record<string, unknown>) => {
-    if (rowKey.length === 0) return;
+  const viewHrefFor = (row: Record<string, unknown>) => {
     const pkObj: Record<string, unknown> = {};
     for (const k of rowKey) pkObj[k] = row[k];
-    router.push(
-      recordHref({
-        connection: params.connection,
-        schema: meta.schema,
-        table: params.table,
-        params: { pk: JSON.stringify(pkObj) },
-      }),
-    );
+    return recordHref({
+      connection: params.connection,
+      schema: meta.schema,
+      table: params.table,
+      params: { pk: JSON.stringify(pkObj) },
+    });
+  };
+  const openRow = (row: Record<string, unknown>) => {
+    if (rowKey.length === 0) return;
+    router.push(viewHrefFor(row));
   };
 
   // Phase 8.2 — bulk delete needs a real, writable key (primary key or first
@@ -527,8 +530,10 @@ export default function TablePage() {
           onToggleSort={toggleSort}
           columnVisibility={columnVisibility}
           onColumnVisibilityChange={setColumnVisibility}
-          rowClickable={rowKey.length > 0}
-          onRowClick={openRow}
+          columnSizing={columnSizing}
+          onColumnSizingChange={setColumnSizing}
+          viewHref={rowKey.length > 0 ? viewHrefFor : undefined}
+          onEdit={rowKey.length > 0 && !meta.isView ? (row) => setEditing(row) : undefined}
           onSelectionChange={canBulkDelete ? setSelectedRows : undefined}
           clearSelectionSignal={clearSelectionSignal}
         />
@@ -579,7 +584,9 @@ export default function TablePage() {
       )}
       {(() => {
         const grouped = viewType === "kanban" || viewType === "calendar";
-        const empty = grouped ? !groupedLoading && groupedData?.rows.length === 0 : !isLoading && data?.rows.length === 0;
+        const empty = grouped
+          ? !groupedLoading && groupedData?.rows.length === 0
+          : !isLoading && data?.rows.length === 0;
         return (
           empty && (
             <p className="px-1 py-6 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
@@ -611,6 +618,7 @@ export default function TablePage() {
         <RowEditor
           meta={meta}
           row={editing === "new" ? null : (editing as Record<string, unknown>)}
+          refetchOnOpen={editing !== "new"}
           onClose={() => setEditing(undefined)}
         />
       )}

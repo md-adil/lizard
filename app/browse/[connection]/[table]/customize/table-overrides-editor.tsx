@@ -184,16 +184,6 @@ export function TableOverridesEditor({
   const [optionsDialogFor, setOptionsDialogFor] = useState<string | null>(null);
   const [colFilter, setColFilter] = useState("");
 
-  // Re-seed every field when the scope itself is toggled (schema <-> pattern)
-  // — the mount-time useState defaults above only apply once, so without this
-  // the form would keep showing whatever the *previous* target's values were
-  // instead of the new target's actual saved settings. Deliberately keyed on
-  // `scope`, not `saveSchema`/pattern text: the pattern input changes value on
-  // every keystroke, and resyncing off that would wipe out label/displayCol/etc
-  // edits the user made in between keystrokes, and — if they hit Save before
-  // finishing the pattern — silently write those wiped-blank values under
-  // whatever partial (or, if pattern was still empty, the *concrete*) schema
-  // saveSchema resolved to at that moment.
   useEffect(() => {
     setTableLabel(tableOv?.label ?? "");
     setDisplayCol(tableOv?.displayColumn ?? "");
@@ -448,7 +438,10 @@ export function TableOverridesEditor({
                     className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]"
                     style={{ color: "var(--muted-foreground)" }}
                   >
-                    <label className="flex items-center gap-1" title="Hidden everywhere — grid, kanban/gallery, and the record view/edit pages">
+                    <label
+                      className="flex items-center gap-1"
+                      title="Hidden everywhere — grid, kanban/gallery, and the record view/edit pages"
+                    >
                       <input
                         type="checkbox"
                         checked={c.hidden}

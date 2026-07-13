@@ -124,6 +124,22 @@ function defaultSortFor(conn: ConnectionConfig, table: TableInfo): { column: str
   return lastDateCol ? { column: lastDateCol.name, dir: "desc" } : null;
 }
 
+// The columns to actually SELECT for a grid-type fetch (listRows/
+// listGroupedRows) — `hidden`/`hiddenInGrid` columns are dropped so a
+// wide-content column (html/markdown/longtext — exactly what hiddenInGrid
+// exists for) doesn't get read off disk and shipped over the wire on every
+// browse just to be thrown away client-side. `getRow`/`exportRows` are
+// deliberately NOT pruned this way: the row editor always needs every
+// writable column (hidden or not — see the customize-page hidden-vs-
+// hiddenInGrid design notes), and an export is a "give me everything" ask
+// independent of grid display prefs.
+function selectColumnsFor(conn: ConnectionConfig, table: TableInfo, alwaysInclude: (string | null)[]): string[] {
+  const overrides = getColumnOverrides(conn.id, table.schema, table.name);
+  const prunable = new Set(overrides.filter((o) => o.hidden || o.hiddenInGrid).map((o) => o.column));
+  const keep = new Set(alwaysInclude.filter((c): c is string => !!c));
+  return table.columns.filter((c) => keep.has(c.name) || !prunable.has(c.name)).map((c) => c.name);
+}
+
 // ---------- list ----------
 
 export async function listRows(params: ListParams) {
@@ -170,7 +186,15 @@ export async function listRows(params: ListParams) {
       ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(table.name)}`
       : dialect.quoteIdent(table.name);
 
-    const sql = `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${pageSize + 1} OFFSET ${offset}`;
+    const selectCols = selectColumnsFor(conn, table, [
+      ...effectiveKey(table),
+      displayColumnFor(conn, table),
+      params.sort ?? null,
+      fallbackSort?.column ?? null,
+    ]);
+    const selectSql = selectCols.map((c) => dialect.quoteIdent(c)).join(", ");
+
+    const sql = `SELECT ${selectSql} FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${pageSize + 1} OFFSET ${offset}`;
     const res = await client.query(sql, allValues);
     const hasMore = res.rows.length > pageSize;
     const rows = hasMore ? res.rows.slice(0, pageSize) : res.rows;
@@ -290,9 +314,18 @@ export async function listGroupedRows(params: GroupedListParams) {
     const scopedWhereSql = whereSql ? `${whereSql} AND ${groupFilterClause}` : `WHERE ${groupFilterClause}`;
     const scopedValues = [...allValues, ...nonNullKeys];
 
+    const selectCols = selectColumnsFor(conn, table, [
+      ...effectiveKey(table),
+      displayColumnFor(conn, table),
+      params.sort ?? null,
+      fallbackSort?.column ?? null,
+      params.groupBy,
+    ]);
+    const selectColsSql = selectCols.map((c) => `t.${dialect.quoteIdent(c)}`).join(", ");
+
     const sql = `
       SELECT * FROM (
-        SELECT t.*, ROW_NUMBER() OVER (PARTITION BY ${groupExpr} ORDER BY ${orderSql}) AS __group_rn
+        SELECT ${selectColsSql}, ROW_NUMBER() OVER (PARTITION BY ${groupExpr} ORDER BY ${orderSql}) AS __group_rn
         FROM ${fqtn} t ${scopedWhereSql}
       ) __ranked WHERE __group_rn <= ${perGroup}`;
     const res = await client.query(sql, scopedValues);
