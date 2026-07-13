@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DataSelect } from "@/components/ui/data-select";
+import { Switch } from "@/components/ui/switch";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DatabaseSelect } from "./database-select";
@@ -95,6 +96,10 @@ export function ConnectionForm({
     write: string | null;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<"uri" | "manual">(mode === "create" && !initial ? "uri" : "manual");
+  // The URI tab has no read/write user split like Manual Fields does — a
+  // pasted URI is one set of credentials, so this decides whether that set
+  // also becomes the write role or the connection is saved read-only.
+  const [uriAccess, setUriAccess] = useState<"readwrite" | "readonly">("readwrite");
   const [useSeparateReadWrite, setUseSeparateReadWrite] = useState<boolean>(
     initial
       ? !!initial.writeUser && initial.writeUser !== initial.readUser
@@ -106,6 +111,18 @@ export function ConnectionForm({
     : isDuplicate
       ? "•••• cloned (credentials loaded)"
       : "";
+
+  // Write credentials to actually send: on the URI tab it's the readwrite/
+  // readonly switch (a pasted URI is a single set of creds); on Manual
+  // Fields it's the existing separate-user checkbox.
+  const isUriTab = activeTab === "uri";
+  const wUser = isUriTab
+    ? uriAccess === "readonly" ? null : (form.writeUser || null)
+    : useSeparateReadWrite ? (form.writeUser || null) : form.readUser;
+  const wPass = isUriTab
+    ? uriAccess === "readonly" ? null : (form.writePassword || null)
+    : useSeparateReadWrite ? (form.writePassword || null) : form.readPassword;
+  const willTestWrite = isUriTab ? uriAccess === "readwrite" : !!(useSeparateReadWrite ? form.writeUser : form.readUser);
 
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({
@@ -156,8 +173,6 @@ export function ConnectionForm({
 
   const testMutation = useMutation({
     mutationFn: async () => {
-      const wUser = useSeparateReadWrite ? (form.writeUser || null) : form.readUser;
-      const wPass = useSeparateReadWrite ? (form.writePassword || null) : form.readPassword;
       const res = await fetch("/api/connections/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -188,8 +203,6 @@ export function ConnectionForm({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const wUser = useSeparateReadWrite ? (form.writeUser || null) : form.readUser;
-      const wPass = useSeparateReadWrite ? (form.writePassword || null) : form.readPassword;
       const base = {
         engine: form.engine,
         name: form.name,
@@ -304,6 +317,21 @@ export function ConnectionForm({
                   {uriMsg}
                 </p>
               )}
+            </div>
+            <div>
+              <label className="label">Access</label>
+              <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer">
+                <Switch
+                  checked={uriAccess === "readwrite"}
+                  onCheckedChange={(checked) => setUriAccess(checked ? "readwrite" : "readonly")}
+                />
+                {uriAccess === "readwrite" ? "Read-write" : "Read-only"}
+              </label>
+              <p className="text-[12px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                {uriAccess === "readonly"
+                  ? "Saved without write credentials — this connection can only be browsed, not edited."
+                  : "The URI's credentials are used for both reading and writing."}
+              </p>
             </div>
           </div>
         ) : (
@@ -423,7 +451,7 @@ export function ConnectionForm({
         {testResult && (
           <div className="flex items-center gap-2">
             {statusPill("read", testResult.read)}
-            {(useSeparateReadWrite ? form.writeUser : form.readUser) && statusPill("write", testResult.write)}
+            {willTestWrite && statusPill("write", testResult.write)}
             {testResult.read && (
               <span className="text-[12px]" style={{ color: "var(--destructive)" }}>
                 {testResult.read}

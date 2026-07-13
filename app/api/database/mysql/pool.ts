@@ -7,6 +7,19 @@ import type { ConnectionConfig } from "@/lib/types";
 
 type Role = "read" | "write";
 
+// Postgres enforces a statement_timeout at the connection level (see
+// READ_STATEMENT_TIMEOUT_MS in lib/db/pools.ts) so a slow/unindexed query
+// gets killed by the server itself — the query stops consuming CPU/locks/
+// memory there, not just abandoned client-side — instead of hanging the pool
+// (and eventually the target database) for however long a full scan takes.
+// MySQL has no equivalent startup parameter, so it's set per connection here.
+// MAX_EXECUTION_TIME only bounds read-only SELECTs, which is exactly what the
+// read pool runs (listRows/listGroupedRows/export/introspection); the write
+// pool's risk is lock contention rather than a runaway scan, so it gets a
+// lock-wait cap instead.
+const READ_MAX_EXECUTION_TIME_MS = 10_000;
+const WRITE_LOCK_WAIT_TIMEOUT_S = 15;
+
 const pools = new Map<string, Pool>();
 
 function poolKey(conn: ConnectionConfig, role: Role): string {
@@ -35,6 +48,17 @@ export function getMysqlPool(conn: ConnectionConfig, role: Role): Pool {
       // would overflow a JS number; the grid renders them as text anyway.
       supportBigNumbers: true,
       bigNumberStrings: true,
+    });
+    // Fires once per physical connection, after the handshake completes (see
+    // BasePool.getConnection in mysql2) — same timing as the Postgres pool's
+    // `on("connect", ...)` this mirrors, so the session variable is set
+    // before the connection is ever handed back to a caller.
+    pool.on("connection", (connection) => {
+      if (role === "read") {
+        connection.query(`SET SESSION MAX_EXECUTION_TIME=${READ_MAX_EXECUTION_TIME_MS}`);
+      } else {
+        connection.query(`SET SESSION innodb_lock_wait_timeout=${WRITE_LOCK_WAIT_TIMEOUT_S}`);
+      }
     });
     pools.set(key, pool);
   }

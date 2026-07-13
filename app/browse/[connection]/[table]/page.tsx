@@ -31,17 +31,26 @@ import {
   selfRefColumn,
   type ViewType,
 } from "@/components/browse/view-types";
-import { GalleryView, KanbanView, CalendarView, TreeView } from "@/components/browse/table-views";
+import {
+  GalleryView,
+  KanbanView,
+  CalendarView,
+  TreeView,
+  currentCalendarCursor,
+  type CalendarCursor,
+} from "@/components/browse/table-views";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
 import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
 import { dataApiUrl } from "@/components/browse/data-api";
+import { useGroupedRows } from "@/components/browse/use-grouped-rows";
+import { ColumnsSelect } from "@/components/browse/columns-select";
 import type { FkLabels, SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { DataSelect } from "@/components/ui/data-select";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useInterval } from "@/hooks/use-interval";
 import { Card } from "@/components/ui/card";
 
@@ -84,6 +93,7 @@ export default function TablePage() {
   const [viewType, setViewType] = useState<ViewType>("table");
   const [groupBy, setGroupBy] = useState<string | undefined>();
   const [dateField, setDateField] = useState<string | undefined>();
+  const [calendarCursor, setCalendarCursor] = useState<CalendarCursor>(currentCalendarCursor);
   // Phase 8.8 — Grafana-style auto-refresh, default off (ms; 0 = off).
   const [refreshMs, setRefreshMs] = useState(0);
   const [columnVisibility, setColumnVisibility] = useColumnVisibility(
@@ -128,6 +138,13 @@ export default function TablePage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  // Needed above the early returns below since hooks can't be conditional —
+  // computed defensively (meta may still be undefined on first render).
+  const groupCols = meta ? kanbanGroupColumns(meta) : [];
+  const dateCols = meta ? dateColumns(meta) : [];
+  const activeGroupBy = groupBy ?? groupCols[0]?.col.name;
+  const activeDateField = dateField ?? dateCols[0]?.col.name;
+
   const pageSize = 50;
   const { data, isLoading, isFetching, error, refetch } = useQuery<ListResponse>({
     queryKey: ["rows", params.connection, schema, params.table, page, sort, sortDir, filterSet, search],
@@ -160,6 +177,27 @@ export default function TablePage() {
     enabled: !!meta,
   });
 
+  const {
+    data: groupedData,
+    isLoading: groupedLoading,
+    isFetching: groupedFetching,
+    refetch: refetchGrouped,
+  } = useGroupedRows({
+    connection: params.connection,
+    schema: meta?.schema,
+    table: params.table,
+    viewType,
+    groupBy: activeGroupBy,
+    dateField: activeDateField,
+    calendarCursor,
+    sort,
+    sortDir,
+    filters: filterSet.conditions,
+    combinator: filterSet.combinator,
+    search,
+    enabled: !!meta,
+  });
+
   // Phase 8.8 — Grafana-style auto-refresh (off by default; no LISTEN/NOTIFY,
   // see PLAN.md §8.8 for why: a trigger-based approach would need DDL on the
   // target DB).
@@ -175,15 +213,18 @@ export default function TablePage() {
       </PagePad>
     );
 
-  const visibleCols = meta.columns.filter((c) => !c.hidden);
+  const visibleCols = meta.columns.filter((c) => !c.hidden && !c.hiddenInGrid);
 
   // Phase 8.4 — alternate view types this table supports + group/date pickers.
   const views = availableViews(meta);
-  const groupCols = kanbanGroupColumns(meta);
-  const dateCols = dateColumns(meta);
   const parentField = selfRefColumn(meta);
-  const activeGroupBy = groupBy ?? groupCols[0]?.col.name;
-  const activeDateField = dateField ?? dateCols[0]?.col.name;
+  // ColumnsSelect keys items by `.name` — adapt ColumnMeta (label lives at
+  // `.label`, the real column name at `.col.name`) into that shape so the
+  // picker stays searchable once a table has many candidate columns.
+  const groupColItems = groupCols.map((c) => ({ ...c, name: c.label }));
+  const activeGroupColItem = groupColItems.find((c) => c.col.name === activeGroupBy) ?? null;
+  const dateColItems = dateCols.map((c) => ({ ...c, name: c.label }));
+  const activeDateColItem = dateColItems.find((c) => c.col.name === activeDateField) ?? null;
 
   const rowKey = effectiveKey(meta.table);
   const openRow = (row: Record<string, unknown>) => {
@@ -403,34 +444,36 @@ export default function TablePage() {
           </Tabs>
         )}
         {viewType === "kanban" && groupCols.length > 1 && (
-          <DataSelect
-            items={groupCols}
-            value={groupCols.find((c) => c.col.name === activeGroupBy) ?? null}
-            onChange={(c) => {
-              if (!c) return;
-              setGroupBy(c.col.name);
-              setTablePref("groupBy", c.col.name);
-            }}
-            getValue={(c) => c.col.name}
-            getLabel={(c) => `Group by ${c.label}`}
-            size="sm"
-            className="w-auto"
-          />
+          <div className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+            Group by
+            <ColumnsSelect
+              items={groupColItems}
+              value={activeGroupColItem}
+              onChange={(c) => {
+                if (!c) return;
+                setGroupBy(c.col.name);
+                setTablePref("groupBy", c.col.name);
+              }}
+              placeholder="Select column…"
+              className="w-40"
+            />
+          </div>
         )}
         {viewType === "calendar" && dateCols.length > 1 && (
-          <DataSelect
-            items={dateCols}
-            value={dateCols.find((c) => c.col.name === activeDateField) ?? null}
-            onChange={(c) => {
-              if (!c) return;
-              setDateField(c.col.name);
-              setTablePref("dateField", c.col.name);
-            }}
-            getValue={(c) => c.col.name}
-            getLabel={(c) => `By ${c.label}`}
-            size="sm"
-            className="w-auto"
-          />
+          <div className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+            By
+            <ColumnsSelect
+              items={dateColItems}
+              value={activeDateColItem}
+              onChange={(c) => {
+                if (!c) return;
+                setDateField(c.col.name);
+                setTablePref("dateField", c.col.name);
+              }}
+              placeholder="Select column…"
+              className="w-40"
+            />
+          </div>
         )}
         <span className="flex-1" />
         {/* Phase 8.8 — auto-refresh, default off */}
@@ -441,6 +484,16 @@ export default function TablePage() {
           size="sm"
           className="w-auto"
         />
+        <Button
+          variant="secondary"
+          size="icon-sm"
+          aria-label="Refresh"
+          onClick={() => (viewType === "kanban" || viewType === "calendar" ? refetchGrouped() : refetch())}
+        >
+          <RefreshCw
+            className={`size-3.5 ${(viewType === "kanban" || viewType === "calendar" ? groupedFetching : isFetching) ? "animate-spin" : ""}`}
+          />
+        </Button>
         {isFetching && refreshMs > 0 && (
           <Loader2 className="size-3.5 animate-spin" style={{ color: "var(--primary)" }} />
         )}
@@ -480,48 +533,79 @@ export default function TablePage() {
           clearSelectionSignal={clearSelectionSignal}
         />
       )}
-      {viewType !== "table" && (
+      {viewType === "gallery" && (
         <div className="relative">
-          {/* DataGrid carries its own refetch bar; the other views share
-            this one so a refetch is visible no matter which is active. */}
           <RefetchBar isFetching={isFetching} isLoading={isLoading} />
-          {viewType === "gallery" && <GalleryView meta={meta} rows={data?.rows ?? EMPTY_ROWS} onOpen={openRow} />}
-          {viewType === "kanban" && activeGroupBy && (
-            <KanbanView
-              meta={meta}
-              rows={data?.rows ?? EMPTY_ROWS}
-              fkLabels={data?.fkLabels ?? EMPTY_FK_LABELS}
-              groupBy={activeGroupBy}
-              onOpen={openRow}
-              onChanged={() => refetch()}
-            />
-          )}
-          {viewType === "calendar" && activeDateField && (
-            <CalendarView meta={meta} rows={data?.rows ?? EMPTY_ROWS} dateField={activeDateField} onOpen={openRow} />
-          )}
-          {viewType === "tree" && parentField && (
-            <TreeView meta={meta} rows={data?.rows ?? EMPTY_ROWS} parentField={parentField} onOpen={openRow} />
-          )}
+          <GalleryView meta={meta} rows={data?.rows ?? EMPTY_ROWS} onOpen={openRow} />
         </div>
       )}
-      {!isLoading && data?.rows.length === 0 && (
-        <p className="px-1 py-6 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-          No rows{filterSet.conditions.length ? " match the filters" : ""}.
-        </p>
+      {viewType === "kanban" && activeGroupBy && (
+        <div className="relative">
+          {/* Kanban is driven by the grouped fetch (use-grouped-rows.ts), not
+            the table's flat page — see KanbanView's groupCounts prop. */}
+          <RefetchBar isFetching={groupedFetching} isLoading={groupedLoading} />
+          <KanbanView
+            meta={meta}
+            rows={groupedData?.rows ?? EMPTY_ROWS}
+            fkLabels={groupedData?.fkLabels ?? EMPTY_FK_LABELS}
+            groupBy={activeGroupBy}
+            groupCounts={groupedData?.groupCounts}
+            onOpen={openRow}
+            onChanged={() => refetch()}
+          />
+        </div>
       )}
+      {viewType === "calendar" && activeDateField && (
+        <div className="relative">
+          {/* Calendar is driven by the grouped fetch (use-grouped-rows.ts),
+            scoped server-side to the visible month and per-day, not the
+            table's flat page. */}
+          <RefetchBar isFetching={groupedFetching} isLoading={groupedLoading} />
+          <CalendarView
+            meta={meta}
+            rows={groupedData?.rows ?? EMPTY_ROWS}
+            dateField={activeDateField}
+            cursor={calendarCursor}
+            onCursorChange={setCalendarCursor}
+            onOpen={openRow}
+          />
+        </div>
+      )}
+      {viewType === "tree" && parentField && (
+        <div className="relative">
+          <RefetchBar isFetching={isFetching} isLoading={isLoading} />
+          <TreeView meta={meta} rows={data?.rows ?? EMPTY_ROWS} parentField={parentField} onOpen={openRow} />
+        </div>
+      )}
+      {(() => {
+        const grouped = viewType === "kanban" || viewType === "calendar";
+        const empty = grouped ? !groupedLoading && groupedData?.rows.length === 0 : !isLoading && data?.rows.length === 0;
+        return (
+          empty && (
+            <p className="px-1 py-6 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+              No rows{filterSet.conditions.length ? " match the filters" : ""}.
+            </p>
+          )
+        );
+      })()}
 
-      <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-        <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-          ← Prev
-        </Button>
-        <span>
-          Page {page + 1}
-          {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
-        </span>
-        <Button variant="secondary" size="sm" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
-          Next →
-        </Button>
-      </div>
+      {/* Kanban/Calendar aren't paginated — they show every group's top-N in
+        one grouped fetch (use-grouped-rows.ts), so a page control tied to the
+        table's flat query wouldn't do anything there. */}
+      {viewType !== "kanban" && viewType !== "calendar" && (
+        <div className="flex items-center gap-3 mt-3 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+          <Button variant="secondary" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            ← Prev
+          </Button>
+          <span>
+            Page {page + 1}
+            {data?.total != null && <> · {data.total.toLocaleString()} rows</>}
+          </span>
+          <Button variant="secondary" size="sm" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
+            Next →
+          </Button>
+        </div>
+      )}
 
       {editing !== undefined && (
         <RowEditor

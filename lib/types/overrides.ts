@@ -50,6 +50,12 @@ export interface TableOverride {
   // — off by default, since scanning every table is the exact unbounded
   // fan-out that feature is designed to avoid.
   searchable: boolean;
+  // Grid settings (customize page) — the sort applied when nobody's picked
+  // one yet this session. Falls back to the last date/timestamp column
+  // descending, then primary-key order, when unset (see defaultSortFor in
+  // lib/data/crud.ts).
+  defaultSort: string | null;
+  defaultSortDir: "asc" | "desc" | null;
 }
 
 export interface ColumnOverride {
@@ -60,6 +66,11 @@ export interface ColumnOverride {
   label: string | null;
   widget: string | null;
   hidden: boolean;
+  // Hides the column from the Table/Kanban/Gallery grid only — unlike
+  // `hidden`, the record view/edit pages still show it. For wide-content
+  // widgets (html/markdown/longtext) that clutter a grid row but are still
+  // worth reading/editing on the record itself.
+  hiddenInGrid: boolean;
   readonly: boolean;
   redacted: boolean;
   sortOrder: number | null;

@@ -26,6 +26,7 @@ import type { ColumnMeta } from "./useTableMeta";
 import { formatCell } from "./useTableMeta";
 import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -37,8 +38,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { useColumnSearch } from "./use-column-search";
 
 type Row = Record<string, unknown>;
+
+// Below this many toggleable columns, scanning the list by eye is easier
+// than typing — the search box only earns its keep past that.
+const COLUMN_SEARCH_THRESHOLD = 10;
 
 interface Props {
   columns: ColumnMeta[];
@@ -107,6 +113,11 @@ export function DataGrid({
   // page — drop any stale selection whenever the page's rows change.
   useEffect(() => setRowSelection({}), [rows]);
   useEffect(() => setRowSelection({}), [clearSelectionSignal]);
+  // "Columns ▾" search — a wide table can have dozens of columns, so filter
+  // the toggle list instead of making the user scroll for one. Cleared
+  // whenever the menu closes so it doesn't carry over stale to the next open.
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [columnSearch, setColumnSearch] = useState("");
 
   const colDefs = useMemo<ColumnDef<Row>[]>(
     () => [
@@ -189,11 +200,20 @@ export function DataGrid({
 
   const leafColumns = table.getVisibleLeafColumns();
   const totalWidth = table.getTotalSize();
+  const allLeafColumns = table.getAllLeafColumns();
+  const toggleableColumns = useMemo(() => allLeafColumns.filter((c) => c.id !== "__select"), [allLeafColumns]);
+  const searchedColumns = useColumnSearch(toggleableColumns, columns, columnSearch);
 
   return (
     <div>
       <div className="flex justify-end mb-2">
-        <DropdownMenu>
+        <DropdownMenu
+          open={columnsMenuOpen}
+          onOpenChange={(open) => {
+            setColumnsMenuOpen(open);
+            if (!open) setColumnSearch("");
+          }}
+        >
           <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="gap-1.5 bg-card" />}>
             <Columns3 className="size-3.5" />
             Columns
@@ -207,12 +227,7 @@ export function DataGrid({
                     variant="ghost"
                     size="sm"
                     className="h-5 px-1.5 text-[11px]"
-                    onClick={() =>
-                      table
-                        .getAllLeafColumns()
-                        .filter((c) => c.id !== "__select")
-                        .forEach((c) => c.toggleVisibility(true))
-                    }
+                    onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(true))}
                   >
                     All
                   </Button>
@@ -220,34 +235,38 @@ export function DataGrid({
                     variant="ghost"
                     size="sm"
                     className="h-5 px-1.5 text-[11px]"
-                    onClick={() =>
-                      table
-                        .getAllLeafColumns()
-                        .filter((c) => c.id !== "__select")
-                        .forEach((c) => c.toggleVisibility(false))
-                    }
+                    onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(false))}
                   >
                     None
                   </Button>
                 </div>
               </div>
+              {toggleableColumns.length > COLUMN_SEARCH_THRESHOLD && (
+                <div className="px-1.5 pb-1">
+                  <Input
+                    type="search"
+                    value={columnSearch}
+                    onChange={(e) => setColumnSearch(e.target.value)}
+                    // stop the keystroke from reaching the menu's roving-focus /
+                    // typeahead handling — otherwise letters jump-select items
+                    // instead of typing into the box.
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="Search columns…"
+                    className="h-7 text-[12px]"
+                  />
+                </div>
+              )}
               <DropdownMenuSeparator />
-              {table
-                .getAllLeafColumns()
-                .filter((column) => column.id !== "__select")
-                .map((column) => {
-                  const cm = columns.find((c) => c.col.name === column.id);
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(checked) => column.toggleVisibility(checked)}
-                      closeOnClick={false}
-                    >
-                      {cm?.label ?? column.id}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
+              {searchedColumns.map(({ column, cm }) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(checked) => column.toggleVisibility(checked)}
+                  closeOnClick={false}
+                >
+                  {cm?.label ?? column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>

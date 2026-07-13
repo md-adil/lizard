@@ -54,6 +54,9 @@ export interface ColumnMeta {
   label: string;
   widget: Widget;
   hidden: boolean;
+  // Hides from the grid/kanban/gallery cards only — record view/edit still
+  // show it (see ColumnOverride.hiddenInGrid).
+  hiddenInGrid: boolean;
   readonly: boolean;
   redacted: boolean;
   help: string | null;
@@ -165,6 +168,7 @@ export function buildTableMeta(
       label: o?.label || humanize(col.name),
       widget: ref ? "reference" : widget,
       hidden: o?.hidden ?? false,
+      hiddenInGrid: o?.hiddenInGrid ?? false,
       readonly: o?.readonly ?? guessReadonly(table, col),
       redacted: o?.redacted ?? guessRedacted(col),
       help: o?.help ?? col.comment,

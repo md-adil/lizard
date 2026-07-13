@@ -33,7 +33,7 @@ function displayValue(meta: TableMeta, row: Row): string {
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|avif)(\?|$)/i;
 function imageUrl(row: Row, meta: TableMeta): string | null {
   for (const cm of meta.columns) {
-    if (cm.hidden) continue;
+    if (cm.hidden || cm.hiddenInGrid) continue;
     const v = row[cm.col.name];
     if (typeof v === "string" && /^https?:\/\//.test(v) && IMAGE_RE.test(v)) return v;
   }
@@ -42,7 +42,9 @@ function imageUrl(row: Row, meta: TableMeta): string | null {
 
 // A few key/value lines for a card face (skips the display column + hidden).
 function CardFields({ meta, row }: { meta: TableMeta; row: Row }) {
-  const cols = meta.columns.filter((c) => !c.hidden && c.col.name !== meta.displayColumn).slice(0, 4);
+  const cols = meta.columns
+    .filter((c) => !c.hidden && !c.hiddenInGrid && c.col.name !== meta.displayColumn)
+    .slice(0, 4);
   return (
     <div className="space-y-0.5 mt-1">
       {cols.map((cm) => {
@@ -103,6 +105,7 @@ export function KanbanView({
   rows,
   fkLabels,
   groupBy,
+  groupCounts,
   onOpen,
   onChanged,
 }: {
@@ -110,6 +113,10 @@ export function KanbanView({
   rows: Row[];
   fkLabels: FkLabels;
   groupBy: string;
+  // exact per-group row count from the server (see listGroupedRows) — lets a
+  // column that was capped at the per-group fetch limit say "+N more" instead
+  // of silently looking complete.
+  groupCounts?: Record<string, number>;
   onOpen: (row: Row) => void;
   onChanged: () => void;
 }) {
@@ -159,6 +166,19 @@ export function KanbanView({
     return String(v);
   };
 
+  // `groupCounts` keys come straight from the DB (raw column value, "" for
+  // null) — normalize the same way `groupOf` normalizes rows so they can be
+  // looked up by display key.
+  const totalFor = (key: string): number | undefined => {
+    if (!groupCounts) return undefined;
+    if (key === NULL_KEY) return groupCounts[""];
+    if (isBool) {
+      const entry = Object.entries(groupCounts).find(([k]) => normalizeBool(k) === key);
+      return entry?.[1];
+    }
+    return groupCounts[key];
+  };
+
   async function move(row: Row, toKey: string) {
     if (!canWrite) return;
     const value = toKey === NULL_KEY ? null : toKey;
@@ -177,6 +197,7 @@ export function KanbanView({
     <div className="flex gap-3 overflow-x-auto scrollbar-thin pb-2">
       {keys.map((key) => {
         const cards = rows.filter((r) => groupOf(r) === key);
+        const total = totalFor(key);
         return (
           <div
             key={key}
@@ -190,7 +211,9 @@ export function KanbanView({
           >
             <div className="flex items-center gap-2 px-1 pb-2 text-[12.5px] font-semibold">
               <span className="truncate">{labelFor(key)}</span>
-              <span style={{ color: "var(--muted-foreground-faint)" }}>{cards.length}</span>
+              <span style={{ color: "var(--muted-foreground-faint)" }}>
+                {total != null && total > cards.length ? `${cards.length} of ${total}` : cards.length}
+              </span>
             </div>
             <div className="space-y-2">
               {cards.map((row) => {
@@ -234,22 +257,31 @@ const MONTHS = [
   "December",
 ];
 
+export interface CalendarCursor {
+  y: number;
+  m: number;
+}
+
+export function currentCalendarCursor(): CalendarCursor {
+  const d = new Date();
+  return { y: d.getFullYear(), m: d.getMonth() };
+}
+
 export function CalendarView({
   meta,
   rows,
   dateField,
+  cursor,
+  onCursorChange,
   onOpen,
 }: {
   meta: TableMeta;
   rows: Row[];
   dateField: string;
+  cursor: CalendarCursor;
+  onCursorChange: (c: CalendarCursor) => void;
   onOpen: (row: Row) => void;
 }) {
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date();
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
-
   const first = new Date(cursor.y, cursor.m, 1);
   const startDow = first.getDay();
   const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
@@ -272,11 +304,10 @@ export function CalendarView({
   for (let i = 0; i < startDow; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
-  const step = (delta: number) =>
-    setCursor((c) => {
-      const m = c.m + delta;
-      return { y: c.y + Math.floor(m / 12), m: ((m % 12) + 12) % 12 };
-    });
+  const step = (delta: number) => {
+    const m = cursor.m + delta;
+    onCursorChange({ y: cursor.y + Math.floor(m / 12), m: ((m % 12) + 12) % 12 });
+  };
 
   return (
     <div className="panel p-3">
@@ -320,7 +351,7 @@ export function CalendarView({
                   {(byDay.get(day) ?? []).slice(0, 4).map((row, j) => (
                     <button
                       key={j}
-                      className="block w-full text-left truncate rounded px-1 py-0.5 hoverable"
+                      className="block w-full text-left truncate rounded px-1 py-0.5 hoverable cursor-pointer"
                       style={{ background: "var(--primary-soft)", color: "var(--primary)" }}
                       onClick={() => onOpen(row)}
                     >

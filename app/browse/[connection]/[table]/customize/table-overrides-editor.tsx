@@ -156,6 +156,7 @@ export function TableOverridesEditor({
       label: findOv(cm.col.name)?.label ?? "",
       widget: findOv(cm.col.name)?.widget ?? "",
       hidden: findOv(cm.col.name)?.hidden ?? false,
+      hiddenInGrid: findOv(cm.col.name)?.hiddenInGrid ?? false,
       readonly: findOv(cm.col.name)?.readonly ?? false,
       redacted: findOv(cm.col.name)?.redacted ?? cm.redacted,
       // fixed by the DB schema — value set can't be added to/removed here
@@ -170,6 +171,8 @@ export function TableOverridesEditor({
   const [displayCol, setDisplayCol] = useState(tableOv?.displayColumn ?? "");
   const [hidden, setHidden] = useState(tableOv?.hidden ?? false);
   const [searchable, setSearchable] = useState(tableOv?.searchable ?? false);
+  const [defaultSort, setDefaultSort] = useState(tableOv?.defaultSort ?? "");
+  const [defaultSortDir, setDefaultSortDir] = useState<"asc" | "desc">(tableOv?.defaultSortDir ?? "desc");
   // meta.hasRealKey reflects introspection, unaffected by any pretend-PK
   // override already overlaid onto meta.table.primaryKey — using
   // meta.table.primaryKey.length here instead would make the picker
@@ -196,6 +199,8 @@ export function TableOverridesEditor({
     setDisplayCol(tableOv?.displayColumn ?? "");
     setHidden(tableOv?.hidden ?? false);
     setSearchable(tableOv?.searchable ?? false);
+    setDefaultSort(tableOv?.defaultSort ?? "");
+    setDefaultSortDir(tableOv?.defaultSortDir ?? "desc");
     setPkCols(tableOv?.primaryKey ?? []);
     setCols(columnsInit());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,6 +231,8 @@ export function TableOverridesEditor({
           label: tableLabel || null,
           primaryKey: !hasRealKey && pkCols.length ? pkCols : null,
           searchable,
+          defaultSort: defaultSort || null,
+          defaultSortDir: defaultSort ? defaultSortDir : null,
         }),
       });
       for (const c of cols) {
@@ -241,6 +248,7 @@ export function TableOverridesEditor({
             label: c.label || null,
             widget: c.widget || null,
             hidden: c.hidden,
+            hiddenInGrid: c.hiddenInGrid,
             readonly: c.readonly,
             redacted: c.redacted,
             sortOrder: c.order,
@@ -312,6 +320,38 @@ export function TableOverridesEditor({
               </div>
             </div>
           )}
+        </Card>
+
+        <SaveButton save={save} saved={saved} />
+      </TabsContent>
+
+      <TabsContent value="grid">
+        <Card className="max-w-xl p-4 gap-0">
+          <label className="label">Default sort</label>
+          <p className="text-[12px] mb-2" style={{ color: "var(--muted-foreground)" }}>
+            Applied whenever nobody's picked a sort yet this session. Left unset, tables fall back to their last
+            date/timestamp column, newest first.
+          </p>
+          <div className="flex items-center gap-2">
+            <ColumnsSelect
+              items={meta.table.columns}
+              value={meta.table.columns.find((c) => c.name === defaultSort) ?? null}
+              onChange={(col) => setDefaultSort(col?.name ?? "")}
+              placeholder="auto (last date/timestamp column, desc)"
+              className="flex-1"
+            />
+            <Chip active={defaultSortDir === "asc"} onClick={() => setDefaultSortDir("asc")}>
+              Ascending
+            </Chip>
+            <Chip active={defaultSortDir === "desc"} onClick={() => setDefaultSortDir("desc")}>
+              Descending
+            </Chip>
+            {defaultSort && (
+              <Button variant="ghost" size="sm" onClick={() => setDefaultSort("")}>
+                ✕ Clear
+              </Button>
+            )}
+          </div>
         </Card>
 
         <SaveButton save={save} saved={saved} />
@@ -408,7 +448,7 @@ export function TableOverridesEditor({
                     className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]"
                     style={{ color: "var(--muted-foreground)" }}
                   >
-                    <label className="flex items-center gap-1">
+                    <label className="flex items-center gap-1" title="Hidden everywhere — grid, kanban/gallery, and the record view/edit pages">
                       <input
                         type="checkbox"
                         checked={c.hidden}
@@ -417,6 +457,19 @@ export function TableOverridesEditor({
                         }
                       />
                       hidden
+                    </label>
+                    <label
+                      className="flex items-center gap-1"
+                      title="Hidden from the grid/kanban/gallery only — still shown on the record view/edit pages"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={c.hiddenInGrid}
+                        onChange={(e) =>
+                          setCols((s) => s.map((x, j) => (j === i ? { ...x, hiddenInGrid: e.target.checked } : x)))
+                        }
+                      />
+                      hidden in grid
                     </label>
                     <label className="flex items-center gap-1">
                       <input

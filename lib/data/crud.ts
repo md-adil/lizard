@@ -97,6 +97,28 @@ export function primaryKeyColumnsFor(conn: ConnectionConfig, table: TableInfo): 
   return override?.primaryKey ?? [];
 }
 
+// date/timestamp udtNames, normalized identically across engines (see
+// dateColumns() in components/browse/view-types.ts, the client-side twin of
+// this heuristic).
+function isDateLikeUdt(udtName: string): boolean {
+  return udtName === "date" || udtName.startsWith("timestamp");
+}
+
+// The ORDER BY to use when a request specifies no explicit sort: the
+// customize-page "Grid settings" default sort column if one is set, else the
+// table's last (highest-ordinal) date/timestamp column, descending — an
+// unsorted browse is far more often "show me the newest rows" than "show me
+// primary-key order" — else null (caller falls back to PK order).
+function defaultSortFor(conn: ConnectionConfig, table: TableInfo): { column: string; dir: "asc" | "desc" } | null {
+  const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
+  if (override?.defaultSort && table.columns.some((c) => c.name === override.defaultSort)) {
+    return { column: override.defaultSort, dir: override.defaultSortDir ?? "asc" };
+  }
+  const dateCols = table.columns.filter((c) => isDateLikeUdt(c.udtName));
+  const lastDateCol = dateCols[dateCols.length - 1];
+  return lastDateCol ? { column: lastDateCol.name, dir: "desc" } : null;
+}
+
 // ---------- list ----------
 
 export async function listRows(params: ListParams) {
@@ -122,12 +144,15 @@ export async function listRows(params: ListParams) {
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
 
     let orderSql = "";
+    const fallbackSort = params.sort ? null : defaultSortFor(conn, table);
     if (params.sort) {
       assertColumn(table, params.sort);
       orderSql = `ORDER BY ${dialect.quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"}`;
       if (dialect.engine === "postgres") {
         orderSql += " NULLS LAST";
       }
+    } else if (fallbackSort) {
+      orderSql = `ORDER BY ${dialect.quoteIdent(fallbackSort.column)} ${fallbackSort.dir === "desc" ? "DESC" : "ASC"}`;
     } else if (effectiveKey(table).length > 0) {
       orderSql = `ORDER BY ${effectiveKey(table)
         .map((c) => dialect.quoteIdent(c))
@@ -157,6 +182,133 @@ export async function listRows(params: ListParams) {
 
     const fkLabels = await fetchFkLabels(conn, table, rows);
     return { rows, hasMore, total, fkLabels };
+  } finally {
+    client.release();
+  }
+}
+
+export interface GroupedListParams {
+  connection: string;
+  schema: string | undefined;
+  table: string;
+  groupBy: string;
+  groupKind: "value" | "day"; // "day" truncates a date/timestamp column before grouping (calendar)
+  perGroup: number; // max rows returned per distinct group
+  maxGroups?: number; // max distinct groups fetched at all (default 50) — bounds total rows to maxGroups * perGroup
+  sort?: string;
+  sortDir?: "asc" | "desc";
+  filters?: FilterCondition[];
+  combinator?: Combinator;
+  search?: string;
+}
+
+// Phase 8.4 fix — Kanban/Calendar used to render whatever page the Table view
+// had already fetched, bucketed client-side. With one global LIMIT, a group
+// (kanban column / calendar day) bigger than the page size crowded every other
+// group out of the response entirely. This runs a windowed query so every
+// distinct group gets its own top-N, plus an exact per-group count so the UI
+// can show "+N more" instead of silently dropping rows.
+//
+// A group-by column can still have unbounded cardinality (e.g. a high-cardinality
+// FK) — total rows fetched is capped at maxGroups * perGroup by first picking
+// which distinct groups to show, so a runaway group count can't blow up the
+// query the way a runaway group *size* used to.
+export async function listGroupedRows(params: GroupedListParams) {
+  const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+
+  try {
+    assertColumn(table, params.groupBy);
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
+    const { clause: filterClause, values: filterValues } = buildFilterClause(
+      table,
+      params.filters ?? [],
+      params.combinator ?? "and",
+      dialect,
+      0,
+      tagCols,
+    );
+    const allValues: unknown[] = [...filterValues];
+
+    const searchClause = params.search ? searchClauseFor(conn, table, params.search, allValues, dialect) : "";
+
+    const clauses = [filterClause, searchClause].filter(Boolean);
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    let orderSql = "";
+    const fallbackSort = params.sort ? null : defaultSortFor(conn, table);
+    if (params.sort) {
+      assertColumn(table, params.sort);
+      orderSql = `${dialect.quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"}`;
+    } else if (fallbackSort) {
+      orderSql = `${dialect.quoteIdent(fallbackSort.column)} ${fallbackSort.dir === "desc" ? "DESC" : "ASC"}`;
+    } else if (effectiveKey(table).length > 0) {
+      orderSql = effectiveKey(table)
+        .map((c) => dialect.quoteIdent(c))
+        .join(", ");
+    } else {
+      orderSql = dialect.quoteIdent(params.groupBy);
+    }
+
+    const groupExpr =
+      params.groupKind === "day"
+        ? dialect.dateTrunc(dialect.quoteIdent(params.groupBy))
+        : dialect.quoteIdent(params.groupBy);
+
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(table.name)}`
+      : dialect.quoteIdent(table.name);
+
+    const perGroup = Math.min(Math.max(params.perGroup, 1), 200);
+    const maxGroups = Math.min(Math.max(params.maxGroups ?? 50, 1), 200);
+
+    // Step 1 — which distinct groups to show, bounded to maxGroups.
+    const distinctSql = `SELECT DISTINCT ${groupExpr} AS __gk FROM ${fqtn} t ${whereSql} ORDER BY ${groupExpr} LIMIT ${maxGroups}`;
+    const distinctRes = await client.query(distinctSql, allValues);
+    const groupKeys = (distinctRes.rows as { __gk: unknown }[]).map((r) => r.__gk);
+    if (groupKeys.length === 0) {
+      return { rows: [], groupCounts: {}, fkLabels: {} };
+    }
+    const nonNullKeys = groupKeys.filter((v) => v != null);
+    const hasNullGroup = groupKeys.length > nonNullKeys.length;
+
+    // Restrict both the ranked fetch and the count query to just those
+    // groups — NULL can't be matched via `IN`, so it needs its own IS NULL arm.
+    const inParts: string[] = [];
+    if (nonNullKeys.length > 0) {
+      const placeholders = nonNullKeys.map((_, i) => dialect.placeholder(allValues.length + i + 1)).join(", ");
+      inParts.push(`${groupExpr} IN (${placeholders})`);
+    }
+    if (hasNullGroup) inParts.push(`${groupExpr} IS NULL`);
+    const groupFilterClause = inParts.length > 1 ? `(${inParts.join(" OR ")})` : inParts[0];
+    const scopedWhereSql = whereSql ? `${whereSql} AND ${groupFilterClause}` : `WHERE ${groupFilterClause}`;
+    const scopedValues = [...allValues, ...nonNullKeys];
+
+    const sql = `
+      SELECT * FROM (
+        SELECT t.*, ROW_NUMBER() OVER (PARTITION BY ${groupExpr} ORDER BY ${orderSql}) AS __group_rn
+        FROM ${fqtn} t ${scopedWhereSql}
+      ) __ranked WHERE __group_rn <= ${perGroup}`;
+    const res = await client.query(sql, scopedValues);
+    const rows = res.rows.map((r) => {
+      const { __group_rn: _rn, ...rest } = r as Record<string, unknown>;
+      return rest;
+    });
+    normalizeTagColumns(rows, tagCols);
+
+    // exact row count per shown group, so the UI can flag truncated groups
+    // ("+N more") instead of silently dropping rows past `perGroup`.
+    const countSql = `SELECT ${groupExpr} AS __group_key, count(*) AS n FROM ${fqtn} t ${scopedWhereSql} GROUP BY ${groupExpr}`;
+    const countRes = await client.query(countSql, scopedValues);
+    const groupCounts: Record<string, number> = {};
+    for (const row of countRes.rows as { __group_key: unknown; n: string | number }[]) {
+      const key = row.__group_key == null ? "" : String(row.__group_key);
+      groupCounts[key] = Number(row.n);
+    }
+
+    const fkLabels = await fetchFkLabels(conn, table, rows);
+    return { rows, groupCounts, fkLabels };
   } finally {
     client.release();
   }

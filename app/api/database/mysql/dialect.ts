@@ -42,6 +42,10 @@ export const mysqlDialect: Dialect = {
     return `CAST(${expr} AS CHAR) REGEXP ${placeholder}`;
   },
 
+  dateTrunc(expr) {
+    return `DATE(${expr})`;
+  },
+
   likeEscapeChar: "\\",
 
   supportsReturning: false,

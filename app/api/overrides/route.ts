@@ -14,6 +14,8 @@ const tableOverrideSchema = z.object({
   label: z.string().nullable().default(null),
   primaryKey: z.array(z.string()).nullable().default(null),
   searchable: z.boolean().default(false),
+  defaultSort: z.string().nullable().default(null),
+  defaultSortDir: z.enum(["asc", "desc"]).nullable().default(null),
 });
 
 const columnOverrideSchema = z.object({
@@ -25,6 +27,7 @@ const columnOverrideSchema = z.object({
   label: z.string().nullable().default(null),
   widget: z.string().nullable().default(null),
   hidden: z.boolean().default(false),
+  hiddenInGrid: z.boolean().default(false),
   readonly: z.boolean().default(false),
   redacted: z.boolean().default(false),
   sortOrder: z.number().nullable().default(null),

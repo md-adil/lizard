@@ -229,6 +229,8 @@ export function getTableOverride(connectionId: string, schema: string, table: st
     label: (r.label as string) || null,
     primaryKey: parseJsonColumn<string[]>(r.primary_key),
     searchable: !!r.searchable,
+    defaultSort: (r.default_sort as string) || null,
+    defaultSortDir: (r.default_sort_dir as "asc" | "desc") || null,
   };
 }
 
@@ -242,6 +244,8 @@ function mapTableOverrideRow(r: Record<string, unknown>): TableOverride {
     label: (r.label as string) || null,
     primaryKey: parseJsonColumn<string[]>(r.primary_key),
     searchable: !!r.searchable,
+    defaultSort: (r.default_sort as string) || null,
+    defaultSortDir: (r.default_sort_dir as "asc" | "desc") || null,
   };
 }
 
@@ -263,11 +267,12 @@ export function listTableOverridesForConnection(connectionId: string): TableOver
 export function setTableOverride(o: TableOverride): void {
   getDb()
     .prepare(
-      `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label, primary_key, searchable)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO table_overrides (connection_id, schema_name, table_name, hidden, display_column, label, primary_key, searchable, default_sort, default_sort_dir)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name)
        DO UPDATE SET hidden=excluded.hidden, display_column=excluded.display_column, label=excluded.label,
-                     primary_key=excluded.primary_key, searchable=excluded.searchable`,
+                     primary_key=excluded.primary_key, searchable=excluded.searchable,
+                     default_sort=excluded.default_sort, default_sort_dir=excluded.default_sort_dir`,
     )
     .run(
       o.connectionId,
@@ -278,6 +283,8 @@ export function setTableOverride(o: TableOverride): void {
       o.label,
       o.primaryKey ? JSON.stringify(o.primaryKey) : null,
       o.searchable ? 1 : 0,
+      o.defaultSort,
+      o.defaultSortDir,
     );
 }
 
@@ -290,6 +297,7 @@ function mapColumnOverrideRow(r: Record<string, unknown>): ColumnOverride {
     label: (r.label as string) || null,
     widget: (r.widget as string) || null,
     hidden: !!r.hidden,
+    hiddenInGrid: !!r.hidden_in_grid,
     readonly: !!r.readonly,
     redacted: !!r.redacted,
     sortOrder: r.sort_order as number | null,
@@ -321,10 +329,10 @@ export function getColumnOverrides(connectionId: string, schema: string, table: 
 export function setColumnOverride(o: ColumnOverride): void {
   getDb()
     .prepare(
-      `INSERT INTO column_overrides (connection_id, schema_name, table_name, column_name, label, widget, hidden, readonly, redacted, sort_order, help, options, option_labels)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO column_overrides (connection_id, schema_name, table_name, column_name, label, widget, hidden, hidden_in_grid, readonly, redacted, sort_order, help, options, option_labels)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, schema_name, table_name, column_name)
-       DO UPDATE SET label=excluded.label, widget=excluded.widget, hidden=excluded.hidden,
+       DO UPDATE SET label=excluded.label, widget=excluded.widget, hidden=excluded.hidden, hidden_in_grid=excluded.hidden_in_grid,
                      readonly=excluded.readonly, redacted=excluded.redacted, sort_order=excluded.sort_order, help=excluded.help,
                      options=excluded.options, option_labels=excluded.option_labels`,
     )
@@ -336,6 +344,7 @@ export function setColumnOverride(o: ColumnOverride): void {
       o.label,
       o.widget,
       o.hidden ? 1 : 0,
+      o.hiddenInGrid ? 1 : 0,
       o.readonly ? 1 : 0,
       o.redacted ? 1 : 0,
       o.sortOrder,
