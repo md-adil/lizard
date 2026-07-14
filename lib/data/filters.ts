@@ -2,7 +2,7 @@
 // are validated against the table catalog and every value is parameterized;
 // operators map to fixed SQL fragments (nothing user-supplied reaches SQL text).
 import type { TableInfo } from "@/lib/types";
-import { isArrayColumn, arrayElementUdt, NUMERIC_UDTS } from "@/lib/introspect/heuristics";
+import { isArrayColumn, arrayElementUdt, NUMERIC_UDTS, TEXT_UDTS } from "@/lib/introspect/heuristics";
 import type { Dialect } from "@/app/api/database/driver";
 
 export type FilterOp =
@@ -70,7 +70,7 @@ function castType(table: TableInfo, column: string): string {
 }
 
 // Whether a value already carries the column's native JS type, so it can be
-// bound as-is instead of round-tripping through a text SQL cast. Two cases
+// bound as-is instead of round-tripping through a text SQL cast. Three cases
 // care about this:
 //  - booleans: MySQL's tinyint(1) (normalized to the "bool" udtName) has no
 //    boolean CAST target, and CAST('true'/'false' AS SIGNED) can't parse
@@ -80,8 +80,21 @@ function castType(table: TableInfo, column: string): string {
 //    DECIMAL)-wrapped text parameter is needless indirection once the value
 //    is already numeric; binding it natively keeps the parameter a plain
 //    number, which every driver can index/plan against directly.
+//  - strings: a text column compared against a text parameter needs no cast at
+//    all — the round-trip used to emit CAST(CAST(? AS CHAR) AS CHAR), which is
+//    not merely redundant but wrong on MySQL. A cast result carries the
+//    *connection's* collation with implicit coercibility, and MySQL refuses to
+//    compare it against an implicitly-collated column of any other collation
+//    ("illegal mix of collations"), which is every utf8mb4_unicode_ci column on
+//    a MySQL 8 server. Bound bare, the parameter is merely *coercible*: it
+//    adopts whatever collation the column itself has. It also sidesteps CAST(?
+//    AS enum), which isn't even a legal cast target in MySQL.
 function bindsNative(cast: string, value: unknown): boolean {
-  return (cast === "bool" && typeof value === "boolean") || (NUMERIC_UDTS.has(cast) && typeof value === "number");
+  return (
+    (cast === "bool" && typeof value === "boolean") ||
+    (NUMERIC_UDTS.has(cast) && typeof value === "number") ||
+    (TEXT_UDTS.has(cast) && typeof value === "string")
+  );
 }
 
 /**
@@ -179,9 +192,7 @@ export function buildFilterClause(
           // `col = ANY($1::int4[])` — the array literal is cast, not the column.
           parts.push(`${col} = ANY(${dialect.cast(push(arr), `${cast}[]`)})`);
         } else {
-          parts.push(
-            `${col} IN (${arr.map((val) => dialect.cast(dialect.castToText(push(val)), cast)).join(", ")})`,
-          );
+          parts.push(`${col} IN (${arr.map((val) => bindOrCast(cast, val)).join(", ")})`);
         }
         break;
       }

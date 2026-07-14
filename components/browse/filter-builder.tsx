@@ -7,6 +7,7 @@ import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
 import { RefCombobox } from "./ref-combobox";
 import { TagInput } from "./tag-input";
+import { AutocompleteInput } from "./autocomplete-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TypedInput } from "@/components/ui/typed-input";
@@ -150,12 +151,16 @@ function Chips({
 function ConditionRow({
   columns,
   target,
+  indexedColumns,
   cond,
   onChange,
   onRemove,
 }: {
   columns: ColumnMeta[];
   target: FilterTarget;
+  // Which columns the server can filter without a full scan — gates the
+  // indexed "is" autocomplete (see valueEditor's "text" + "eq" branch below).
+  indexedColumns: string[];
   cond: FilterCondition;
   onChange: (c: FilterCondition) => void;
   onRemove: () => void;
@@ -424,6 +429,22 @@ function ConditionRow({
         />
       );
     }
+    // Indexed "is" fast path: a case-sensitive prefix-match autocomplete
+    // (mode="prefix") that can use a plain index on the column, instead of
+    // the free-text input below with no query behind it at all.
+    if (kind === "text" && cond.op === "eq" && indexedColumns.includes(cm.col.name)) {
+      return (
+        <AutocompleteInput
+          target={{ connection: target.connection, schema: target.schema, table: target.table, column: cm.col.name }}
+          mode="prefix"
+          className="flex-1 min-w-30"
+          placeholder="value"
+          value={strValue(cond.value)}
+          onChange={(value) => onChange({ ...cond, value })}
+        />
+      );
+    }
+
     // text / date single value
     return (
       <TypedInput
@@ -482,17 +503,33 @@ function ConditionRow({
 export function FilterPanel({
   columns,
   target,
+  indexedColumns = [],
   value,
   onChange,
   onClose,
+  displayColumn,
 }: {
   columns: ColumnMeta[];
   target: FilterTarget;
+  // Which columns the server can filter without a full scan — gates the
+  // indexed "is" autocomplete on each condition row (see ConditionRow).
+  indexedColumns?: string[];
   value: FilterSet;
   onChange: (set: FilterSet) => void;
   onClose?: () => void;
+  // Column a fresh condition should default to — the table's "display"
+  // column reads better as a first filter than whatever happens to be
+  // columns[0] (often the PK). Falls back to columns[0] when absent/hidden.
+  displayColumn?: string | null;
 }) {
-  const [set, setSet] = useState<FilterSet>(value);
+  const defaultColumn = () => columns.find((c) => c.col.name === displayColumn) ?? columns[0];
+
+  const [set, setSet] = useState<FilterSet>(() => {
+    if (value.conditions.length > 0) return value;
+    const col = defaultColumn();
+    if (!col) return value;
+    return { ...value, conditions: [{ column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }] };
+  });
 
   const complete = (s: FilterSet): FilterSet => ({
     combinator: s.combinator,
@@ -504,7 +541,8 @@ export function FilterPanel({
   const dirty = JSON.stringify(complete(set)) !== JSON.stringify(complete(applied));
 
   const addCondition = () => {
-    const col = columns[0];
+    const col = defaultColumn();
+    if (!col) return;
     setSet((s) => ({
       ...s,
       conditions: [
@@ -582,6 +620,7 @@ export function FilterPanel({
             key={i}
             columns={columns}
             target={target}
+            indexedColumns={indexedColumns}
             cond={c}
             onChange={(nc) => update(i, nc)}
             onRemove={() => remove(i)}

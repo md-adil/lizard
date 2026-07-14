@@ -6,7 +6,8 @@
 // width on every th/td (driven by TanStack column sizing held in React
 // state) keeps header/body aligned and drives live column-resize. Sorting
 // stays server-side: header clicks call back to the parent to refetch.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { FkLabels } from "@/lib/types";
 import { RefetchBar } from "./refetch-bar";
 import { fkLabelFor } from "@/lib/data/fk-labels";
@@ -21,11 +22,13 @@ import {
   type RowSelectionState,
   type Updater,
 } from "@tanstack/react-table";
-import { Columns3 } from "lucide-react";
+import { Columns3, Eye, Pencil } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import { formatCell } from "./useTableMeta";
+import { ReferenceHoverPreview } from "./reference-hover-preview";
 import { RedactedValue } from "./redacted-value";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -37,8 +40,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { useColumnSearch } from "./use-column-search";
 
 type Row = Record<string, unknown>;
+
+// Below this many toggleable columns, scanning the list by eye is easier
+// than typing — the search box only earns its keep past that.
+const COLUMN_SEARCH_THRESHOLD = 10;
 
 interface Props {
   columns: ColumnMeta[];
@@ -49,6 +57,8 @@ interface Props {
   onToggleSort: (column: string) => void;
   onRowClick?: (row: Row) => void;
   rowClickable?: boolean;
+  viewHref?: (row: Row) => string;
+  onEdit?: (row: Row) => void;
   maxHeight?: string;
   isLoading?: boolean;
   isFetching?: boolean;
@@ -57,6 +67,10 @@ interface Props {
   // need this to survive reloads).
   columnVisibility?: VisibilityState;
   onColumnVisibilityChange?: (updater: Updater<VisibilityState>) => void;
+  // Controlled column widths, persisted per-user (see use-column-widths.ts).
+  // Omit to fall back to local, unpersisted state.
+  columnSizing?: ColumnSizingState;
+  onColumnSizingChange?: (updater: Updater<ColumnSizingState>) => void;
   // Phase 8.2 — row-selection checkboxes for bulk actions. Omit to hide the
   // selection column entirely (e.g. the reference picker modal).
   onSelectionChange?: (rows: Row[]) => void;
@@ -74,7 +88,7 @@ const SK_WIDTHS = [72, 55, 88, 64, 91, 48, 76, 60, 83, 44];
 // initial width heuristic: short types narrow, references/text wider
 function defaultWidth(cm: ColumnMeta): number {
   if (["bool", "int2", "int4", "int8", "date"].includes(cm.col.udtName)) return 120;
-  if (cm.widget === "reference") return 230;
+  if (cm.ref) return 230;
   if (cm.widget === "datetime") return 180;
   if (cm.widget === "textarea" || cm.widget === "json") return 300;
   return 170;
@@ -89,16 +103,22 @@ export function DataGrid({
   onToggleSort,
   onRowClick,
   rowClickable,
+  viewHref,
+  onEdit,
   maxHeight = "calc(100vh - 240px)",
   isLoading = false,
   isFetching = false,
   columnVisibility: controlledVisibility,
   onColumnVisibilityChange,
+  columnSizing: controlledSizing,
+  onColumnSizingChange,
   onSelectionChange,
   clearSelectionSignal,
 }: Props) {
   // holding sizing in React state guarantees a re-render on every resize tick
-  const [colSizing, setColSizing] = useState<ColumnSizingState>({});
+  const [localSizing, setLocalSizing] = useState<ColumnSizingState>({});
+  const colSizing = controlledSizing ?? localSizing;
+  const setColSizing = onColumnSizingChange ?? setLocalSizing;
   const [localVisibility, setLocalVisibility] = useState<VisibilityState>({});
   const columnVisibility = controlledVisibility ?? localVisibility;
   const setColumnVisibility = onColumnVisibilityChange ?? setLocalVisibility;
@@ -107,6 +127,11 @@ export function DataGrid({
   // page — drop any stale selection whenever the page's rows change.
   useEffect(() => setRowSelection({}), [rows]);
   useEffect(() => setRowSelection({}), [clearSelectionSignal]);
+  // "Columns ▾" search — a wide table can have dozens of columns, so filter
+  // the toggle list instead of making the user scroll for one. Cleared
+  // whenever the menu closes so it doesn't carry over stale to the next open.
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [columnSearch, setColumnSearch] = useState("");
 
   const colDefs = useMemo<ColumnDef<Row>[]>(
     () => [
@@ -151,21 +176,66 @@ export function DataGrid({
               cm.ref && v != null
                 ? fkLabelFor(fkLabels, cm.col.name, info.row.original as Record<string, unknown>)
                 : undefined;
-            if (label) {
-              return (
-                <>
-                  {label}{" "}
-                  <span className="rounded border px-1 font-mono text-[10px] text-muted-foreground">{String(v)}</span>
-                </>
+            const rawContent = label ? (
+              <>
+                {label}{" "}
+                <span className="rounded border px-1 font-mono text-[10px] text-muted-foreground">{String(v)}</span>
+              </>
+            ) : (
+              (() => {
+                const f = formatCell(v, cm.widget, cm.optionLabels);
+                return <span className={f.muted ? "text-muted-foreground" : undefined}>{f.icon ?? f.text}</span>;
+              })()
+            );
+            const content =
+              cm.ref && v != null ? (
+                <ReferenceHoverPreview target={cm.ref} value={v}>
+                  {rawContent}
+                </ReferenceHoverPreview>
+              ) : (
+                rawContent
               );
-            }
-            const f = formatCell(v, cm.widget, cm.optionLabels);
-            return <span className={f.muted ? "text-muted-foreground" : undefined}>{f.icon ?? f.text}</span>;
+            return content;
           },
         }),
       ),
+      ...(viewHref || onEdit
+        ? [
+            helper.display({
+              id: "__actions",
+              size: 96,
+              header: () => null,
+              cell: ({ row }) => (
+                <div className="flex items-center justify-end gap-1">
+                  {viewHref && (
+                    <Button
+                      variant="ghost"
+                      title="View"
+                      nativeButton={false}
+                      render={<Link href={viewHref(row.original)} onClick={(e) => e.stopPropagation()} />}
+                    >
+                      <Eye />
+                    </Button>
+                  )}
+                  {onEdit && (
+                    <Button
+                      variant="ghost"
+                      title="Edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(row.original);
+                      }}
+                    >
+                      <Pencil />
+                    </Button>
+                  )}
+                </div>
+              ),
+            }) as ColumnDef<Row>,
+          ]
+        : []),
     ],
-    [columns, fkLabels, onSelectionChange],
+    [columns, fkLabels, onSelectionChange, viewHref, onEdit],
   );
 
   const table = useReactTable({
@@ -189,11 +259,23 @@ export function DataGrid({
 
   const leafColumns = table.getVisibleLeafColumns();
   const totalWidth = table.getTotalSize();
+  const allLeafColumns = table.getAllLeafColumns();
+  const toggleableColumns = useMemo(
+    () => allLeafColumns.filter((c) => c.id !== "__select" && c.id !== "__actions"),
+    [allLeafColumns],
+  );
+  const searchedColumns = useColumnSearch(toggleableColumns, columns, columnSearch);
 
   return (
     <div>
       <div className="flex justify-end mb-2">
-        <DropdownMenu>
+        <DropdownMenu
+          open={columnsMenuOpen}
+          onOpenChange={(open) => {
+            setColumnsMenuOpen(open);
+            if (!open) setColumnSearch("");
+          }}
+        >
           <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="gap-1.5 bg-card" />}>
             <Columns3 className="size-3.5" />
             Columns
@@ -207,12 +289,7 @@ export function DataGrid({
                     variant="ghost"
                     size="sm"
                     className="h-5 px-1.5 text-[11px]"
-                    onClick={() =>
-                      table
-                        .getAllLeafColumns()
-                        .filter((c) => c.id !== "__select")
-                        .forEach((c) => c.toggleVisibility(true))
-                    }
+                    onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(true))}
                   >
                     All
                   </Button>
@@ -220,34 +297,38 @@ export function DataGrid({
                     variant="ghost"
                     size="sm"
                     className="h-5 px-1.5 text-[11px]"
-                    onClick={() =>
-                      table
-                        .getAllLeafColumns()
-                        .filter((c) => c.id !== "__select")
-                        .forEach((c) => c.toggleVisibility(false))
-                    }
+                    onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(false))}
                   >
                     None
                   </Button>
                 </div>
               </div>
+              {toggleableColumns.length > COLUMN_SEARCH_THRESHOLD && (
+                <div className="px-1.5 pb-1">
+                  <Input
+                    type="search"
+                    value={columnSearch}
+                    onChange={(e) => setColumnSearch(e.target.value)}
+                    // stop the keystroke from reaching the menu's roving-focus /
+                    // typeahead handling — otherwise letters jump-select items
+                    // instead of typing into the box.
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="Search columns…"
+                    className="h-7 text-[12px]"
+                  />
+                </div>
+              )}
               <DropdownMenuSeparator />
-              {table
-                .getAllLeafColumns()
-                .filter((column) => column.id !== "__select")
-                .map((column) => {
-                  const cm = columns.find((c) => c.col.name === column.id);
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(checked) => column.toggleVisibility(checked)}
-                      closeOnClick={false}
-                    >
-                      {cm?.label ?? column.id}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
+              {searchedColumns.map(({ column, cm }) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(checked) => column.toggleVisibility(checked)}
+                  closeOnClick={false}
+                >
+                  {cm?.label ?? column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -255,20 +336,32 @@ export function DataGrid({
 
       <div className="relative">
         <RefetchBar isFetching={!!isFetching} isLoading={!!isLoading} />
-        <div className="overflow-auto rounded-md border bg-card" style={{ maxHeight }}>
+        <div className="overflow-y-auto rounded-md border bg-card" style={{ maxHeight }}>
           <Table style={{ tableLayout: "fixed", width: totalWidth, minWidth: totalWidth }}>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id} className="hover:bg-transparent">
                   {hg.headers.map((header) => {
                     const w = header.getSize();
-                    // the leading row-selection column (Phase 8.2) has no
-                    // ColumnMeta — it's a UI control, not a data column.
+                    // the leading row-selection column (Phase 8.2) and the
+                    // trailing view/edit actions column have no ColumnMeta —
+                    // they're UI controls, not data columns.
                     if (header.column.id === "__select") {
                       return (
                         <TableHead
                           key={header.id}
                           className="sticky top-0 z-1 bg-card"
+                          style={{ width: w, minWidth: w, maxWidth: w }}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
+                      );
+                    }
+                    if (header.column.id === "__actions") {
+                      return (
+                        <TableHead
+                          key={header.id}
+                          className="sticky top-0 right-0 z-2 border-r bg-card"
                           style={{ width: w, minWidth: w, maxWidth: w }}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
@@ -328,7 +421,12 @@ export function DataGrid({
                 : table.getRowModel().rows.map((row) => (
                     <TableRow
                       key={row.id}
-                      className={rowClickable ? "cursor-pointer" : ""}
+                      // Only onRowClick/rowClickable makes the whole row a
+                      // click target (record page, reference picker). When a
+                      // caller uses the pinned view/edit actions column
+                      // instead, the row itself isn't clickable, so the base
+                      // hover highlight would be misleading.
+                      className={`group ${rowClickable ? "cursor-pointer" : "hover:bg-transparent"}`}
                       onClick={() => onRowClick?.(row.original)}
                     >
                       {row.getVisibleCells().map((cell) => {
@@ -337,7 +435,11 @@ export function DataGrid({
                         return (
                           <TableCell
                             key={cell.id}
-                            className="truncate"
+                            className={
+                              cell.column.id === "__actions"
+                                ? "sticky right-0 z-1 border-r border-transparent bg-card group-hover:border-border"
+                                : "truncate"
+                            }
                             style={{ width: w, minWidth: w, maxWidth: w }}
                             title={typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "")}
                             onClick={cell.column.id === "__select" ? (e) => e.stopPropagation() : undefined}

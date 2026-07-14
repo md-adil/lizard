@@ -8,7 +8,7 @@ export const connectionBaseSchema = z.object({
     .string()
     .min(1)
     .max(40)
-    .regex(/^[a-z][a-z0-9_]*$/, "lowercase letters, digits and underscores; must start with a letter"),
+    .regex(/^[a-zA-Z0-9_-]+$/, "letters, digits, hyphens and underscores"),
   engine: z.enum(DB_ENGINES as [DbEngine, ...DbEngine[]]),
   host: z.string().min(1),
   // optional on input — defaulted from the engine on create (see connectionSchema)

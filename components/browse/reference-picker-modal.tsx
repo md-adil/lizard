@@ -98,7 +98,7 @@ export function ReferencePickerModal({
     onClose();
   };
 
-  const visibleCols = meta?.columns.filter((c) => !c.hidden) ?? [];
+  const visibleCols = meta?.columns.filter((c) => !c.hidden && !c.hiddenInGrid) ?? [];
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

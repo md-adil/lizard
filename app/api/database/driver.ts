@@ -46,6 +46,10 @@ export interface Dialect {
   // A case-insensitive regex predicate. PG: `expr::text ~* ph`; MySQL: `expr REGEXP ph`.
   regexMatch(expr: string, placeholder: string): string;
 
+  // Truncate a date/timestamp expression down to the day, for grouping rows
+  // by calendar day. PG: `date_trunc('day', expr)`; MySQL: `DATE(expr)`.
+  dateTrunc(expr: string): string;
+
   // Character used to escape LIKE metacharacters in user input.
   readonly likeEscapeChar: string;
 

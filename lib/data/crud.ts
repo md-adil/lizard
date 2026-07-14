@@ -13,7 +13,7 @@ import { getConnection, getColumnOverrides, listTableOverrides, listVirtualFks, 
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnectionCatalog } from "@/lib/introspect/catalog";
 import { guessDisplayColumn } from "@/lib/introspect/heuristics";
-import { buildFilterClause, type FilterCondition, type Combinator } from "@/lib/data/filters";
+import { buildFilterClause, escapeLike, type FilterCondition, type Combinator } from "@/lib/data/filters";
 import { matchTargetFor, buildMatchClause } from "@/lib/data/search-match";
 
 export class CrudError extends Error {
@@ -97,6 +97,60 @@ export function primaryKeyColumnsFor(conn: ConnectionConfig, table: TableInfo): 
   return override?.primaryKey ?? [];
 }
 
+// date/timestamp udtNames, normalized identically across engines (see
+// dateColumns() in components/browse/view-types.ts, the client-side twin of
+// this heuristic).
+function isDateLikeUdt(udtName: string): boolean {
+  return udtName === "date" || udtName.startsWith("timestamp");
+}
+
+// char/text-family udtNames across engines (varchar, char, text, mediumtext,
+// bpchar, citext, ...) — a column already this shape needs no CAST(... AS
+// CHAR)/::text to compare or return as a string. Casting it anyway turns a
+// plain index on the column into an unindexable expression: that's what hit
+// a MySQL statement-timeout on `SELECT DISTINCT CAST(name AS CHAR) ...
+// ORDER BY 1 LIMIT 20` against a large indexed varchar column in production
+// (see columnSuggestions).
+function isTextLikeUdt(udtName: string): boolean {
+  return /char|text/i.test(udtName);
+}
+
+// The ORDER BY to use when a request specifies no explicit sort: the
+// customize-page "Grid settings" default sort column if one is set, else the
+// table's last (highest-ordinal) *indexed* date/timestamp column, descending
+// — an unsorted browse is far more often "show me the newest rows" than
+// "show me primary-key order" — else null (caller falls back to PK order).
+// The auto-pick requires an index: sorting by an unindexed column forces a
+// full-table sort on every unsorted browse, which is exactly the silent
+// slow-query risk this fallback shouldn't introduce on its own. (The
+// admin-configured override above isn't gated on this — that's a deliberate
+// per-table choice, not a blanket heuristic applied everywhere.)
+function defaultSortFor(conn: ConnectionConfig, table: TableInfo): { column: string; dir: "asc" | "desc" } | null {
+  const override = resolveTableOverride(listTableOverrides(), conn.id, table.schema, table.name);
+  if (override?.defaultSort && table.columns.some((c) => c.name === override.defaultSort)) {
+    return { column: override.defaultSort, dir: override.defaultSortDir ?? "asc" };
+  }
+  const dateCols = table.columns.filter((c) => isDateLikeUdt(c.udtName) && table.indexedColumns.includes(c.name));
+  const lastDateCol = dateCols[dateCols.length - 1];
+  return lastDateCol ? { column: lastDateCol.name, dir: "desc" } : null;
+}
+
+// The columns to actually SELECT for a grid-type fetch (listRows/
+// listGroupedRows) — `hidden`/`hiddenInGrid` columns are dropped so a
+// wide-content column (html/markdown/longtext — exactly what hiddenInGrid
+// exists for) doesn't get read off disk and shipped over the wire on every
+// browse just to be thrown away client-side. `getRow`/`exportRows` are
+// deliberately NOT pruned this way: the row editor always needs every
+// writable column (hidden or not — see the customize-page hidden-vs-
+// hiddenInGrid design notes), and an export is a "give me everything" ask
+// independent of grid display prefs.
+function selectColumnsFor(conn: ConnectionConfig, table: TableInfo, alwaysInclude: (string | null)[]): string[] {
+  const overrides = getColumnOverrides(conn.id, table.schema, table.name);
+  const prunable = new Set(overrides.filter((o) => o.hidden || o.hiddenInGrid).map((o) => o.column));
+  const keep = new Set(alwaysInclude.filter((c): c is string => !!c));
+  return table.columns.filter((c) => keep.has(c.name) || !prunable.has(c.name)).map((c) => c.name);
+}
+
 // ---------- list ----------
 
 export async function listRows(params: ListParams) {
@@ -122,12 +176,15 @@ export async function listRows(params: ListParams) {
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
 
     let orderSql = "";
+    const fallbackSort = params.sort ? null : defaultSortFor(conn, table);
     if (params.sort) {
       assertColumn(table, params.sort);
       orderSql = `ORDER BY ${dialect.quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"}`;
       if (dialect.engine === "postgres") {
         orderSql += " NULLS LAST";
       }
+    } else if (fallbackSort) {
+      orderSql = `ORDER BY ${dialect.quoteIdent(fallbackSort.column)} ${fallbackSort.dir === "desc" ? "DESC" : "ASC"}`;
     } else if (effectiveKey(table).length > 0) {
       orderSql = `ORDER BY ${effectiveKey(table)
         .map((c) => dialect.quoteIdent(c))
@@ -140,7 +197,15 @@ export async function listRows(params: ListParams) {
       ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(table.name)}`
       : dialect.quoteIdent(table.name);
 
-    const sql = `SELECT * FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${pageSize + 1} OFFSET ${offset}`;
+    const selectCols = selectColumnsFor(conn, table, [
+      ...effectiveKey(table),
+      displayColumnFor(conn, table),
+      params.sort ?? null,
+      fallbackSort?.column ?? null,
+    ]);
+    const selectSql = selectCols.map((c) => dialect.quoteIdent(c)).join(", ");
+
+    const sql = `SELECT ${selectSql} FROM ${fqtn} ${whereSql} ${orderSql} LIMIT ${pageSize + 1} OFFSET ${offset}`;
     const res = await client.query(sql, allValues);
     const hasMore = res.rows.length > pageSize;
     const rows = hasMore ? res.rows.slice(0, pageSize) : res.rows;
@@ -157,6 +222,151 @@ export async function listRows(params: ListParams) {
 
     const fkLabels = await fetchFkLabels(conn, table, rows);
     return { rows, hasMore, total, fkLabels };
+  } finally {
+    client.release();
+  }
+}
+
+export interface GroupedListParams {
+  connection: string;
+  schema: string | undefined;
+  table: string;
+  groupBy: string;
+  groupKind: "value" | "day"; // "day" truncates a date/timestamp column before grouping (calendar)
+  perGroup: number; // max rows returned per distinct group
+  maxGroups?: number; // max distinct groups fetched at all (default 50) — bounds total rows to maxGroups * perGroup
+  sort?: string;
+  sortDir?: "asc" | "desc";
+  filters?: FilterCondition[];
+  combinator?: Combinator;
+  search?: string;
+}
+
+// Phase 8.4 fix — Kanban/Calendar used to render whatever page the Table view
+// had already fetched, bucketed client-side. With one global LIMIT, a group
+// (kanban column / calendar day) bigger than the page size crowded every other
+// group out of the response entirely. This runs a windowed query so every
+// distinct group gets its own top-N, plus an exact per-group count so the UI
+// can show "+N more" instead of silently dropping rows.
+//
+// A group-by column can still have unbounded cardinality (e.g. a high-cardinality
+// FK) — total rows fetched is capped at maxGroups * perGroup by first picking
+// which distinct groups to show, so a runaway group count can't blow up the
+// query the way a runaway group *size* used to.
+export async function listGroupedRows(params: GroupedListParams) {
+  const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
+  const dialect = getDialect(conn.engine);
+  const client = await getClient(conn, "read");
+
+  try {
+    assertColumn(table, params.groupBy);
+    const { tag: tagCols } = widgetOverrideColumns(conn.id, table.schema, table.name);
+    const { clause: filterClause, values: filterValues } = buildFilterClause(
+      table,
+      params.filters ?? [],
+      params.combinator ?? "and",
+      dialect,
+      0,
+      tagCols,
+    );
+    const allValues: unknown[] = [...filterValues];
+
+    const searchClause = params.search ? searchClauseFor(conn, table, params.search, allValues, dialect) : "";
+
+    const clauses = [filterClause, searchClause].filter(Boolean);
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
+    let orderSql = "";
+    const fallbackSort = params.sort ? null : defaultSortFor(conn, table);
+    if (params.sort) {
+      assertColumn(table, params.sort);
+      orderSql = `${dialect.quoteIdent(params.sort)} ${params.sortDir === "desc" ? "DESC" : "ASC"}`;
+    } else if (fallbackSort) {
+      orderSql = `${dialect.quoteIdent(fallbackSort.column)} ${fallbackSort.dir === "desc" ? "DESC" : "ASC"}`;
+    } else if (effectiveKey(table).length > 0) {
+      orderSql = effectiveKey(table)
+        .map((c) => dialect.quoteIdent(c))
+        .join(", ");
+    } else {
+      orderSql = dialect.quoteIdent(params.groupBy);
+    }
+
+    const groupExpr =
+      params.groupKind === "day"
+        ? dialect.dateTrunc(dialect.quoteIdent(params.groupBy))
+        : dialect.quoteIdent(params.groupBy);
+
+    const fqtn = dialect.supportsSchemas
+      ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(table.name)}`
+      : dialect.quoteIdent(table.name);
+
+    const perGroup = Math.min(Math.max(params.perGroup, 1), 200);
+    const maxGroups = Math.min(Math.max(params.maxGroups ?? 50, 1), 200);
+
+    // Step 1 — which distinct groups to show, bounded to maxGroups.
+    const distinctSql = `SELECT DISTINCT ${groupExpr} AS __gk FROM ${fqtn} t ${whereSql} ORDER BY ${groupExpr} LIMIT ${maxGroups}`;
+    const distinctRes = await client.query(distinctSql, allValues);
+    const groupKeys = (distinctRes.rows as { __gk: unknown }[]).map((r) => r.__gk);
+    if (groupKeys.length === 0) {
+      return { rows: [], groupCounts: {}, fkLabels: {} };
+    }
+    const nonNullKeys = groupKeys.filter((v) => v != null);
+    const hasNullGroup = groupKeys.length > nonNullKeys.length;
+
+    // Restrict both the ranked fetch and the count query to just those
+    // groups — NULL can't be matched via `IN`, so it needs its own IS NULL arm.
+    const inParts: string[] = [];
+    if (nonNullKeys.length > 0) {
+      const placeholders = nonNullKeys.map((_, i) => dialect.placeholder(allValues.length + i + 1)).join(", ");
+      inParts.push(`${groupExpr} IN (${placeholders})`);
+    }
+    if (hasNullGroup) inParts.push(`${groupExpr} IS NULL`);
+    const groupFilterClause = inParts.length > 1 ? `(${inParts.join(" OR ")})` : inParts[0];
+    const scopedWhereSql = whereSql ? `${whereSql} AND ${groupFilterClause}` : `WHERE ${groupFilterClause}`;
+    const scopedValues = [...allValues, ...nonNullKeys];
+
+    // Calendar (day grouping) only ever renders a single display field per
+    // event chip (see CalendarView/displayValue in table-views.tsx) — unlike
+    // kanban cards, which show a handful of extra fields via CardFields — so
+    // it doesn't need the rest of the row's non-hidden columns over the wire.
+    const selectCols =
+      params.groupKind === "day"
+        ? [...new Set([...effectiveKey(table), displayColumnFor(conn, table), params.groupBy].filter((c): c is string => !!c))]
+        : selectColumnsFor(conn, table, [
+            ...effectiveKey(table),
+            displayColumnFor(conn, table),
+            params.sort ?? null,
+            fallbackSort?.column ?? null,
+            params.groupBy,
+          ]);
+    const selectColsSql = selectCols.map((c) => `t.${dialect.quoteIdent(c)}`).join(", ");
+
+    const sql = `
+      SELECT * FROM (
+        SELECT ${selectColsSql}, ROW_NUMBER() OVER (PARTITION BY ${groupExpr} ORDER BY ${orderSql}) AS __group_rn
+        FROM ${fqtn} t ${scopedWhereSql}
+      ) __ranked WHERE __group_rn <= ${perGroup}`;
+    const res = await client.query(sql, scopedValues);
+    const rows = res.rows.map((r) => {
+      const { __group_rn: _rn, ...rest } = r as Record<string, unknown>;
+      return rest;
+    });
+    normalizeTagColumns(rows, tagCols);
+
+    // exact row count per shown group, so the UI can flag truncated groups
+    // ("+N more") instead of silently dropping rows past `perGroup`.
+    const countSql = `SELECT ${groupExpr} AS __group_key, count(*) AS n FROM ${fqtn} t ${scopedWhereSql} GROUP BY ${groupExpr}`;
+    const countRes = await client.query(countSql, scopedValues);
+    const groupCounts: Record<string, number> = {};
+    for (const row of countRes.rows as { __group_key: unknown; n: string | number }[]) {
+      const key = row.__group_key == null ? "" : String(row.__group_key);
+      groupCounts[key] = Number(row.n);
+    }
+
+    // CalendarView (groupKind "day") only renders displayValue(row) — no FK
+    // label resolution needed there, unlike kanban cards.
+    const fkLabels = params.groupKind === "day" ? {} : await fetchFkLabels(conn, table, rows);
+    return { rows, groupCounts, fkLabels };
   } finally {
     client.release();
   }
@@ -234,7 +444,7 @@ export async function listLinkedRows(
   otherSchema: string | undefined,
   otherTableName: string,
   selfValue: unknown,
-): Promise<Record<string, unknown>[]> {
+): Promise<{ rows: Record<string, unknown>[]; total: number }> {
   const { conn, table: junction } = await resolveTable(connection, junctionSchema, junctionTable);
   assertColumn(junction, selfFkColumn);
   assertColumn(junction, otherFkColumn);
@@ -268,14 +478,23 @@ export async function listLinkedRows(
     const joinOnJunction = `j.${dialect.quoteIdent(otherFkColumn)}`;
     const whereSelf = `j.${dialect.quoteIdent(selfFkColumn)}`;
 
+    const LIMIT = 50;
+
+    const countSql = `SELECT COUNT(*) AS __count
+                      FROM ${fqJunction} j
+                      WHERE ${whereSelf} = ${dialect.placeholder(1)}`;
+    const countRes = await client.query(countSql, [selfValue]);
+    const total = Number(countRes.rows[0]?.__count ?? 0);
+
     const sql = `SELECT j.*, ${selectDisplay} AS __label, ${selectOtherPk} AS __other_id
                  FROM ${fqJunction} j
                  JOIN ${fqOther} o
                    ON ${joinOnOther} = ${joinOnJunction}
-                 WHERE ${whereSelf} = ${dialect.placeholder(1)}`;
+                 WHERE ${whereSelf} = ${dialect.placeholder(1)}
+                 LIMIT ${LIMIT}`;
 
     const res = await client.query(sql, [selfValue]);
-    return res.rows;
+    return { rows: res.rows, total };
   } finally {
     client.release();
   }
@@ -415,31 +634,38 @@ async function fetchFkLabels(
         // and turns each label lookup into a full scan.
         const targetExpr = (col: string) => `t.${targetDialect.quoteIdent(col)}`;
 
-        const targetCols = job.pairs.map((p) => {
-          return targetTable.columns.find((c) => c.name === p.to)!;
-        });
-
-        const valuesRows = tuples.map((tuple, rowIndex) => {
-          const cols = tuple.map((val, colIndex) => {
+        // The keys are an IN filter, not a joined table: every projected value
+        // comes from `t` itself, so the keys only ever needed to narrow it.
+        //
+        // Bind them bare. A parameter compared against a bare column is
+        // *coercible* — the engine adopts the column's own type and collation.
+        // Wrapping it in a cast (`CAST(? AS CHAR)`) instead gives the value the
+        // connection's default collation with implicit coercibility, and MySQL
+        // then refuses to compare it against an implicitly-collated column of
+        // any other collation: "illegal mix of collations". Which is every
+        // utf8mb4_unicode_ci column on a MySQL 8 server, whose connection
+        // default is utf8mb4_0900_ai_ci.
+        const rowExprs = tuples.map((tuple) => {
+          const cols = tuple.map((val) => {
             params.push(val);
-            const placeholder = targetDialect.placeholder(params.length);
-            const targetCol = targetCols[colIndex];
-            const castPlaceholder = targetDialect.cast(placeholder, targetCol.udtName);
-            return rowIndex === 0 ? `${castPlaceholder} AS k${colIndex}` : castPlaceholder;
+            return targetDialect.placeholder(params.length);
           });
-          return `SELECT ${cols.join(", ")}`;
+          return cols.length === 1 ? cols[0] : `(${cols.join(", ")})`;
         });
-        const keysSubquery = `(${valuesRows.join(" UNION ALL ")})`;
+        const keyExpr =
+          job.pairs.length === 1
+            ? targetExpr(job.pairs[0].to)
+            : `(${job.pairs.map((p) => targetExpr(p.to)).join(", ")})`;
+        const keyClause = `${keyExpr} IN (${rowExprs.join(", ")})`;
 
         const keyCols = job.pairs.map((_, i) => `k${i}`);
-        const onClause = job.pairs.map((p, i) => `${targetExpr(p.to)} = vfk_keys.k${i}`).join(" AND ");
         const selectKeys = job.pairs.map((p, i) => `${targetExpr(p.to)} AS k${i}`);
         const targetConstants = job.constants.filter((c) => !c.side || c.side === "target");
         const constClause = targetConstants.map((c) => {
           params.push(c.value);
           return `${targetExpr(c.toColumn)} = ${targetDialect.placeholder(params.length)}`;
         });
-        const where = constClause.length ? `WHERE ${constClause.join(" AND ")}` : "";
+        const where = `WHERE ${[keyClause, ...constClause].join(" AND ")}`;
 
         const client = await getClient(job.targetConn, "read");
         try {
@@ -452,8 +678,6 @@ async function fetchFkLabels(
           const res = await client.query(
             `SELECT ${selectKeys.join(", ")}, ${selectDisplay} AS label
              FROM ${fqTable} t
-             JOIN ${keysSubquery} vfk_keys
-               ON ${onClause}
              ${where}`,
             params,
           );
@@ -620,6 +844,14 @@ export async function columnSuggestions(
   tableName: string,
   column: string,
   search: string,
+  // "contains" (default) matches anywhere, case-insensitively — via
+  // ILIKE/LOWER(CAST(...)) (see caseInsensitiveLike per dialect), which no
+  // plain index can satisfy no matter the pattern shape. "prefix" is the
+  // filter panel's indexed "is" autocomplete: a bare, case-sensitive
+  // `LIKE 'search%'` against the raw column, sargable against a plain index
+  // (assuming a byte/C-locale-comparable collation) — the whole point of
+  // offering it is to avoid a full scan on a large indexed column.
+  mode: "contains" | "prefix" = "contains",
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   assertColumn(table, column);
@@ -628,9 +860,13 @@ export async function columnSuggestions(
   try {
     const params: unknown[] = [];
     const col = dialect.quoteIdent(column);
-    const colExpr = dialect.castToText(col);
+    const colInfo = table.columns.find((c) => c.name === column);
+    const colExpr = colInfo && isTextLikeUdt(colInfo.udtName) ? col : dialect.castToText(col);
     let where = `WHERE ${col} IS NOT NULL`;
-    if (search) {
+    if (search && mode === "prefix") {
+      params.push(`${escapeLike(search, dialect.likeEscapeChar)}%`);
+      where += ` AND ${colExpr} LIKE ${dialect.placeholder(params.length)}`;
+    } else if (search) {
       params.push(`%${search}%`);
       where += ` AND ${dialect.caseInsensitiveLike(colExpr, dialect.placeholder(params.length))}`;
     }

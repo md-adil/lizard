@@ -31,6 +31,10 @@ export const postgresDialect: Dialect = {
     return `${expr}::text ~* ${placeholder}`;
   },
 
+  dateTrunc(expr) {
+    return `date_trunc('day', ${expr})`;
+  },
+
   likeEscapeChar: "\\",
 
   supportsReturning: true,

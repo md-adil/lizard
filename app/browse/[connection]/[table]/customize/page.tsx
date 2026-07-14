@@ -37,7 +37,7 @@ export default function CustomizePage() {
 
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"settings" | "columns" | "relationships">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "grid" | "columns" | "relationships">("settings");
 
   const backHref = tableHref({ connection: params.connection, schema: meta?.schema ?? schema, table: params.table });
 
@@ -149,6 +149,7 @@ export default function CustomizePage() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <TabsList className="mb-4">
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="grid">Grid</TabsTrigger>
           <TabsTrigger value="columns">Columns</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
         </TabsList>

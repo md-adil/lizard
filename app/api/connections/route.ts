@@ -24,13 +24,36 @@ export async function GET() {
   }
 }
 
+import { getConnection } from "@/lib/metadata/store";
+
 export async function POST(req: Request) {
   try {
     await requireAdmin();
-    const body = connectionSchema.parse(await req.json());
+    const rawBody = await req.json();
+    const body = connectionSchema.parse(rawBody);
     if (listConnections().some((c) => c.name === body.name)) {
       return fail(new Error(`A connection named "${body.name}" already exists`));
     }
+
+    let readPassword = body.readPassword;
+    let writeUser = body.writeUser;
+    let writePassword = body.writePassword;
+
+    if (rawBody.cloneFrom) {
+      const source = getConnection(rawBody.cloneFrom);
+      if (source) {
+        if (!readPassword) {
+          readPassword = source.readPassword;
+        }
+        if (writeUser === undefined || writeUser === null) {
+          writeUser = source.writeUser;
+        }
+        if (!writePassword) {
+          writePassword = source.writePassword;
+        }
+      }
+    }
+
     const conn = addConnection({
       name: body.name,
       engine: body.engine,
@@ -38,9 +61,9 @@ export async function POST(req: Request) {
       port: body.port,
       database: body.database,
       readUser: body.readUser,
-      readPassword: body.readPassword,
-      writeUser: body.writeUser || null,
-      writePassword: body.writePassword || null,
+      readPassword: readPassword,
+      writeUser: writeUser || null,
+      writePassword: writePassword || null,
       ssl: body.ssl,
       allowedSchemas: body.allowedSchemas?.length ? body.allowedSchemas : null,
     });
