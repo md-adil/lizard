@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/preview-card";
 import { useTableMeta, formatCell } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
+import { PreviewSkeleton } from "./preview-skeleton";
 
 export interface ReferenceTarget {
   connection: string;
@@ -73,7 +74,7 @@ export function ReferenceHoverPreview({
         <PreviewCardPositioner>
           <PreviewCardPopup>
             {isLoading ? (
-              <p className="text-[12px] text-muted-foreground">Loading…</p>
+              <PreviewSkeleton rows={PREVIEW_FIELD_LIMIT} />
             ) : !data ? (
               <p className="text-[12px] text-muted-foreground">Row not found.</p>
             ) : (

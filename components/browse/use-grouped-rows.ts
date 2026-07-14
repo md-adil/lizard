@@ -10,7 +10,7 @@
 // would fetch perGroup rows for every day that ever occurred.
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { dataApiUrl } from "./data-api";
-import type { CalendarCursor } from "./table-views";
+import { CALENDAR_DAY_DISPLAY_LIMIT, type CalendarCursor } from "./table-views";
 import type { ViewType } from "./view-types";
 import type { FkLabels } from "@/lib/types";
 import type { FilterCondition, Combinator } from "@/lib/data/filters";
@@ -22,7 +22,10 @@ export interface GroupedListResponse {
 }
 
 const KANBAN_PER_GROUP = 25;
-const CALENDAR_PER_GROUP = 20;
+// Calendar only ever shows CALENDAR_DAY_DISPLAY_LIMIT chips per day (plus a
+// "+N more" built from the server's exact groupCounts) — no point fetching
+// more rows than that per day.
+const CALENDAR_PER_GROUP = CALENDAR_DAY_DISPLAY_LIMIT;
 const KANBAN_MAX_GROUPS = 20;
 const CALENDAR_MAX_GROUPS = 40;
 

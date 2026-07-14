@@ -4,7 +4,8 @@
 // calendar / tree). All operate on the currently-loaded page of rows (no extra
 // fetch); the Table view remains the source of truth for pagination. Kanban is
 // the one that mutates: dropping a card issues an UPDATE of the group column.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { TableMeta } from "./useTableMeta";
 import { formatCell } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
@@ -14,6 +15,14 @@ import { RedactedValue } from "./redacted-value";
 import type { FkLabels } from "@/lib/types";
 import { fkLabelFor } from "@/lib/data/fk-labels";
 import { effectiveKey } from "@/lib/introspect/heuristics";
+import {
+  PreviewCard,
+  PreviewCardTrigger,
+  PreviewCardPortal,
+  PreviewCardPositioner,
+  PreviewCardPopup,
+} from "@/components/ui/preview-card";
+import { PreviewSkeleton } from "./preview-skeleton";
 
 type Row = Record<string, unknown>;
 
@@ -267,10 +276,65 @@ export function currentCalendarCursor(): CalendarCursor {
   return { y: d.getFullYear(), m: d.getMonth() };
 }
 
+// Max event chips rendered per day cell; the rest are folded into "+N more".
+export const CALENDAR_DAY_DISPLAY_LIMIT = 4;
+
+// Calendar rows only carry pk + display column + date field (see
+// listGroupedRows' day-grouping branch) — the chip itself renders just the
+// display value, so hovering it fetches the full row by pk (same GET /row
+// the row editor uses) and shows a few extra fields, lazily and once.
+function CalendarEventPreview({ meta, row, children }: { meta: TableMeta; row: Row; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const pk = rowPk(meta, row);
+
+  const { data, isLoading } = useQuery<Record<string, unknown> | null>({
+    queryKey: ["calendar-event-preview", meta.connection, meta.schema, meta.table.name, pk],
+    queryFn: async () => {
+      const res = await fetch(
+        dataApiUrl({
+          connection: meta.connection,
+          table: meta.table.name,
+          schema: meta.schema,
+          path: "row",
+          params: { pk: JSON.stringify(pk) },
+        }),
+      );
+      if (!res.ok) return null;
+      const body = await res.json();
+      return body.row ?? null;
+    },
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  return (
+    <PreviewCard open={open} onOpenChange={setOpen}>
+      <PreviewCardTrigger render={<span className="inline" />}>{children}</PreviewCardTrigger>
+      <PreviewCardPortal>
+        <PreviewCardPositioner>
+          <PreviewCardPopup>
+            {isLoading ? (
+              <PreviewSkeleton rows={4} />
+            ) : !data ? (
+              <p className="text-[12px] text-muted-foreground">Row not found.</p>
+            ) : (
+              <div className="space-y-1">
+                <div className="mb-1.5 truncate text-[13px] font-semibold">{displayValue(meta, data)}</div>
+                <CardFields meta={meta} row={data} />
+              </div>
+            )}
+          </PreviewCardPopup>
+        </PreviewCardPositioner>
+      </PreviewCardPortal>
+    </PreviewCard>
+  );
+}
+
 export function CalendarView({
   meta,
   rows,
   dateField,
+  groupCounts,
   cursor,
   onCursorChange,
   onOpen,
@@ -278,10 +342,15 @@ export function CalendarView({
   meta: TableMeta;
   rows: Row[];
   dateField: string;
+  // Exact per-day row count from the server (see listGroupedRows) — the
+  // fetch itself is capped at CALENDAR_DAY_DISPLAY_LIMIT rows/day, so the
+  // "+N more" total has to come from here rather than rows.length.
+  groupCounts?: Record<string, number>;
   cursor: CalendarCursor;
   onCursorChange: (c: CalendarCursor) => void;
   onOpen: (row: Row) => void;
 }) {
+  const hasKey = effectiveKey(meta.table).length > 0;
   const first = new Date(cursor.y, cursor.m, 1);
   const startDow = first.getDay();
   const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
@@ -299,6 +368,21 @@ export function CalendarView({
       byDay.get(day)!.push(row);
     }
   }
+
+  // Exact per-day totals from the server (groupCounts is keyed by the
+  // DB's day-truncated value, parsed the same way as row dates above) —
+  // the fetch itself is capped, so byDay's array length alone can't tell
+  // a full day from a truncated one.
+  const dayTotals = new Map<number, number>();
+  for (const [key, count] of Object.entries(groupCounts ?? {})) {
+    const d = new Date(key);
+    if (isNaN(d.getTime())) continue;
+    if (d.getFullYear() === cursor.y && d.getMonth() === cursor.m) {
+      const day = d.getDate();
+      dayTotals.set(day, (dayTotals.get(day) ?? 0) + count);
+    }
+  }
+  const totalFor = (day: number): number => dayTotals.get(day) ?? byDay.get(day)?.length ?? 0;
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < startDow; i++) cells.push(null);
@@ -348,18 +432,32 @@ export function CalendarView({
               <>
                 <div style={{ color: "var(--muted-foreground-faint)" }}>{day}</div>
                 <div className="space-y-0.5 mt-0.5">
-                  {(byDay.get(day) ?? []).slice(0, 4).map((row, j) => (
-                    <button
-                      key={j}
-                      className="block w-full text-left truncate rounded px-1 py-0.5 hoverable cursor-pointer"
-                      style={{ background: "var(--primary-soft)", color: "var(--primary)" }}
-                      onClick={() => onOpen(row)}
-                    >
-                      {displayValue(meta, row)}
-                    </button>
-                  ))}
-                  {(byDay.get(day)?.length ?? 0) > 4 && (
-                    <div style={{ color: "var(--muted-foreground-faint)" }}>+{byDay.get(day)!.length - 4} more</div>
+                  {(byDay.get(day) ?? []).slice(0, CALENDAR_DAY_DISPLAY_LIMIT).map((row, j) => {
+                    const chip = (
+                      <button
+                        className="block w-full text-left truncate rounded px-1 py-0.5 hoverable cursor-pointer"
+                        style={{ background: "var(--primary-soft)", color: "var(--primary)" }}
+                        onClick={() => onOpen(row)}
+                      >
+                        {displayValue(meta, row)}
+                      </button>
+                    );
+                    return (
+                      <div key={j}>
+                        {hasKey ? (
+                          <CalendarEventPreview meta={meta} row={row}>
+                            {chip}
+                          </CalendarEventPreview>
+                        ) : (
+                          chip
+                        )}
+                      </div>
+                    );
+                  })}
+                  {totalFor(day) > CALENDAR_DAY_DISPLAY_LIMIT && (
+                    <div style={{ color: "var(--muted-foreground-faint)" }}>
+                      +{totalFor(day) - CALENDAR_DAY_DISPLAY_LIMIT} more
+                    </div>
                   )}
                 </div>
               </>

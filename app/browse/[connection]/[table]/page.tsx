@@ -570,6 +570,7 @@ export default function TablePage() {
             meta={meta}
             rows={groupedData?.rows ?? EMPTY_ROWS}
             dateField={activeDateField}
+            groupCounts={groupedData?.groupCounts}
             cursor={calendarCursor}
             onCursorChange={setCalendarCursor}
             onOpen={openRow}

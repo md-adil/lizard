@@ -314,13 +314,20 @@ export async function listGroupedRows(params: GroupedListParams) {
     const scopedWhereSql = whereSql ? `${whereSql} AND ${groupFilterClause}` : `WHERE ${groupFilterClause}`;
     const scopedValues = [...allValues, ...nonNullKeys];
 
-    const selectCols = selectColumnsFor(conn, table, [
-      ...effectiveKey(table),
-      displayColumnFor(conn, table),
-      params.sort ?? null,
-      fallbackSort?.column ?? null,
-      params.groupBy,
-    ]);
+    // Calendar (day grouping) only ever renders a single display field per
+    // event chip (see CalendarView/displayValue in table-views.tsx) — unlike
+    // kanban cards, which show a handful of extra fields via CardFields — so
+    // it doesn't need the rest of the row's non-hidden columns over the wire.
+    const selectCols =
+      params.groupKind === "day"
+        ? [...new Set([...effectiveKey(table), displayColumnFor(conn, table), params.groupBy].filter((c): c is string => !!c))]
+        : selectColumnsFor(conn, table, [
+            ...effectiveKey(table),
+            displayColumnFor(conn, table),
+            params.sort ?? null,
+            fallbackSort?.column ?? null,
+            params.groupBy,
+          ]);
     const selectColsSql = selectCols.map((c) => `t.${dialect.quoteIdent(c)}`).join(", ");
 
     const sql = `
@@ -345,7 +352,9 @@ export async function listGroupedRows(params: GroupedListParams) {
       groupCounts[key] = Number(row.n);
     }
 
-    const fkLabels = await fetchFkLabels(conn, table, rows);
+    // CalendarView (groupKind "day") only renders displayValue(row) — no FK
+    // label resolution needed there, unlike kanban cards.
+    const fkLabels = params.groupKind === "day" ? {} : await fetchFkLabels(conn, table, rows);
     return { rows, groupCounts, fkLabels };
   } finally {
     client.release();
