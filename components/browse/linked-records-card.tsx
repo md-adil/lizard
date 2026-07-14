@@ -4,7 +4,7 @@
 // rendered as a chip list on both parent records; add/remove just insert or
 // delete a junction row through the existing generic row create/delete
 // endpoints — no new write path needed.
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
@@ -52,7 +52,7 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
       params,
     });
 
-  const { data } = useQuery<{ rows: Record<string, unknown>[] }>({
+  const { data } = useQuery<{ rows: Record<string, unknown>[]; total: number }>({
     queryKey: key,
     queryFn: async () => {
       const res = await fetch(
@@ -122,23 +122,30 @@ export function LinkedRecordsCard({ title, target, selfValue }: { title: string;
           Nothing linked yet.
         </p>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {rows.map((r, i) => (
-            <span key={i} className="tag" style={{ color: "var(--foreground)" }}>
-              {String(r.__label ?? r.__other_id)}
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="ml-1.5"
-                style={{ color: "var(--muted-foreground-faint)" }}
-                title="Unlink"
-                onClick={() => unlink(r)}
-              >
-                ✕
-              </Button>
-            </span>
-          ))}
-        </div>
+        <Fragment>
+          <div className="flex flex-wrap gap-2">
+            {rows.map((r, i) => (
+              <span key={i} className="tag" style={{ color: "var(--foreground)" }}>
+                {String(r.__label ?? r.__other_id)}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="ml-1.5"
+                  style={{ color: "var(--muted-foreground-faint)" }}
+                  title="Unlink"
+                  onClick={() => unlink(r)}
+                >
+                  ✕
+                </Button>
+              </span>
+            ))}
+          </div>
+          {data != null && data.total > rows.length && (
+            <p className="text-xs mt-1.5" style={{ color: "var(--muted-foreground-faint)" }}>
+              showing {rows.length} of {data.total}
+            </p>
+          )}
+        </Fragment>
       )}
 
       {linking && (

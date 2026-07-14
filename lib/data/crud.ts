@@ -424,7 +424,7 @@ export async function listLinkedRows(
   otherSchema: string | undefined,
   otherTableName: string,
   selfValue: unknown,
-): Promise<Record<string, unknown>[]> {
+): Promise<{ rows: Record<string, unknown>[]; total: number }> {
   const { conn, table: junction } = await resolveTable(connection, junctionSchema, junctionTable);
   assertColumn(junction, selfFkColumn);
   assertColumn(junction, otherFkColumn);
@@ -458,14 +458,23 @@ export async function listLinkedRows(
     const joinOnJunction = `j.${dialect.quoteIdent(otherFkColumn)}`;
     const whereSelf = `j.${dialect.quoteIdent(selfFkColumn)}`;
 
+    const LIMIT = 50;
+
+    const countSql = `SELECT COUNT(*) AS __count
+                      FROM ${fqJunction} j
+                      WHERE ${whereSelf} = ${dialect.placeholder(1)}`;
+    const countRes = await client.query(countSql, [selfValue]);
+    const total = Number(countRes.rows[0]?.__count ?? 0);
+
     const sql = `SELECT j.*, ${selectDisplay} AS __label, ${selectOtherPk} AS __other_id
                  FROM ${fqJunction} j
                  JOIN ${fqOther} o
                    ON ${joinOnOther} = ${joinOnJunction}
-                 WHERE ${whereSelf} = ${dialect.placeholder(1)}`;
+                 WHERE ${whereSelf} = ${dialect.placeholder(1)}
+                 LIMIT ${LIMIT}`;
 
     const res = await client.query(sql, [selfValue]);
-    return res.rows;
+    return { rows: res.rows, total };
   } finally {
     client.release();
   }
@@ -623,9 +632,10 @@ async function fetchFkLabels(
           });
           return cols.length === 1 ? cols[0] : `(${cols.join(", ")})`;
         });
-        const keyExpr = job.pairs.length === 1
-          ? targetExpr(job.pairs[0].to)
-          : `(${job.pairs.map((p) => targetExpr(p.to)).join(", ")})`;
+        const keyExpr =
+          job.pairs.length === 1
+            ? targetExpr(job.pairs[0].to)
+            : `(${job.pairs.map((p) => targetExpr(p.to)).join(", ")})`;
         const keyClause = `${keyExpr} IN (${rowExprs.join(", ")})`;
 
         const keyCols = job.pairs.map((_, i) => `k${i}`);

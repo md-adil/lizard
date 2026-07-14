@@ -1,11 +1,5 @@
 "use client";
 
-// In-memory (not persisted) per-table cache for the grid's search/filter/
-// sort/page state. Navigating to a row's record page and back unmounts and
-// remounts the table page, which would otherwise reset to page 0 with no
-// filters — this cache, keyed by table, survives that round trip. Lost on a
-// hard reload; that's intentional, this is transient session scratch, not a
-// durable preference like use-table-prefs.ts.
 import { useEffect, useRef, useState } from "react";
 import type { FilterSet } from "@/lib/data/filters";
 

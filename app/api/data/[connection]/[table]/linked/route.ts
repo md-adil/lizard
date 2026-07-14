@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: Params) {
     if (!selfFkColumn || !otherFkColumn || !otherTable) {
       return fail(new Error("selfFkColumn, otherFkColumn and otherTable are required"));
     }
-    const rows = await listLinkedRows(
+    const { rows, total } = await listLinkedRows(
       connection,
       schema,
       table,
@@ -32,7 +32,7 @@ export async function GET(req: Request, { params }: Params) {
       otherTable,
       selfValue,
     );
-    return ok({ rows });
+    return ok({ rows, total });
   } catch (e) {
     return fail(e);
   }

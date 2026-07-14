@@ -21,14 +21,9 @@ export interface GroupedListResponse {
   fkLabels: FkLabels;
 }
 
-const KANBAN_PER_GROUP = 100;
+const KANBAN_PER_GROUP = 25;
 const CALENDAR_PER_GROUP = 20;
-// Bounds total rows fetched to maxGroups * perGroup — a group-by column can
-// still have unbounded cardinality (e.g. a high-cardinality FK), so the
-// number of *groups* shown needs its own cap alongside perGroup. Calendar is
-// already scoped to one visible month (<=31 days), so its cap is just a
-// safety net rather than a real constraint.
-const KANBAN_MAX_GROUPS = 50;
+const KANBAN_MAX_GROUPS = 20;
 const CALENDAR_MAX_GROUPS = 40;
 
 export function useGroupedRows(args: {
