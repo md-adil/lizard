@@ -24,6 +24,8 @@ interface Props {
   search: string;
   onSearchChange: (committed: string) => void;
   isLoading?: boolean;
+  // Passed through to FilterPanel — a fresh filter defaults to this column.
+  displayColumn?: string | null;
 }
 
 export function TableSearchBar({
@@ -35,6 +37,7 @@ export function TableSearchBar({
   search,
   onSearchChange,
   isLoading = false,
+  displayColumn,
 }: Props) {
   const [searchInput, setSearchInput] = useState(search);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -114,9 +117,11 @@ export function TableSearchBar({
         <FilterPanel
           columns={columns}
           target={target}
+          indexedColumns={indexedColumns}
           value={filterSet}
           onChange={onFilterChange}
           onClose={() => setFilterOpen(false)}
+          displayColumn={displayColumn}
         />
       )}
     </div>

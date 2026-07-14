@@ -402,6 +402,7 @@ export default function TablePage() {
           columns={meta.columns.filter((c) => !c.hidden)}
           target={{ connection: params.connection, schema: meta.schema, table: params.table }}
           indexedColumns={meta.table.indexedColumns}
+          displayColumn={meta.displayColumn}
           filterSet={filterSet}
           onFilterChange={(s) => {
             setFilterSet(s);

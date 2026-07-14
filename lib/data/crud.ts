@@ -13,7 +13,7 @@ import { getConnection, getColumnOverrides, listTableOverrides, listVirtualFks, 
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnectionCatalog } from "@/lib/introspect/catalog";
 import { guessDisplayColumn } from "@/lib/introspect/heuristics";
-import { buildFilterClause, type FilterCondition, type Combinator } from "@/lib/data/filters";
+import { buildFilterClause, escapeLike, type FilterCondition, type Combinator } from "@/lib/data/filters";
 import { matchTargetFor, buildMatchClause } from "@/lib/data/search-match";
 
 export class CrudError extends Error {
@@ -102,6 +102,17 @@ export function primaryKeyColumnsFor(conn: ConnectionConfig, table: TableInfo): 
 // this heuristic).
 function isDateLikeUdt(udtName: string): boolean {
   return udtName === "date" || udtName.startsWith("timestamp");
+}
+
+// char/text-family udtNames across engines (varchar, char, text, mediumtext,
+// bpchar, citext, ...) — a column already this shape needs no CAST(... AS
+// CHAR)/::text to compare or return as a string. Casting it anyway turns a
+// plain index on the column into an unindexable expression: that's what hit
+// a MySQL statement-timeout on `SELECT DISTINCT CAST(name AS CHAR) ...
+// ORDER BY 1 LIMIT 20` against a large indexed varchar column in production
+// (see columnSuggestions).
+function isTextLikeUdt(udtName: string): boolean {
+  return /char|text/i.test(udtName);
 }
 
 // The ORDER BY to use when a request specifies no explicit sort: the
@@ -833,6 +844,14 @@ export async function columnSuggestions(
   tableName: string,
   column: string,
   search: string,
+  // "contains" (default) matches anywhere, case-insensitively — via
+  // ILIKE/LOWER(CAST(...)) (see caseInsensitiveLike per dialect), which no
+  // plain index can satisfy no matter the pattern shape. "prefix" is the
+  // filter panel's indexed "is" autocomplete: a bare, case-sensitive
+  // `LIKE 'search%'` against the raw column, sargable against a plain index
+  // (assuming a byte/C-locale-comparable collation) — the whole point of
+  // offering it is to avoid a full scan on a large indexed column.
+  mode: "contains" | "prefix" = "contains",
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
   assertColumn(table, column);
@@ -841,9 +860,13 @@ export async function columnSuggestions(
   try {
     const params: unknown[] = [];
     const col = dialect.quoteIdent(column);
-    const colExpr = dialect.castToText(col);
+    const colInfo = table.columns.find((c) => c.name === column);
+    const colExpr = colInfo && isTextLikeUdt(colInfo.udtName) ? col : dialect.castToText(col);
     let where = `WHERE ${col} IS NOT NULL`;
-    if (search) {
+    if (search && mode === "prefix") {
+      params.push(`${escapeLike(search, dialect.likeEscapeChar)}%`);
+      where += ` AND ${colExpr} LIKE ${dialect.placeholder(params.length)}`;
+    } else if (search) {
       params.push(`%${search}%`);
       where += ` AND ${dialect.caseInsensitiveLike(colExpr, dialect.placeholder(params.length))}`;
     }
