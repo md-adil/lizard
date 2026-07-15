@@ -246,6 +246,22 @@ export interface GroupedListParams {
   search?: string;
 }
 
+// The [start, next-day) bounds for a day-truncated group key, as plain
+// timestamp strings. The calendar fetches each day with `col >= lower AND col <
+// upper` against the *raw* date column (never a re-truncation of it), so the
+// predicate stays sargable and rides the required index on that column. Day
+// math is done on the date parts in UTC so the host timezone can't shift the
+// boundary; date_trunc (Postgres) and DATE() (MySQL) both begin with YYYY-MM-DD.
+function dayBounds(groupKey: unknown): { lower: string; upper: string } {
+  const datePart = String(groupKey).slice(0, 10); // YYYY-MM-DD
+  const [y, m, d] = datePart.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d) + 86_400_000);
+  const nextPart = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    next.getUTCDate(),
+  ).padStart(2, "0")}`;
+  return { lower: `${datePart} 00:00:00`, upper: `${nextPart} 00:00:00` };
+}
+
 // Phase 8.4 fix — Kanban/Calendar used to render whatever page the Table view
 // had already fetched, bucketed client-side. With one global LIMIT, a group
 // (kanban column / calendar day) bigger than the page size crowded every other
@@ -311,6 +327,63 @@ export async function listGroupedRows(params: GroupedListParams) {
     const perGroup = Math.min(Math.max(params.perGroup, 1), 200);
     const maxGroups = Math.min(Math.max(params.maxGroups ?? 50, 1), 200);
 
+    // ---- Calendar (day grouping) — index-friendly per-day fetch ----
+    // Day grouping is only ever offered on an *indexed* date column (see
+    // dateColumns in components/browse/view-types.ts). That lets the calendar
+    // avoid the window-function path below — which reads and sorts the entire
+    // visible month to keep a handful of rows per day. Instead:
+    //   1) one grouped scan yields the day keys AND their exact counts, and
+    //   2) each day's top-N is fetched via a sargable range predicate
+    //      (col >= day AND col < day+1) in a single UNION ALL, so every day is
+    //      a bounded index scan rather than a full-month sort.
+    if (params.groupKind === "day") {
+      const countSql = `SELECT ${groupExpr} AS __gk, count(*) AS n FROM ${fqtn} t ${whereSql} GROUP BY ${groupExpr} ORDER BY ${groupExpr} LIMIT ${maxGroups}`;
+      const countRes = await client.query(countSql, allValues);
+      const dayRows = (countRes.rows as { __gk: unknown; n: string | number }[]).filter((r) => r.__gk != null);
+      const groupCounts: Record<string, number> = {};
+      for (const r of dayRows) groupCounts[String(r.__gk)] = Number(r.n);
+      if (dayRows.length === 0) return { rows: [], groupCounts: {}, fkLabels: {} };
+
+      // Chips render only the display value, so fetch just pk + display + date.
+      const selectCols = [
+        ...new Set(
+          [...effectiveKey(table), displayColumnFor(conn, table), params.groupBy].filter((c): c is string => !!c),
+        ),
+      ];
+      const selectColsSql = selectCols.map((c) => `t.${dialect.quoteIdent(c)}`).join(", ");
+      const dateCol = dialect.quoteIdent(params.groupBy);
+
+      const fetchParams: unknown[] = [];
+      const subqueries: string[] = [];
+      for (const dr of dayRows) {
+        // Rebuild filter/search per subquery so placeholders keep numbering
+        // correctly across the UNION (Postgres $n is positional).
+        const { clause: fc, values: fv } = buildFilterClause(
+          table,
+          params.filters ?? [],
+          params.combinator ?? "and",
+          dialect,
+          fetchParams.length,
+          tagCols,
+        );
+        fetchParams.push(...fv);
+        const sc = params.search ? searchClauseFor(conn, table, params.search, fetchParams, dialect) : "";
+        const { lower, upper } = dayBounds(dr.__gk);
+        fetchParams.push(lower);
+        const lo = dialect.placeholder(fetchParams.length);
+        fetchParams.push(upper);
+        const up = dialect.placeholder(fetchParams.length);
+        const dayPred = `t.${dateCol} >= ${lo} AND t.${dateCol} < ${up}`;
+        const where = `WHERE ${[fc, sc, dayPred].filter(Boolean).join(" AND ")}`;
+        subqueries.push(`(SELECT ${selectColsSql} FROM ${fqtn} t ${where} ORDER BY ${orderSql} LIMIT ${perGroup})`);
+      }
+      const res = await client.query(subqueries.join(" UNION ALL "), fetchParams);
+      const rows = res.rows as Record<string, unknown>[];
+      normalizeTagColumns(rows, tagCols);
+      // No FK-label resolution for calendar — chips render the display value only.
+      return { rows, groupCounts, fkLabels: {} };
+    }
+
     // Step 1 — which distinct groups to show, bounded to maxGroups.
     const distinctSql = `SELECT DISTINCT ${groupExpr} AS __gk FROM ${fqtn} t ${whereSql} ORDER BY ${groupExpr} LIMIT ${maxGroups}`;
     const distinctRes = await client.query(distinctSql, allValues);
@@ -333,20 +406,15 @@ export async function listGroupedRows(params: GroupedListParams) {
     const scopedWhereSql = whereSql ? `${whereSql} AND ${groupFilterClause}` : `WHERE ${groupFilterClause}`;
     const scopedValues = [...allValues, ...nonNullKeys];
 
-    // Calendar (day grouping) only ever renders a single display field per
-    // event chip (see CalendarView/displayValue in table-views.tsx) — unlike
-    // kanban cards, which show a handful of extra fields via CardFields — so
-    // it doesn't need the rest of the row's non-hidden columns over the wire.
-    const selectCols =
-      params.groupKind === "day"
-        ? [...new Set([...effectiveKey(table), displayColumnFor(conn, table), params.groupBy].filter((c): c is string => !!c))]
-        : selectColumnsFor(conn, table, [
-            ...effectiveKey(table),
-            displayColumnFor(conn, table),
-            params.sort ?? null,
-            fallbackSort?.column ?? null,
-            params.groupBy,
-          ]);
+    // Kanban cards show a handful of fields via CardFields, so fetch the
+    // table's non-hidden grid columns. (Day grouping returned above.)
+    const selectCols = selectColumnsFor(conn, table, [
+      ...effectiveKey(table),
+      displayColumnFor(conn, table),
+      params.sort ?? null,
+      fallbackSort?.column ?? null,
+      params.groupBy,
+    ]);
     const selectColsSql = selectCols.map((c) => `t.${dialect.quoteIdent(c)}`).join(", ");
 
     const sql = `
@@ -371,9 +439,8 @@ export async function listGroupedRows(params: GroupedListParams) {
       groupCounts[key] = Number(row.n);
     }
 
-    // CalendarView (groupKind "day") only renders displayValue(row) — no FK
-    // label resolution needed there, unlike kanban cards.
-    const fkLabels = params.groupKind === "day" ? {} : await fetchFkLabels(conn, table, rows);
+    // Kanban cards resolve FK labels (day grouping returned above).
+    const fkLabels = await fetchFkLabels(conn, table, rows);
     return { rows, groupCounts, fkLabels };
   } finally {
     client.release();

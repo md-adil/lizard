@@ -44,15 +44,18 @@ export function kanbanGroupColumns(meta: TableMeta): ColumnMeta[] {
   );
 }
 
-// Date/timestamp columns a calendar can place rows on, same indexed-or-small
-// guard as kanbanGroupColumns above.
+// Date/timestamp columns a calendar can place rows on. Unlike kanban, calendar
+// requires the column to be **indexed** regardless of table size: the calendar
+// loads each visible day via a range predicate (col >= day AND col < day+1, see
+// listGroupedRows' day branch), which is only cheap when that predicate is
+// index-backed. An unindexed date column would turn every day into a full scan,
+// so such columns simply aren't offered a calendar view.
 export function dateColumns(meta: TableMeta): ColumnMeta[] {
-  const smallTable = meta.table.rowEstimate < SMALL_TABLE_ROW_THRESHOLD;
   return meta.columns.filter(
     (c) =>
       !c.hidden &&
       (c.col.udtName === "date" || c.col.udtName.startsWith("timestamp")) &&
-      (smallTable || meta.table.indexedColumns.includes(c.col.name)),
+      meta.table.indexedColumns.includes(c.col.name),
   );
 }
 

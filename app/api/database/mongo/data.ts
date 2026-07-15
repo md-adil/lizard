@@ -111,26 +111,49 @@ export async function mongoListGroupedRows(conn: ConnectionConfig, table: TableI
   const where = whereFor(table, params.filters, params.combinator, params.search);
   const perGroup = Math.min(Math.max(params.perGroup, 1), 200);
   const maxGroups = Math.min(Math.max(params.maxGroups ?? 50, 1), 200);
+  const sort = sortSpec(table, params.sort, params.sortDir);
 
-  // The group key: the raw field value, or (calendar) the value truncated to a
-  // day. $dateTrunc requires MongoDB 5.0+.
-  const groupExpr =
-    params.groupKind === "day"
-      ? { $dateTrunc: { date: `$${params.groupBy}`, unit: "day" } }
-      : `$${params.groupBy}`;
+  // Calendar (day grouping): count per day in one grouped pass (no $push of
+  // every document into memory), then fetch each day's top-N via a bounded
+  // range query on the date field — the document-store twin of the relational
+  // per-day fetch. The calendar only offers indexed date fields, so each
+  // range find rides that index.
+  if (params.groupKind === "day") {
+    const grouped = await coll
+      .aggregate(
+        [
+          { $match: where },
+          { $group: { _id: { $dateTrunc: { date: `$${params.groupBy}`, unit: "day" } }, count: { $sum: 1 } } },
+          { $sort: { _id: 1 } },
+          { $limit: maxGroups },
+        ],
+        { maxTimeMS: READ_MAX_TIME_MS, allowDiskUse: true },
+      )
+      .toArray();
+    const days = grouped.filter((g) => g._id instanceof Date) as { _id: Date; count: number }[];
+    const groupCounts: Record<string, number> = {};
+    for (const g of days) groupCounts[g._id.toISOString()] = g.count;
 
+    const perDay = await Promise.all(
+      days.map(async (g) => {
+        const start = g._id;
+        const end = new Date(start.getTime() + 86_400_000);
+        const dayFilter = andFilters(where, { [params.groupBy]: { $gte: start, $lt: end } });
+        const docs = await coll.find(dayFilter, { maxTimeMS: READ_MAX_TIME_MS }).sort(sort).limit(perGroup).toArray();
+        return docs.map(serializeDoc);
+      }),
+    );
+    return { rows: perDay.flat(), groupCounts, fkLabels: {} as FkLabels };
+  }
+
+  // Kanban (value grouping): a small number of low-cardinality groups, so the
+  // $push/$slice top-N per group is fine here.
   const rows = await coll
     .aggregate(
       [
         { $match: where },
-        { $sort: sortSpec(table, params.sort, params.sortDir) },
-        {
-          $group: {
-            _id: groupExpr,
-            docs: { $push: "$$ROOT" },
-            count: { $sum: 1 },
-          },
-        },
+        { $sort: sort },
+        { $group: { _id: `$${params.groupBy}`, docs: { $push: "$$ROOT" }, count: { $sum: 1 } } },
         { $limit: maxGroups },
         { $project: { docs: { $slice: ["$docs", perGroup] }, count: 1 } },
       ],
