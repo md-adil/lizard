@@ -26,6 +26,7 @@ beforeAll(() => {
     writePassword: "lizard_write",
     ssl: false,
     allowedSchemas: null,
+    options: null,
   });
   const orders = addConnection({
     name: "orders_service",
@@ -39,6 +40,7 @@ beforeAll(() => {
     writePassword: "lizard_write",
     ssl: false,
     allowedSchemas: null,
+    options: null,
   });
   addVirtualFk({
     // stable connection ids, not names — see the VirtualFk type comment.

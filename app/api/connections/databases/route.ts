@@ -14,6 +14,7 @@ const schema = z.object({
   user: z.string().optional(),
   password: z.string().optional(),
   ssl: z.boolean().optional(),
+  options: z.string().nullish(),
 });
 
 export async function POST(req: Request) {
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
     let user: string;
     let password = "";
     let ssl = false;
+    let options: string | null = null;
 
     if (b.connectionId) {
       const conn = getConnection(b.connectionId);
@@ -38,6 +40,7 @@ export async function POST(req: Request) {
       user = conn.readUser;
       password = conn.readPassword;
       ssl = conn.ssl;
+      options = conn.options;
     } else {
       if (!b.engine || !b.host || !b.database || !b.user) {
         return fail(new Error("Missing required connection parameters"));
@@ -49,6 +52,7 @@ export async function POST(req: Request) {
       user = b.user;
       password = b.password ?? "";
       ssl = b.ssl ?? false;
+      options = b.options ?? null;
     }
 
     const databases = await discoverDatabases({
@@ -59,6 +63,7 @@ export async function POST(req: Request) {
       user,
       password,
       ssl,
+      options,
     });
     return ok(databases);
   } catch (e) {

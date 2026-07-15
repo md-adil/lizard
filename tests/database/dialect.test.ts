@@ -96,8 +96,12 @@ describe("engine registry", () => {
     expect(getDriver("mysql")).toBeDefined();
   });
 
-  it("throws EngineNotSupportedError for engines without a dialect/driver yet", () => {
-    expect(() => getDialect("mongo" as any)).toThrow(EngineNotSupportedError);
-    expect(() => getDriver("mongo" as any)).toThrow(EngineNotSupportedError);
+  it("resolves a driver for mongo (document store) with a null dialect", () => {
+    // Mongo has a Driver (introspect + data builder) but no relational SQL
+    // dialect, so getDriver resolves while getDialect still refuses it.
+    const driver = getDriver("mongo");
+    expect(driver).toBeDefined();
+    expect(driver.dialect).toBeNull();
+    expect(() => getDialect("mongo")).toThrow(EngineNotSupportedError);
   });
 });

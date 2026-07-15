@@ -33,6 +33,17 @@ const DRIVERS: Partial<Record<DbEngine, Driver>> = {
     },
     defaultSchema: (conn) => conn.database,
   },
+  // Mongo is a document store: no SQL dialect, its own data builder. The
+  // connection's database is the single synthetic schema (like MySQL).
+  mongo: {
+    engine: "mongo",
+    dialect: null,
+    introspect: async (conn) => {
+      const { introspectMongo } = await import("@/app/api/database/mongo/introspect");
+      return introspectMongo(conn);
+    },
+    defaultSchema: (conn) => conn.database,
+  },
 };
 
 export function getDialect(engine: DbEngine): Dialect {

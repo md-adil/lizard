@@ -27,6 +27,7 @@ export interface ConnectionRow {
   writeUser: string | null;
   hasWrite: boolean;
   ssl: boolean;
+  options?: string | null;
 }
 
 interface FormState {
@@ -40,6 +41,7 @@ interface FormState {
   writeUser: string;
   writePassword: string;
   ssl: boolean;
+  options: string;
 }
 
 const BLANK: FormState = {
@@ -53,6 +55,7 @@ const BLANK: FormState = {
   writeUser: "",
   writePassword: "",
   ssl: false,
+  options: "",
 };
 
 // URI placeholder per engine, so the field shows a relevant example.
@@ -85,6 +88,7 @@ export function ConnectionForm({
         writeUser: initial.writeUser ?? "",
         writePassword: "",
         ssl: initial.ssl,
+        options: initial.options ?? "",
       }
       : BLANK,
   );
@@ -168,6 +172,7 @@ export function ConnectionForm({
       writeUser: p.user,
       writePassword: p.password,
       ssl: p.ssl,
+      options: p.options ?? "",
     }));
   };
 
@@ -187,6 +192,7 @@ export function ConnectionForm({
           writeUser: wUser,
           writePassword: wPass,
           ssl: form.ssl,
+          options: form.options || null,
         }),
       });
       const body = await res.json();
@@ -211,6 +217,7 @@ export function ConnectionForm({
         database: form.database,
         readUser: form.readUser,
         ssl: form.ssl,
+        options: form.options || null,
       };
       if (mode === "create") {
         const res = await fetch("/api/connections", {
@@ -443,8 +450,27 @@ export function ConnectionForm({
                 readUser={form.readUser}
                 readPassword={form.readPassword}
                 ssl={form.ssl}
+                options={form.options}
               />
             </div>
+
+            {form.engine === "mongo" && (
+              <div className="border-t border-border pt-4 mt-4">
+                <label className="label">Advanced options</label>
+                <Input
+                  className="code w-full"
+                  placeholder="authSource=admin&directConnection=true&readPreference=secondary"
+                  value={form.options}
+                  onChange={set("options")}
+                />
+                <p className="text-[12px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+                  Extra MongoDB driver options as URL query params, appended to the connection
+                  string (e.g. <code>authSource</code>, <code>replicaSet</code>,{" "}
+                  <code>readPreference</code>). Lizard defaults to <code>directConnection=true</code>{" "}
+                  for a single host.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

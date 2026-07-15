@@ -12,6 +12,7 @@ import { RowEditor } from "@/components/browse/row-editor";
 import { RedactedValue } from "@/components/browse/redacted-value";
 import { RecordComments } from "@/components/browse/record-comments";
 import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
+import { ReferenceHoverPreview } from "@/components/browse/reference-hover-preview";
 import { DataGrid } from "@/components/browse/data-grid";
 import { JsonView } from "@/components/browse/json-view";
 import { MediaPreview, type MediaKind } from "@/components/browse/media-preview";
@@ -21,7 +22,10 @@ import { humanize, effectiveKey } from "@/lib/introspect/heuristics";
 import { SAME_SCHEMA, isPattern, vfkDisplayColumn } from "@/lib/introspect/virtual-fk";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { widgetIcons, type Widget } from "@/lib/data/widgets";
+import { Check, X, CalendarDays, Link2, Copy } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Breadcrumb,
@@ -144,54 +148,208 @@ function RelatedCard({
   );
 }
 
+// widgets whose values are long-form and read better full-width, wrapping
+// instead of being clipped to a single grid cell.
+const WIDE_WIDGETS = new Set<Widget>(["textarea", "markdown", "tag", "array"]);
+// numeric widgets — emphasized with tabular figures so columns of digits align.
+const NUMERIC_WIDGETS = new Set<Widget>(["number", "currency", "percent", "range"]);
+
+// Copies a field's raw value; appears on hover next to the field label.
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title="Copy value"
+      className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+    </button>
+  );
+}
+
+// One field's value, rendered according to its widget/data type. `formatCell`
+// already produces rich `icon` nodes for many widgets (rating, currency, tag,
+// color, url…); this layer adds type-appropriate framing on top: badges for
+// booleans/selects, emphasized figures for numbers, a calendar affordance for
+// dates, and a wrapping block for long-form text. `emphasize` gives key
+// (primary-key / display) fields a larger, heavier value.
+function FieldValue({
+  cm,
+  value,
+  label,
+  isMedia,
+  wide,
+  emphasize,
+}: {
+  cm: TableMeta["columns"][number];
+  value: unknown;
+  label: string | undefined;
+  isMedia: boolean;
+  wide: boolean;
+  emphasize?: boolean;
+}) {
+  const size = emphasize ? "text-[15px]" : "text-[13px]";
+  if (cm.redacted) return <RedactedValue value={value} />;
+
+  if (isMedia) {
+    return (
+      <MediaPreview
+        kind={cm.widget as MediaKind}
+        value={value as string}
+        className={cm.widget === "audio" ? "w-full" : "h-16 rounded border object-cover"}
+      />
+    );
+  }
+
+  const f = formatCell(value, cm.widget, cm.optionLabels);
+  // `formatCell` clips plain strings to a preview length for grids — on the
+  // record page we want the whole value, so use the raw string as-is.
+  const fullText = typeof value === "string" ? value : f.text;
+
+  // resolved foreign-key reference: human label + the raw key value. Hovering
+  // it previews a few fields of the row it points at.
+  if (label && cm.ref) {
+    return (
+      <ReferenceHoverPreview target={cm.ref} value={value}>
+        <span className={`${size} wrap-break-word cursor-default ${emphasize ? "font-semibold" : ""}`}>
+          {label}{" "}
+          <span className="tag code" style={{ fontSize: 10 }}>
+            {String(value)}
+          </span>
+        </span>
+      </ReferenceHoverPreview>
+    );
+  }
+
+  if (value == null) {
+    return (
+      <div className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
+        {f.text}
+      </div>
+    );
+  }
+
+  // boolean / toggle → a compact yes/no pill instead of a bare icon.
+  if (cm.widget === "toggle" || typeof value === "boolean") {
+    const on = !f.muted;
+    return (
+      <Badge variant={on ? "outline" : "ghost"} className="mt-0.5 gap-1">
+        {on ? <Check className="text-green-600 dark:text-green-500" /> : <X className="text-muted-foreground" />}
+        {on ? "Yes" : "No"}
+      </Badge>
+    );
+  }
+
+  // single-select / enum → a badge so the chosen option reads as a token.
+  if (cm.widget === "select") {
+    return (
+      <Badge variant="secondary" className="mt-0.5 max-w-full truncate">
+        {f.text}
+      </Badge>
+    );
+  }
+
+  // date / datetime → calendar affordance + value.
+  if ((cm.widget === "date" || cm.widget === "datetime") && !f.icon) {
+    return (
+      <div className={`flex items-center gap-1.5 tabular-nums ${size}`}>
+        <CalendarDays className="size-3.5 shrink-0" style={{ color: "var(--muted-foreground-faint)" }} />
+        {f.text}
+      </div>
+    );
+  }
+
+  // long-form text/tags/arrays → wrap in a block showing the full value.
+  if (wide && !f.icon) {
+    return <div className="text-[13px] whitespace-pre-wrap wrap-break-word rounded-md px-2.5 py-1.5">{fullText}</div>;
+  }
+  if (wide && f.icon) {
+    // markdown is a block; tags/arrays are chip collections that should wrap.
+    return cm.widget === "markdown" ? (
+      <div className="text-[13px]">{f.icon}</div>
+    ) : (
+      <div className="text-[13px] flex flex-wrap gap-1">{f.icon}</div>
+    );
+  }
+
+  // numeric → emphasized, aligned figures.
+  if (NUMERIC_WIDGETS.has(cm.widget)) {
+    return (
+      <div
+        className={`${emphasize ? "text-[15px]" : "text-[13.5px]"} font-medium tabular-nums truncate`}
+        title={f.text}
+      >
+        {f.icon ?? f.text}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`${size} wrap-break-word ${emphasize ? "font-medium" : ""}`}
+      style={{ color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)" }}
+    >
+      {f.icon ?? fullText}
+    </div>
+  );
+}
+
 function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<string, unknown>; fkLabels: FkLabels }) {
   const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "json" && c.widget !== "html");
+  // key/identifying fields (display column + primary key) surface first with a
+  // heavier treatment; grid's default stretch keeps the two columns' bottom
+  // borders aligned per row, giving clean dividers.
+  const keyNames = new Set([meta.displayColumn, ...effectiveKey(meta.table)].filter(Boolean) as string[]);
+  const ordered = [...cols].sort((a, b) => Number(keyNames.has(b.col.name)) - Number(keyNames.has(a.col.name)));
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
-      {cols.map((cm) => {
+    <div className="grid grid-cols-2 gap-x-6">
+      {ordered.map((cm) => {
         const v = row[cm.col.name];
         const label = cm.ref && v != null ? fkLabelFor(fkLabels, cm.col.name, row) : undefined;
-        const f = formatCell(v, cm.widget, cm.optionLabels);
         const isMedia =
           (cm.widget === "image" || cm.widget === "video" || cm.widget === "audio") &&
           typeof v === "string" &&
           v !== "";
+        // wide fields claim a full row; a plain long string does too, so it
+        // isn't clipped mid-word in a half-width cell.
+        const f = formatCell(v, cm.widget, cm.optionLabels);
+        const wide =
+          !label &&
+          !isMedia &&
+          (WIDE_WIDGETS.has(cm.widget) || (!f.icon && v != null && typeof v !== "boolean" && f.text.length > 64));
+        const isKey = keyNames.has(cm.col.name);
+        const Icon = cm.ref ? Link2 : widgetIcons[cm.widget];
+        const copyText = v == null ? "" : typeof v === "string" ? v : String(v);
         return (
-          <div key={cm.col.name} className="min-w-0">
+          <div
+            key={cm.col.name}
+            className={`group min-w-0 border-b py-2.5 ${wide ? "col-span-2" : ""}`}
+            style={{ borderColor: "var(--border)" }}
+          >
             <div
-              className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: "var(--muted-foreground-faint)" }}
+              className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide mb-1"
+              style={{ color: isKey ? "var(--foreground)" : "var(--muted-foreground-faint)" }}
             >
-              {cm.label}
+              <Icon className="size-3 shrink-0" />
+              <span className="truncate">{cm.label}</span>
+              {isKey && (
+                <span className="tag code" style={{ fontSize: 9 }}>
+                  key
+                </span>
+              )}
+              {copyText && (
+                <span className="ml-auto">
+                  <CopyButton text={copyText} />
+                </span>
+              )}
             </div>
-            {isMedia ? (
-              <MediaPreview
-                kind={cm.widget as MediaKind}
-                value={v as string}
-                className={cm.widget === "audio" ? "w-full" : "h-16 rounded border object-cover"}
-              />
-            ) : (
-              <div
-                className="text-[13px] truncate"
-                style={{
-                  color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)",
-                }}
-                title={cm.redacted ? undefined : f.text}
-              >
-                {cm.redacted ? (
-                  <RedactedValue value={v} />
-                ) : label ? (
-                  <>
-                    {label}{" "}
-                    <span className="tag code" style={{ fontSize: 10 }}>
-                      {String(v)}
-                    </span>
-                  </>
-                ) : (
-                  (f.icon ?? f.text)
-                )}
-              </div>
-            )}
+            <FieldValue cm={cm} value={v} label={label} isMedia={isMedia} wide={wide} emphasize={isKey} />
           </div>
         );
       })}

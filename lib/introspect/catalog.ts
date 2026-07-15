@@ -59,7 +59,8 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     return introspectMysql(conn);
   }
   if (conn.engine === "mongo") {
-    throw new Error("MongoDB introspection isn't available yet");
+    const { introspectMongo } = await import("@/app/api/database/mongo/introspect");
+    return introspectMongo(conn);
   }
 
   const pool = getPool(conn, "read");

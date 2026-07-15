@@ -36,6 +36,12 @@ export interface ConnectionConfig {
   writePassword: string | null;
   ssl: boolean;
   allowedSchemas: string[] | null; // null = all non-system schemas
+  // Extra driver connection options as a URL query string (no leading "?"),
+  // e.g. "authSource=admin&replicaSet=rs0&readPreference=secondary". Preserved
+  // from a pasted URI and re-applied when building the driver connection string.
+  // Consumed by the MongoDB driver (where authSource/directConnection matter);
+  // ignored by the relational engines. null = none.
+  options: string | null;
   createdAt: string;
 }
 

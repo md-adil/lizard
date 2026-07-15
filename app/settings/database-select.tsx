@@ -21,6 +21,7 @@ interface DatabaseSelectProps {
   readUser: string;
   readPassword?: string;
   ssl: boolean;
+  options?: string | null;
 }
 
 export function DatabaseSelect({
@@ -33,6 +34,7 @@ export function DatabaseSelect({
   readUser,
   readPassword,
   ssl,
+  options,
 }: DatabaseSelectProps) {
   const [dbOptions, setDbOptions] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
@@ -52,6 +54,7 @@ export function DatabaseSelect({
           user: readUser,
           password: readPassword,
           ssl,
+          options,
         }),
       });
       if (res.ok) {
