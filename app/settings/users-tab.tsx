@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DataSelect } from "@/components/ui/data-select";
+import { useConnections } from "@/app/settings/use-connections";
 
 type Role = "admin" | "editor" | "viewer";
 type Access = "read" | "write";
@@ -378,12 +379,7 @@ export function UsersTab() {
     enabled: isAdmin,
   });
 
-  const { data: connectionsData } = useQuery<{ data: Connection[] }>({
-    queryKey: ["connections"],
-    queryFn: () => apiJson("/api/connections"),
-    enabled: isAdmin,
-  });
-  const connections: Connection[] = connectionsData?.data ?? [];
+  const { data: connections } = useConnections({ enabled: isAdmin });
 
   return (
     <div className="space-y-6">
@@ -405,7 +401,7 @@ export function UsersTab() {
       ) : (
         <div className="space-y-3">
           {(users ?? []).map((u) => (
-            <UserCard key={u.id} user={u} currentUserId={self!.id} connections={connections} />
+            <UserCard key={u.id} user={u} currentUserId={self!.id} connections={connections ?? []} />
           ))}
         </div>
       )}

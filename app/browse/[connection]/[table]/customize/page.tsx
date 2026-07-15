@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
+import { useCatalog } from "@/components/browse/use-catalog";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -79,7 +80,7 @@ export default function CustomizePage() {
       : [];
 
   function invalidate() {
-    qc.invalidateQueries({ queryKey: ["catalog"] });
+    useCatalog.invalidate(qc);
     qc.invalidateQueries({ queryKey: ["schema-meta", meta!.connection] });
     qc.invalidateQueries({
       queryKey: ["rows", meta!.connection, meta!.schema, meta!.table.name],

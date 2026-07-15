@@ -21,6 +21,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
+import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnections } from "@/app/settings/use-connections";
 
 interface ConnectionStatus {
   read: string | null;
@@ -93,18 +95,15 @@ export function ConnectionsTab() {
   const [editing, setEditing] = useState<ConnectionRow | null>(null);
   const [removing, setRemoving] = useState<ConnectionRow | null>(null);
 
-  const { data: connections, isLoading } = useQuery<ConnectionRow[]>({
-    queryKey: ["connections"],
-    queryFn: async () => (await fetch("/api/connections")).json(),
-  });
+  const { data: connections, isLoading } = useConnections();
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await fetch(`/api/connections/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["connections"] });
-      qc.invalidateQueries({ queryKey: ["catalog"] });
+      useConnections.invalidate(qc);
+      useCatalog.invalidate(qc);
     },
   });
 
@@ -117,8 +116,8 @@ export function ConnectionsTab() {
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["connections"] });
-      qc.invalidateQueries({ queryKey: ["catalog"] });
+      useConnections.invalidate(qc);
+      useCatalog.invalidate(qc);
     },
   });
 

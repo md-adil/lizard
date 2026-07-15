@@ -26,26 +26,9 @@ import { MarkdownCell } from "./markdown-cell";
 import { AvatarCell } from "./avatar-cell";
 import { TimezoneCell } from "./timezone-cell";
 import { TagCell } from "./tag-cell";
+import { useCatalog } from "./use-catalog";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
-
-// Schema structure changes rarely — only when a connection or its
-// tables/columns are edited (those flows call qc.invalidateQueries(["catalog"])
-// explicitly), so a long staleTime avoids refetching on every page navigation
-// while still picking up real changes immediately via invalidation.
-const CATALOG_STALE_TIME_MS = 60 * 60_000;
-
-export function useCatalog() {
-  return useQuery<CatalogResponse>({
-    queryKey: ["catalog"],
-    queryFn: async () => {
-      const res = await fetch("/api/catalog");
-      if (!res.ok) throw new Error("Failed to load catalog");
-      return res.json();
-    },
-    staleTime: CATALOG_STALE_TIME_MS,
-  });
-}
 
 // Does the named connection expose a real schema namespace? A virtual FK can
 // point at a different connection (with a different engine) than its source

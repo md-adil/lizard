@@ -10,7 +10,7 @@ import { VisualizeButton } from "@/components/charts/visualize-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useCatalog } from "@/components/browse/useTableMeta";
+import { useCatalog } from "@/components/browse/use-catalog";
 
 interface Turn {
   question: string;

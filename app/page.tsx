@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
-import { useCatalog } from "@/components/browse/useTableMeta";
+import { useCatalog } from "@/components/browse/use-catalog";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

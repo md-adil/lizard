@@ -32,7 +32,8 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCatalog, useSchemaMeta } from "@/components/browse/useTableMeta";
+import { useSchemaMeta } from "@/components/browse/useTableMeta";
+import { useCatalog } from "@/components/browse/use-catalog";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
 import { GlobalSearch } from "@/components/global-search";
@@ -243,7 +244,7 @@ export function Sidebar() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  const { data } = useCatalog();
+  const { data, isFetching: catalogLoading } = useCatalog();
 
   const connections = useMemo(() => data?.connections ?? [], [data]);
   const [selected, setSelected] = useState<string>("");
@@ -315,9 +316,7 @@ export function Sidebar() {
   // Guard against the render where `selected` has moved to a new connection but
   // the effect restoring `loaded` hasn't run yet: only schemas the current
   // connection actually has are safe to fetch.
-  const shownSchemas = loaded
-    .filter((s) => allSchemas.includes(s))
-    .filter((s) => !activeSchema || s === activeSchema);
+  const shownSchemas = loaded.filter((s) => allSchemas.includes(s)).filter((s) => !activeSchema || s === activeSchema);
 
   const tableQ = tableSearch.trim().toLowerCase();
 
@@ -382,6 +381,7 @@ export function Sidebar() {
             <DataSelect
               key={`${selected}-${connections.length}`}
               items={connections}
+              loading={catalogLoading}
               value={connections.find((c) => c.connectionName === selected) ?? null}
               onChange={(c) => {
                 if (c) {
