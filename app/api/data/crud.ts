@@ -64,6 +64,7 @@ function searchClauseFor(
 async function resolveTable(connectionName: string, schema: string | undefined, table: string) {
   const conn = getConnection(connectionName);
   if (!conn) throw new CrudError(`Unknown connection: ${connectionName}`, 404);
+  if (conn.disabled) throw new CrudError(`Connection "${connectionName}" is disabled`, 403);
   const catalog = await getConnectionCatalog(conn);
   if (catalog.error) throw new CrudError(`Connection error: ${catalog.error}`, 502);
   const targetSchema = schema || (supportsSchemas(conn.engine) ? "public" : conn.database);

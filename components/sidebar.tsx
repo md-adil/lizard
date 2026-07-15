@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { MoreHorizontal, Search, X } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -32,9 +32,9 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSchemaMeta } from "@/components/browse/useTableMeta";
+import { useCatalog, useSchemaMeta } from "@/components/browse/useTableMeta";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
-import { supportsSchemas, type CatalogResponse } from "@/lib/types";
+import { supportsSchemas } from "@/lib/types";
 import { GlobalSearch } from "@/components/global-search";
 
 const NAV = [
@@ -243,14 +243,7 @@ export function Sidebar() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  const { data } = useQuery<CatalogResponse>({
-    queryKey: ["catalog"],
-    queryFn: async () => {
-      const res = await fetch("/api/catalog");
-      if (!res.ok) throw new Error("failed to load catalog");
-      return res.json();
-    },
-  });
+  const { data } = useCatalog();
 
   const connections = useMemo(() => data?.connections ?? [], [data]);
   const [selected, setSelected] = useState<string>("");

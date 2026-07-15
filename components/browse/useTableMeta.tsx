@@ -29,6 +29,12 @@ import { TagCell } from "./tag-cell";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
 
+// Schema structure changes rarely — only when a connection or its
+// tables/columns are edited (those flows call qc.invalidateQueries(["catalog"])
+// explicitly), so a long staleTime avoids refetching on every page navigation
+// while still picking up real changes immediately via invalidation.
+const CATALOG_STALE_TIME_MS = 60 * 60_000;
+
 export function useCatalog() {
   return useQuery<CatalogResponse>({
     queryKey: ["catalog"],
@@ -37,6 +43,7 @@ export function useCatalog() {
       if (!res.ok) throw new Error("Failed to load catalog");
       return res.json();
     },
+    staleTime: CATALOG_STALE_TIME_MS,
   });
 }
 

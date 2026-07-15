@@ -10,6 +10,7 @@ import { VisualizeButton } from "@/components/charts/visualize-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useCatalog } from "@/components/browse/useTableMeta";
 
 interface Turn {
   question: string;
@@ -28,10 +29,7 @@ export default function AiConsole() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const { data: catalog } = useQuery<{ connections: { connectionName: string; error?: string }[] }>({
-    queryKey: ["catalog"],
-    queryFn: async () => (await fetch("/api/catalog")).json(),
-  });
+  const { data: catalog } = useCatalog();
   const { data: saved } = useQuery<SavedQuery[]>({
     queryKey: ["saved-queries"],
     queryFn: async () => (await fetch("/api/saved-queries")).json(),

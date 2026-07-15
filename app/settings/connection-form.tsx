@@ -28,6 +28,7 @@ export interface ConnectionRow {
   hasWrite: boolean;
   ssl: boolean;
   options?: string | null;
+  disabled: boolean;
 }
 
 interface FormState {

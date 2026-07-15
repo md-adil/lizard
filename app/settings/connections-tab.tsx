@@ -8,6 +8,7 @@ import { ConnectionForm, type ConnectionRow } from "@/app/settings/connection-fo
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -107,6 +108,20 @@ export function ConnectionsTab() {
     },
   });
 
+  const toggleDisabled = useMutation({
+    mutationFn: async ({ id, disabled }: { id: string; disabled: boolean }) => {
+      await fetch(`/api/connections/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disabled }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["connections"] });
+      qc.invalidateQueries({ queryKey: ["catalog"] });
+    },
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -149,70 +164,90 @@ export function ConnectionsTab() {
       <div className="space-y-3">
         {connections?.map((c) => {
           return (
-            <Card key={c.id} className="px-5 py-4 gap-3 flex-row items-center flex-wrap sm:flex-nowrap">
-              <Link
-                href={`/browse/${c.name}`}
-                className="flex-1 min-w-0 flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                <div
-                  className="shrink-0 grid place-items-center size-10 rounded-lg border"
-                  style={{ borderColor: "var(--border)", background: "var(--muted)" }}
+            <Card key={c.id} className="px-5 py-4 gap-3">
+              <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                <Link
+                  href={`/browse/${c.name}`}
+                  className="flex-1 min-w-0 flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
-                  <EngineIcon engine={c.engine} className="size-6" />
-                </div>
+                  <div
+                    className="shrink-0 grid place-items-center size-10 rounded-lg border"
+                    style={{ borderColor: "var(--border)", background: "var(--muted)" }}
+                  >
+                    <EngineIcon engine={c.engine} className="size-6" />
+                  </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-[14px] truncate">{c.name}</span>
-                    <Badge variant="secondary" className="shrink-0">
-                      {ENGINE_LABELS[c.engine]}
-                    </Badge>
-                    <ConnectionStatusBadges id={c.id} hasWrite={c.hasWrite} />
-                    {!c.hasWrite && (
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-[14px] truncate">{c.name}</span>
                       <Badge variant="secondary" className="shrink-0">
-                        read-only
+                        {ENGINE_LABELS[c.engine]}
                       </Badge>
-                    )}
-                    {c.ssl && (
-                      <Badge variant="secondary" className="shrink-0">
-                        <Lock /> SSL
-                      </Badge>
-                    )}
+                      {c.disabled ? (
+                        <Badge variant="destructive" className="shrink-0">
+                          disabled
+                        </Badge>
+                      ) : (
+                        <ConnectionStatusBadges id={c.id} hasWrite={c.hasWrite} />
+                      )}
+                      {!c.hasWrite && (
+                        <Badge variant="secondary" className="shrink-0">
+                          read-only
+                        </Badge>
+                      )}
+                      {c.ssl && (
+                        <Badge variant="secondary" className="shrink-0">
+                          <Lock /> SSL
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-[12.5px] mt-1 code truncate" style={{ color: "var(--muted-foreground)" }}>
+                      {c.host}:{c.port}/{c.database}
+                    </div>
+                    {!c.disabled && <ConnectionStatusFailure id={c.id} />}
                   </div>
-                  <div className="text-[12.5px] mt-1 code truncate" style={{ color: "var(--muted-foreground)" }}>
-                    {c.host}:{c.port}/{c.database}
-                  </div>
-                  <ConnectionStatusFailure id={c.id} />
+                </Link>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(c);
+                      setFormMode("edit");
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEditing({
+                        ...c,
+                        name: `${c.name}-copy`,
+                      });
+                      setFormMode("create");
+                    }}
+                  >
+                    Duplicate
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => setRemoving(c)}>
+                    Remove
+                  </Button>
                 </div>
-              </Link>
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(c);
-                    setFormMode("edit");
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditing({
-                      ...c,
-                      name: `${c.name}-copy`,
-                    });
-                    setFormMode("create");
-                  }}
-                >
-                  Duplicate
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => setRemoving(c)}>
-                  Remove
-                </Button>
               </div>
+              <label
+                className="flex items-center gap-2 text-[13px] select-none cursor-pointer pl-[52px]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                <Switch
+                  size="sm"
+                  checked={!c.disabled}
+                  disabled={toggleDisabled.isPending}
+                  onCheckedChange={(checked) => toggleDisabled.mutate({ id: c.id, disabled: !checked })}
+                />
+                {c.disabled ? "Disabled" : "Enabled"}
+              </label>
             </Card>
           );
         })}
