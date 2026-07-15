@@ -15,20 +15,32 @@ export const connectionBaseSchema = z.object({
   port: z.coerce.number().int().min(1).max(65535).optional(),
   database: z.string().min(1),
   readUser: z.string().min(1),
-  readPassword: z.string().default(""),
+  // optional on input — defaulted on create (see connectionSchema) and left
+  // unchanged on partial PATCH updates when omitted (e.g. toggling `disabled`
+  // alone). A z.default() here would fill in "" for *any* PATCH that doesn't
+  // resend it, silently wiping the stored password.
+  readPassword: z.string().optional(),
   writeUser: z.string().nullish(),
   writePassword: z.string().nullish(),
-  ssl: z.boolean().default(false),
+  // optional on input, same reasoning as readPassword — defaulted on create,
+  // preserved on partial update.
+  ssl: z.boolean().optional(),
   allowedSchemas: z.array(z.string()).nullish(),
   // Free-form driver options (URL query string) — e.g. Mongo's authSource /
   // directConnection / readPreference. Preserved from a pasted URI.
   options: z.string().nullish(),
+  // Admin-only toggle to take a connection offline without deleting it —
+  // only ever set via PATCH (see connections/[id]/route.ts), never on create.
+  disabled: z.boolean().optional(),
 });
 
-// Create schema: fills the engine's default port when one wasn't supplied.
+// Create schema: fills the engine's default port, and the readPassword/ssl
+// defaults that connectionBaseSchema no longer supplies, when they weren't given.
 export const connectionSchema = connectionBaseSchema.transform((c) => ({
   ...c,
   port: c.port ?? DEFAULT_PORTS[c.engine],
+  readPassword: c.readPassword ?? "",
+  ssl: c.ssl ?? false,
 }));
 
 export function redact(c: ConnectionConfig) {

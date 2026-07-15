@@ -15,6 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DatabaseSelect } from "./database-select";
+import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnections } from "@/app/settings/use-connections";
 
 export interface ConnectionRow {
   id: string;
@@ -28,6 +30,7 @@ export interface ConnectionRow {
   hasWrite: boolean;
   ssl: boolean;
   options?: string | null;
+  disabled: boolean;
 }
 
 interface FormState {
@@ -255,8 +258,8 @@ export function ConnectionForm({
       if (!res.ok) throw new Error(body.error ?? "Failed to update connection");
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["connections"] });
-      qc.invalidateQueries({ queryKey: ["catalog"] });
+      useConnections.invalidate(qc);
+      useCatalog.invalidate(qc);
       onClose();
     },
     onError: (e: Error) => setError(e.message),

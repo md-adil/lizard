@@ -65,6 +65,7 @@ function rowToConnection(r: Record<string, unknown>): ConnectionConfig {
     ssl: !!r.ssl,
     allowedSchemas: r.allowed_schemas ? JSON.parse(r.allowed_schemas as string) : null,
     options: (r.options as string) || null,
+    disabled: !!r.disabled,
     createdAt: r.created_at as string,
   };
 }
@@ -83,8 +84,8 @@ export function addConnection(input: ConnectionInput): ConnectionConfig {
   const id = randomUUID();
   getDb()
     .prepare(
-      `INSERT INTO connections (id, name, engine, host, port, database, read_user, read_password, write_user, write_password, ssl, allowed_schemas, options)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO connections (id, name, engine, host, port, database, read_user, read_password, write_user, write_password, ssl, allowed_schemas, options, disabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -100,6 +101,7 @@ export function addConnection(input: ConnectionInput): ConnectionConfig {
       input.ssl ? 1 : 0,
       input.allowedSchemas ? JSON.stringify(input.allowedSchemas) : null,
       input.options || null,
+      input.disabled ? 1 : 0,
     );
   return getConnection(id)!;
 }
@@ -116,7 +118,7 @@ export function updateConnection(id: string, input: Partial<ConnectionInput>): C
   const merged = { ...existing, ...provided };
   getDb()
     .prepare(
-      `UPDATE connections SET name=?, engine=?, host=?, port=?, database=?, read_user=?, read_password=?, write_user=?, write_password=?, ssl=?, allowed_schemas=?, options=? WHERE id=?`,
+      `UPDATE connections SET name=?, engine=?, host=?, port=?, database=?, read_user=?, read_password=?, write_user=?, write_password=?, ssl=?, allowed_schemas=?, options=?, disabled=? WHERE id=?`,
     )
     .run(
       merged.name,
@@ -131,6 +133,7 @@ export function updateConnection(id: string, input: Partial<ConnectionInput>): C
       merged.ssl ? 1 : 0,
       merged.allowedSchemas ? JSON.stringify(merged.allowedSchemas) : null,
       merged.options || null,
+      merged.disabled ? 1 : 0,
       id,
     );
   return getConnection(id);

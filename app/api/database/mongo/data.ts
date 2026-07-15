@@ -1,5 +1,5 @@
 // MongoDB data/CRUD service — the document-store counterpart to the relational
-// SQL path in lib/data/crud.ts. It is a *separate* implementation (Phase 9
+// SQL path in app/api/data/crud.ts. It is a *separate* implementation (Phase 9
 // decision 2: Mongo is not an extension of the relational base): the shared
 // crud.ts dispatches here by engine, and these functions return the exact same
 // shapes its route handlers already consume, so browse/CRUD stay uniform.
@@ -9,19 +9,20 @@
 // which requires write credentials. Field names are validated against the
 // sampled catalog before use; values are coerced to their BSON type.
 import type { ConnectionConfig, FkLabels, TableInfo } from "@/lib/types";
-import type { ListParams, GroupedListParams } from "@/lib/data/crud";
+import type { ListParams, GroupedListParams } from "@/app/api/data/crud";
 import type { FilterCondition, Combinator } from "@/lib/data/filters";
 import { effectiveKey, guessDisplayColumn } from "@/lib/introspect/heuristics";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getColumnOverrides, listTableOverrides, logAudit } from "@/lib/metadata/store";
 import { getMongoDb, READ_MAX_TIME_MS, WRITE_MAX_TIME_MS } from "./client";
 import { serializeDoc, coerceId, coerceWriteValue } from "./bson";
-import { buildMongoFilter, buildMongoSearch, andFilters } from "./filters";
+import { buildMongoFilter, andFilters } from "./filters";
+import { buildMongoSearchFilter } from "./search";
 // crud.ts imports this module only via a runtime dynamic import (never at its
 // top level), so this static import back into it is fully evaluated by the time
 // any function here runs — no load-order cycle — and reusing CrudError means
 // lib/api.ts's `fail()` maps our errors to the right HTTP status.
-import { CrudError } from "@/lib/data/crud";
+import { CrudError, fetchFkLabels } from "@/app/api/data/crud";
 
 function assertColumn(table: TableInfo, column: string): void {
   if (!table.columns.some((c) => c.name === column)) {
@@ -61,9 +62,15 @@ function sortSpec(table: TableInfo, sort?: string, sortDir?: "asc" | "desc"): Re
   return { _id: -1 };
 }
 
-function whereFor(table: TableInfo, filters?: FilterCondition[], combinator?: Combinator, search?: string) {
+function whereFor(
+  conn: ConnectionConfig,
+  table: TableInfo,
+  filters?: FilterCondition[],
+  combinator?: Combinator,
+  search?: string,
+) {
   const filter = buildMongoFilter(table, filters ?? [], combinator ?? "and");
-  const searchFilter = search ? buildMongoSearch(table, search) : null;
+  const searchFilter = search ? buildMongoSearchFilter(conn, table, search) : null;
   return andFilters(filter, searchFilter);
 }
 
@@ -72,7 +79,7 @@ function whereFor(table: TableInfo, filters?: FilterCondition[], combinator?: Co
 export async function mongoListRows(conn: ConnectionConfig, table: TableInfo, params: ListParams) {
   const db = await getMongoDb(conn, "read");
   const coll = db.collection(table.name);
-  const where = whereFor(table, params.filters, params.combinator, params.search);
+  const where = whereFor(conn, table, params.filters, params.combinator, params.search);
   const pageSize = Math.min(Math.max(params.pageSize, 1), 200);
   const skip = Math.max(params.page, 0) * pageSize;
   const projection = gridProjection(conn, table, [
@@ -99,8 +106,10 @@ export async function mongoListRows(conn: ConnectionConfig, table: TableInfo, pa
     total = table.rowEstimate;
   }
 
-  // No declared relationships in a document store, so no FK labels to resolve.
-  const fkLabels: FkLabels = {};
+  // A document store has no declared relationships of its own, but a virtual
+  // FK can still point from a Mongo column to any other table/connection
+  // (relational or Mongo) — resolve those the same way the relational path does.
+  const fkLabels = await fetchFkLabels(conn, table, rows);
   return { rows, hasMore, total, fkLabels };
 }
 
@@ -108,7 +117,7 @@ export async function mongoListGroupedRows(conn: ConnectionConfig, table: TableI
   assertColumn(table, params.groupBy);
   const db = await getMongoDb(conn, "read");
   const coll = db.collection(table.name);
-  const where = whereFor(table, params.filters, params.combinator, params.search);
+  const where = whereFor(conn, table, params.filters, params.combinator, params.search);
   const perGroup = Math.min(Math.max(params.perGroup, 1), 200);
   const maxGroups = Math.min(Math.max(params.maxGroups ?? 50, 1), 200);
   const sort = sortSpec(table, params.sort, params.sortDir);
@@ -170,7 +179,10 @@ export async function mongoListGroupedRows(conn: ConnectionConfig, table: TableI
     for (const doc of g.docs as Record<string, unknown>[]) outRows.push(serializeDoc(doc));
   }
 
-  return { rows: outRows, groupCounts, fkLabels: {} as FkLabels };
+  // Kanban cards resolve FK labels (day grouping returned above), matching
+  // listGroupedRows's relational counterpart.
+  const fkLabels = await fetchFkLabels(conn, table, outRows);
+  return { rows: outRows, groupCounts, fkLabels };
 }
 
 const EXPORT_ROW_LIMIT = 100_000;
@@ -178,7 +190,7 @@ const EXPORT_ROW_LIMIT = 100_000;
 export async function mongoExportRows(conn: ConnectionConfig, table: TableInfo, params: Omit<ListParams, "page" | "pageSize">) {
   const db = await getMongoDb(conn, "read");
   const coll = db.collection(table.name);
-  const where = whereFor(table, params.filters, params.combinator, params.search);
+  const where = whereFor(conn, table, params.filters, params.combinator, params.search);
   const docs = await coll
     .find(where, { maxTimeMS: READ_MAX_TIME_MS })
     .sort(sortSpec(table, params.sort, params.sortDir))
@@ -212,7 +224,9 @@ export async function mongoGetRow(conn: ConnectionConfig, table: TableInfo, key:
   const coll = db.collection(table.name);
   const doc = await coll.findOne(keyFilter(table, key), { maxTimeMS: READ_MAX_TIME_MS });
   if (!doc) throw new CrudError("Row not found", 404);
-  return { row: serializeDoc(doc), fkLabels: {} as FkLabels };
+  const row = serializeDoc(doc);
+  const fkLabels = await fetchFkLabels(conn, table, [row]);
+  return { row, fkLabels };
 }
 
 // Distinct existing values of a text-like column, for autocomplete widgets.

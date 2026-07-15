@@ -5,7 +5,7 @@
 // column / calendar day) bigger than the page size crowded every other group
 // out of the fetch entirely. This hook instead asks the server for a fair
 // top-N per distinct group value (or per day) — see listGroupedRows in
-// lib/data/crud.ts. Calendar additionally scopes the query to the visible
+// app/api/data/crud.ts. Calendar additionally scopes the query to the visible
 // month; without that, grouping by day across the table's whole history
 // would fetch perGroup rows for every day that ever occurred.
 import { useQuery, keepPreviousData } from "@tanstack/react-query";

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { MoreHorizontal, Search, X } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -33,8 +33,9 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSchemaMeta } from "@/components/browse/useTableMeta";
+import { useCatalog } from "@/components/browse/use-catalog";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
-import { supportsSchemas, type CatalogResponse } from "@/lib/types";
+import { supportsSchemas } from "@/lib/types";
 import { GlobalSearch } from "@/components/global-search";
 
 const NAV = [
@@ -243,14 +244,7 @@ export function Sidebar() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  const { data } = useQuery<CatalogResponse>({
-    queryKey: ["catalog"],
-    queryFn: async () => {
-      const res = await fetch("/api/catalog");
-      if (!res.ok) throw new Error("failed to load catalog");
-      return res.json();
-    },
-  });
+  const { data, isFetching: catalogLoading } = useCatalog();
 
   const connections = useMemo(() => data?.connections ?? [], [data]);
   const [selected, setSelected] = useState<string>("");
@@ -322,9 +316,7 @@ export function Sidebar() {
   // Guard against the render where `selected` has moved to a new connection but
   // the effect restoring `loaded` hasn't run yet: only schemas the current
   // connection actually has are safe to fetch.
-  const shownSchemas = loaded
-    .filter((s) => allSchemas.includes(s))
-    .filter((s) => !activeSchema || s === activeSchema);
+  const shownSchemas = loaded.filter((s) => allSchemas.includes(s)).filter((s) => !activeSchema || s === activeSchema);
 
   const tableQ = tableSearch.trim().toLowerCase();
 
@@ -389,6 +381,7 @@ export function Sidebar() {
             <DataSelect
               key={`${selected}-${connections.length}`}
               items={connections}
+              loading={catalogLoading}
               value={connections.find((c) => c.connectionName === selected) ?? null}
               onChange={(c) => {
                 if (c) {

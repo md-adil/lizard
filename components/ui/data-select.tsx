@@ -4,6 +4,7 @@
 // plain (non-searchable) dropdown renders through this instead of repeating
 // the value<->object lookup and the SelectGroup boilerplate by hand.
 import * as React from "react";
+import { Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ export function DataSelect<T, V>({
   size = "default",
   className,
   disabled,
+  loading = false,
 }: {
   items: T[];
   value: T | null;
@@ -52,6 +54,7 @@ export function DataSelect<T, V>({
   size?: "sm" | "default";
   className?: string;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   const selected = value ? getValue(value) : clearable ? NONE : undefined;
   // lets <SelectValue> resolve the trigger label instead of showing the raw value
@@ -68,7 +71,8 @@ export function DataSelect<T, V>({
       disabled={disabled}
     >
       <SelectTrigger size={size} className={className}>
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={loading ? "Loading…" : placeholder} />
+        {loading && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

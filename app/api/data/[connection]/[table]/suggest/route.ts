@@ -1,5 +1,5 @@
 import { ok, fail } from "@/lib/api";
-import { columnSuggestions } from "@/lib/data/crud";
+import { columnSuggestions } from "@/app/api/data/crud";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ connection: string; table: string }> };
@@ -7,7 +7,7 @@ type Params = { params: Promise<{ connection: string; table: string }> };
 // Autocomplete suggestions: GET ?column=<column>&q=<search>&mode=<contains|prefix>
 // — distinct existing values of that column, for the "autocomplete" widget.
 // mode=prefix is the filter panel's indexed "is" autocomplete (see
-// columnSuggestions in lib/data/crud.ts) — omit for the default contains match.
+// columnSuggestions in app/api/data/crud.ts) — omit for the default contains match.
 export async function GET(req: Request, { params }: Params) {
   try {
     const { connection, table } = await params;

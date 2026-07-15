@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useCatalog, useSchemaMeta } from "@/components/browse/useTableMeta";
+import { useSchemaMeta } from "@/components/browse/useTableMeta";
+import { useCatalog } from "@/components/browse/use-catalog";
 import { supportsSchemas, type TableInfo } from "@/lib/types";
 import {
   Breadcrumb,

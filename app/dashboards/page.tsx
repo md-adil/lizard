@@ -2,18 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Dashboard } from "@/lib/types";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDashboards } from "@/components/charts/use-dashboards";
 
 export default function DashboardsPage() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
-  const { data, isLoading } = useQuery<Dashboard[]>({
-    queryKey: ["dashboards"],
-    queryFn: async () => (await fetch("/api/dashboards")).json(),
-  });
+  const { data, isLoading } = useDashboards();
 
   const create = useMutation({
     mutationFn: async () => {
@@ -26,7 +23,7 @@ export default function DashboardsPage() {
     },
     onSuccess: () => {
       setName("");
-      qc.invalidateQueries({ queryKey: ["dashboards"] });
+      useDashboards.invalidate(qc);
     },
   });
 
@@ -34,7 +31,7 @@ export default function DashboardsPage() {
     mutationFn: async (id: string) => {
       await fetch(`/api/dashboards/${id}`, { method: "DELETE" });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboards"] }),
+    onSuccess: () => useDashboards.invalidate(qc),
   });
 
   return (

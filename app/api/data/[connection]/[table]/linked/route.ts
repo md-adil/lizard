@@ -1,4 +1,4 @@
-import { listLinkedRows } from "@/lib/data/crud";
+import { listLinkedRows } from "@/app/api/data/crud";
 import { ok, fail } from "@/lib/api";
 import { requireConnectionAccess } from "@/lib/auth/session";
 

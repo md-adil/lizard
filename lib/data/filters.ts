@@ -110,7 +110,7 @@ export function buildFilterClause(
   dialect: Dialect,
   startIndex = 0,
   // "tag" widget columns store a JSON array (jsonb/json, or JSON text in a
-  // plain text/varchar column per widgetOverrideColumns in lib/data/crud.ts)
+  // plain text/varchar column per widgetOverrideColumns in app/api/data/crud.ts)
   // rather than a native SQL array — arraycontains/arrayoverlap need each
   // engine's JSON functions/operators for these instead of @>/&&.
   tagColumns: Set<string> = new Set()

@@ -42,7 +42,13 @@ export interface ConnectionConfig {
   // Consumed by the MongoDB driver (where authSource/directConnection matter);
   // ignored by the relational engines. null = none.
   options: string | null;
+  // Taken offline by an admin — hidden from Browse/the catalog and rejected by
+  // the query layer, but kept (and its customizations) for later re-enabling.
+  disabled: boolean;
   createdAt: string;
 }
 
-export type ConnectionInput = Omit<ConnectionConfig, "id" | "createdAt">;
+// disabled defaults to false (the DB column has DEFAULT 0) so callers that
+// only ever create enabled connections — like most call sites — don't need
+// to know about the flag.
+export type ConnectionInput = Omit<ConnectionConfig, "id" | "createdAt" | "disabled"> & { disabled?: boolean };

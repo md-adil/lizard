@@ -64,6 +64,7 @@ function searchClauseFor(
 async function resolveTable(connectionName: string, schema: string | undefined, table: string) {
   const conn = getConnection(connectionName);
   if (!conn) throw new CrudError(`Unknown connection: ${connectionName}`, 404);
+  if (conn.disabled) throw new CrudError(`Connection "${connectionName}" is disabled`, 403);
   const catalog = await getConnectionCatalog(conn);
   if (catalog.error) throw new CrudError(`Connection error: ${catalog.error}`, 502);
   const targetSchema = schema || (supportsSchemas(conn.engine) ? "public" : conn.database);
@@ -608,7 +609,7 @@ interface LabelJob {
 // constant (discriminator) columns — see FkLabelSet. A polymorphic relation
 // (`subject_id` + `subject_type`) reuses ids across parent tables, so keying by
 // `subject_id` alone would hand a Course's title to a Batch row with the same id.
-async function fetchFkLabels(
+export async function fetchFkLabels(
   conn: ConnectionConfig,
   table: TableInfo,
   rows: Record<string, unknown>[],
@@ -710,81 +711,104 @@ async function fetchFkLabels(
         // Nothing to resolve if the label would just echo the id.
         if (job.pairs.length === 1 && display === job.pairs[0].to) return;
 
-        const targetDialect = getDialect(job.targetConn.engine);
-        const params: unknown[] = [];
-        // Compare the raw column, never a cast of it — a cast is not sargable
-        // and turns each label lookup into a full scan.
-        const targetExpr = (col: string) => `t.${targetDialect.quoteIdent(col)}`;
-
-        // The keys are an IN filter, not a joined table: every projected value
-        // comes from `t` itself, so the keys only ever needed to narrow it.
-        //
-        // Bind them bare. A parameter compared against a bare column is
-        // *coercible* — the engine adopts the column's own type and collation.
-        // Wrapping it in a cast (`CAST(? AS CHAR)`) instead gives the value the
-        // connection's default collation with implicit coercibility, and MySQL
-        // then refuses to compare it against an implicitly-collated column of
-        // any other collation: "illegal mix of collations". Which is every
-        // utf8mb4_unicode_ci column on a MySQL 8 server, whose connection
-        // default is utf8mb4_0900_ai_ci.
-        const rowExprs = tuples.map((tuple) => {
-          const cols = tuple.map((val) => {
-            params.push(val);
-            return targetDialect.placeholder(params.length);
-          });
-          return cols.length === 1 ? cols[0] : `(${cols.join(", ")})`;
-        });
-        const keyExpr =
-          job.pairs.length === 1
-            ? targetExpr(job.pairs[0].to)
-            : `(${job.pairs.map((p) => targetExpr(p.to)).join(", ")})`;
-        const keyClause = `${keyExpr} IN (${rowExprs.join(", ")})`;
-
         const keyCols = job.pairs.map((_, i) => `k${i}`);
-        const selectKeys = job.pairs.map((p, i) => `${targetExpr(p.to)} AS k${i}`);
         const targetConstants = job.constants.filter((c) => !c.side || c.side === "target");
-        const constClause = targetConstants.map((c) => {
-          params.push(c.value);
-          return `${targetExpr(c.toColumn)} = ${targetDialect.placeholder(params.length)}`;
-        });
-        const where = `WHERE ${[keyClause, ...constClause].join(" AND ")}`;
 
-        const client = await getClient(job.targetConn, "read");
-        try {
-          const fqTable = targetDialect.supportsSchemas
-            ? `${targetDialect.quoteIdent(job.schema)}.${targetDialect.quoteIdent(job.table)}`
-            : targetDialect.quoteIdent(job.table);
+        // Mongo has no SQL dialect/pooled client — look the target rows up
+        // via the driver's find() instead of the SQL IN-list path below (see
+        // app/api/database/mongo/fk-lookup.ts). Key/label values still funnel
+        // through the same String(...)-join contract so a lookup resolves
+        // identically regardless of which side (or neither) is Mongo.
+        let keyToLabel: Map<string, string>;
 
-          const selectDisplay = targetDialect.castToText(`t.${targetDialect.quoteIdent(display)}`);
-
-          const res = await client.query(
-            `SELECT ${selectKeys.join(", ")}, ${selectDisplay} AS label
-             FROM ${fqTable} t
-             ${where}`,
-            params,
+        if (job.targetConn.engine === "mongo") {
+          const { mongoFkLookup } = await import("@/app/api/database/mongo/fk-lookup");
+          keyToLabel = await mongoFkLookup(
+            job.targetConn,
+            job.table,
+            targetTable,
+            job.pairs,
+            tuples,
+            targetConstants,
+            display,
+            SEP,
           );
+        } else {
+          const targetDialect = getDialect(job.targetConn.engine);
+          const params: unknown[] = [];
+          // Compare the raw column, never a cast of it — a cast is not
+          // sargable and turns each label lookup into a full scan.
+          const targetExpr = (col: string) => `t.${targetDialect.quoteIdent(col)}`;
 
-          const keyToLabel = new Map<string, string>();
-          for (const tr of res.rows) {
-            keyToLabel.set(keyCols.map((kc) => String(tr[kc])).join(SEP), tr.label as string);
+          // The keys are an IN filter, not a joined table: every projected
+          // value comes from `t` itself, so the keys only ever needed to
+          // narrow it.
+          //
+          // Bind them bare. A parameter compared against a bare column is
+          // *coercible* — the engine adopts the column's own type and
+          // collation. Wrapping it in a cast (`CAST(? AS CHAR)`) instead
+          // gives the value the connection's default collation with implicit
+          // coercibility, and MySQL then refuses to compare it against an
+          // implicitly-collated column of any other collation: "illegal mix
+          // of collations". Which is every utf8mb4_unicode_ci column on a
+          // MySQL 8 server, whose connection default is utf8mb4_0900_ai_ci.
+          const rowExprs = tuples.map((tuple) => {
+            const cols = tuple.map((val) => {
+              params.push(val);
+              return targetDialect.placeholder(params.length);
+            });
+            return cols.length === 1 ? cols[0] : `(${cols.join(", ")})`;
+          });
+          const keyExpr =
+            job.pairs.length === 1
+              ? targetExpr(job.pairs[0].to)
+              : `(${job.pairs.map((p) => targetExpr(p.to)).join(", ")})`;
+          const keyClause = `${keyExpr} IN (${rowExprs.join(", ")})`;
+
+          const selectKeys = job.pairs.map((p, i) => `${targetExpr(p.to)} AS k${i}`);
+          const constClause = targetConstants.map((c) => {
+            params.push(c.value);
+            return `${targetExpr(c.toColumn)} = ${targetDialect.placeholder(params.length)}`;
+          });
+          const where = `WHERE ${[keyClause, ...constClause].join(" AND ")}`;
+
+          const client = await getClient(job.targetConn, "read");
+          try {
+            const fqTable = targetDialect.supportsSchemas
+              ? `${targetDialect.quoteIdent(job.schema)}.${targetDialect.quoteIdent(job.table)}`
+              : targetDialect.quoteIdent(job.table);
+
+            const selectDisplay = targetDialect.castToText(`t.${targetDialect.quoteIdent(display)}`);
+
+            const res = await client.query(
+              `SELECT ${selectKeys.join(", ")}, ${selectDisplay} AS label
+               FROM ${fqTable} t
+               ${where}`,
+              params,
+            );
+
+            keyToLabel = new Map<string, string>();
+            for (const tr of res.rows) {
+              keyToLabel.set(keyCols.map((kc) => String(tr[kc])).join(SEP), tr.label as string);
+            }
+          } finally {
+            client.release();
           }
-
-          const labels: Record<string, string> = {};
-          for (const [tupleKey, rowKeys] of rowKeysByTuple) {
-            const label = keyToLabel.get(tupleKey);
-            if (label == null) continue;
-            for (const rowKey of rowKeys) labels[rowKey] = label;
-          }
-          if (Object.keys(labels).length === 0) return;
-
-          // Merge: several relations may label the same column (one per
-          // polymorphic type); they share keyColumns so the keys never collide.
-          const existing = out[job.displayColumn];
-          if (existing) Object.assign(existing.labels, labels);
-          else out[job.displayColumn] = { keyColumns, labels };
-        } finally {
-          client.release();
         }
+
+        const labels: Record<string, string> = {};
+        for (const [tupleKey, rowKeys] of rowKeysByTuple) {
+          const label = keyToLabel.get(tupleKey);
+          if (label == null) continue;
+          for (const rowKey of rowKeys) labels[rowKey] = label;
+        }
+        if (Object.keys(labels).length === 0) return;
+
+        // Merge: several relations may label the same column (one per
+        // polymorphic type); they share keyColumns so the keys never collide.
+        const existing = out[job.displayColumn];
+        if (existing) Object.assign(existing.labels, labels);
+        else out[job.displayColumn] = { keyColumns, labels };
       } catch {
         /* label resolution is best-effort */
       }

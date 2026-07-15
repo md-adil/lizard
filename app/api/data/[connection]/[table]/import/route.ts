@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import { bulkInsertRows } from "@/lib/data/crud";
+import { bulkInsertRows } from "@/app/api/data/crud";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = {

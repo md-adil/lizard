@@ -14,7 +14,7 @@ import { RecordComments } from "@/components/browse/record-comments";
 import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { ReferenceHoverPreview } from "@/components/browse/reference-hover-preview";
 import { DataGrid } from "@/components/browse/data-grid";
-import { JsonView } from "@/components/browse/json-view";
+import { JsonView, JsonSyntax } from "@/components/browse/json-view";
 import { MediaPreview, type MediaKind } from "@/components/browse/media-preview";
 import { ShadowDom } from "@/components/ui/shadow-dom";
 import { useSchemaParam, tableHref, recordHref } from "@/components/browse/use-schema-param";
@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { widgetIcons, type Widget } from "@/lib/data/widgets";
-import { Check, X, CalendarDays, Link2, Copy } from "lucide-react";
+import { Check, X, CalendarDays, Link2, Copy, Maximize2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Breadcrumb,
@@ -150,7 +150,7 @@ function RelatedCard({
 
 // widgets whose values are long-form and read better full-width, wrapping
 // instead of being clipped to a single grid cell.
-const WIDE_WIDGETS = new Set<Widget>(["textarea", "markdown", "tag", "array"]);
+const WIDE_WIDGETS = new Set<Widget>(["textarea", "markdown", "tag", "array", "json"]);
 // numeric widgets — emphasized with tabular figures so columns of digits align.
 const NUMERIC_WIDGETS = new Set<Widget>(["number", "currency", "percent", "range"]);
 
@@ -170,6 +170,80 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
     </button>
+  );
+}
+
+// A real json/jsonb column arrives already parsed into an object; a text
+// column with its widget overridden to "json" arrives as a raw string that
+// still needs parsing to render as structured JSON.
+function parseJsonFieldValue(value: unknown): unknown {
+  if (typeof value === "string" && value.trim() !== "") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+// Expand trigger for a JSON field — same hover-revealed icon-button style as
+// CopyButton, placed right beside it in the label row (see FieldList) rather
+// than next to the value itself. Opens a dialog with the full value
+// (structured tree or raw text, toggleable, same as JsonCard used to offer).
+// Editing still goes through the record's "✎ Edit" form (RowEditor already
+// renders JSON columns as an editable textarea), so this is display-only.
+function JsonExpandButton({ cm, value }: { cm: TableMeta["columns"][number]; value: unknown }) {
+  const [open, setOpen] = useState(false);
+  const [raw, setRaw] = useState(false);
+  const parsed = parseJsonFieldValue(value);
+  const pretty = JSON.stringify(parsed, null, 2);
+  return (
+    <>
+      <button
+        type="button"
+        title="View JSON"
+        className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={() => setOpen(true)}
+      >
+        <Maximize2 className="size-3" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          showCloseButton
+          className="top-[5vh] translate-y-0 flex flex-col resize overflow-auto gap-0 rounded-xl"
+          style={{
+            background: "var(--card)",
+            width: "min(90vw, 1100px)",
+            height: "min(60vh, 640px)",
+            minWidth: 360,
+            minHeight: 200,
+            maxWidth: "95vw",
+            maxHeight: "90vh",
+          }}
+        >
+          <div className="flex items-center gap-2 mb-4 pr-6">
+            <DialogTitle className="text-[16px] font-semibold">{cm.label}</DialogTitle>
+            <span className="tag code" style={{ fontSize: 10 }}>
+              json
+            </span>
+            <span className="flex-1" />
+            <Button variant="secondary" size="sm" onClick={() => setRaw((r) => !r)}>
+              {raw ? "Show structured" : "Show raw JSON"}
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto scrollbar-thin pr-1 text-[13.5px]">
+            {raw ? (
+              <pre className="code text-[12px] whitespace-pre-wrap" style={{ color: "var(--foreground)" }}>
+                <JsonSyntax text={pretty} />
+              </pre>
+            ) : (
+              <JsonView value={parsed} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -231,6 +305,18 @@ function FieldValue({
     return (
       <div className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
         {f.text}
+      </div>
+    );
+  }
+
+  // json/jsonb → the structured tree by default, same as the dialog's
+  // default view (raw JSON text is opt-in there, via its toggle). The
+  // expand-to-dialog trigger lives in the label row beside CopyButton (see
+  // FieldList/JsonExpandButton), not here.
+  if (cm.widget === "json") {
+    return (
+      <div className="max-h-56 overflow-auto scrollbar-thin text-[12.5px]">
+        <JsonView value={parseJsonFieldValue(value)} />
       </div>
     );
   }
@@ -301,7 +387,7 @@ function FieldValue({
 }
 
 function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<string, unknown>; fkLabels: FkLabels }) {
-  const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "json" && c.widget !== "html");
+  const cols = meta.columns.filter((c) => !c.hidden && c.widget !== "html");
   // key/identifying fields (display column + primary key) surface first with a
   // heavier treatment; grid's default stretch keeps the two columns' bottom
   // borders aligned per row, giving clean dividers.
@@ -317,7 +403,9 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
           typeof v === "string" &&
           v !== "";
         // wide fields claim a full row; a plain long string does too, so it
-        // isn't clipped mid-word in a half-width cell.
+        // isn't clipped mid-word in a half-width cell. json is always wide
+        // (via WIDE_WIDGETS) even though its preview text is short — matches
+        // the other "big value" widgets (markdown/textarea/tag/array).
         const f = formatCell(v, cm.widget, cm.optionLabels);
         const wide =
           !label &&
@@ -325,7 +413,10 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
           (WIDE_WIDGETS.has(cm.widget) || (!f.icon && v != null && typeof v !== "boolean" && f.text.length > 64));
         const isKey = keyNames.has(cm.col.name);
         const Icon = cm.ref ? Link2 : widgetIcons[cm.widget];
-        const copyText = v == null ? "" : typeof v === "string" ? v : String(v);
+        // An object (json/jsonb's parsed shape) needs stringifying — plain
+        // String(v) on an object gives "[object Object]", not useful to copy.
+        const copyText =
+          v == null ? "" : typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v);
         return (
           <div
             key={cm.col.name}
@@ -343,9 +434,10 @@ function FieldList({ meta, row, fkLabels }: { meta: TableMeta; row: Record<strin
                   key
                 </span>
               )}
-              {copyText && (
-                <span className="ml-auto">
-                  <CopyButton text={copyText} />
+              {(copyText || cm.widget === "json") && (
+                <span className="ml-auto flex items-center gap-0.5">
+                  {cm.widget === "json" && v != null && <JsonExpandButton cm={cm} value={v} />}
+                  {copyText && <CopyButton text={copyText} />}
                 </span>
               )}
             </div>
@@ -456,139 +548,6 @@ function HtmlCard({
         </pre>
       ) : (
         <ShadowDom html={value} className="block max-h-96 overflow-auto scrollbar-thin" />
-      )}
-    </RelatedCard>
-  );
-}
-
-// dedicated card per JSON column with inline editing
-function JsonCard({
-  meta,
-  row,
-  pk,
-  column,
-}: {
-  meta: TableMeta;
-  row: Record<string, unknown>;
-  pk: Record<string, unknown>;
-  column: string;
-}) {
-  const qc = useQueryClient();
-  const stored = row[column];
-  // A real json/jsonb column arrives already parsed into an object; a
-  // text column with its widget overridden to "json" arrives as a raw
-  // string that still needs parsing to render/edit as structured JSON.
-  const value =
-    typeof stored === "string" && stored.trim() !== ""
-      ? (() => {
-          try {
-            return JSON.parse(stored);
-          } catch {
-            return stored;
-          }
-        })()
-      : stored;
-  const pretty = value == null ? "" : JSON.stringify(value, null, 2);
-  const [editing, setEditing] = useState(false);
-  const [raw, setRaw] = useState(false);
-  const [text, setText] = useState(pretty);
-  const [err, setErr] = useState<string | null>(null);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      let parsed: unknown = null;
-      if (text.trim() !== "") {
-        try {
-          parsed = JSON.parse(text);
-        } catch {
-          throw new Error("Invalid JSON");
-        }
-      }
-      const res = await fetch(
-        dataApiUrl({ connection: meta.connection, table: meta.table.name, path: "row", schema: meta.schema }),
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pk, data: { [column]: parsed } }),
-        },
-      );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Save failed");
-    },
-    onSuccess: () => {
-      setEditing(false);
-      setErr(null);
-      qc.invalidateQueries({ queryKey: ["record"] });
-      qc.invalidateQueries({
-        queryKey: ["rows", meta.connection, meta.schema, meta.table.name],
-      });
-    },
-    onError: (e: Error) => setErr(e.message),
-  });
-
-  const cm = meta.columns.find((c) => c.col.name === column);
-  return (
-    <RelatedCard
-      title={cm?.label ?? humanize(column)}
-      subtitle="json"
-      menu={[
-        ...(value != null
-          ? [
-              {
-                label: raw ? "Show structured" : "Show raw JSON",
-                onClick: () => setRaw((r) => !r),
-              },
-            ]
-          : []),
-        ...(meta.isView
-          ? []
-          : [
-              editing
-                ? {
-                    label: "Cancel editing",
-                    onClick: () => {
-                      setEditing(false);
-                      setText(pretty);
-                      setErr(null);
-                    },
-                  }
-                : {
-                    label: "✎ Edit JSON",
-                    onClick: () => {
-                      setText(pretty);
-                      setEditing(true);
-                    },
-                  },
-            ]),
-      ]}
-    >
-      {editing ? (
-        <>
-          <Textarea className="code w-full" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
-          {err && (
-            <p className="text-[12px] mt-1" style={{ color: "var(--destructive)" }}>
-              {err}
-            </p>
-          )}
-          <Button size="sm" className="mt-2" disabled={save.isPending} onClick={() => save.mutate()}>
-            {save.isPending ? "Saving…" : "Save JSON"}
-          </Button>
-        </>
-      ) : value == null ? (
-        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
-          ∅ null
-        </p>
-      ) : raw ? (
-        <pre
-          className="code text-[12px] whitespace-pre-wrap max-h-64 overflow-auto scrollbar-thin"
-          style={{ color: "var(--foreground)" }}
-        >
-          {pretty}
-        </pre>
-      ) : (
-        <div className="max-h-80 overflow-auto scrollbar-thin">
-          <JsonView value={value} />
-        </div>
       )}
     </RelatedCard>
   );
@@ -984,7 +943,6 @@ function RecordView() {
     );
 
   const row = data?.row;
-  const jsonColumns = meta.columns.filter((c) => c.widget === "json" && !c.hidden);
   const htmlColumns = meta.columns.filter((c) => c.widget === "html" && !c.hidden);
   const pkText = Object.entries(pk)
     .map(([k, v]) => `${k}=${v}`)
@@ -1128,10 +1086,6 @@ function RecordView() {
             <div key={c.col.name} className="col-span-2">
               <HtmlCard meta={meta} row={row} pk={pk} column={c.col.name} />
             </div>
-          ))}
-
-          {jsonColumns.map((c) => (
-            <JsonCard key={c.col.name} meta={meta} row={row} pk={pk} column={c.col.name} />
           ))}
 
           {relations.belongsTo.map((b) => (

@@ -3,9 +3,9 @@
 // One-click "Visualize" (Phase 5): turn any query result into a chart, tweak
 // it live, and save it to a dashboard as a panel.
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import type { ChartSpec, Dashboard, QueryRequest, QueryResult } from "@/lib/types";
+import type { ChartSpec, QueryRequest, QueryResult } from "@/lib/types";
 import { suggestCharts } from "@/lib/charts/suggest";
 import { ChartRenderer } from "./chart-renderer";
 import { SpecControls } from "./spec-controls";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataSelect } from "@/components/ui/data-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useDashboards } from "./use-dashboards";
 
 export function VisualizeButton({ result, source }: { result: QueryResult; source: QueryRequest }) {
   const [open, setOpen] = useState(false);
@@ -24,11 +25,7 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
   const [savedTo, setSavedTo] = useState<{ id: string; name: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const { data: dashboards } = useQuery<Dashboard[]>({
-    queryKey: ["dashboards"],
-    queryFn: async () => (await fetch("/api/dashboards")).json(),
-    enabled: open,
-  });
+  const { data: dashboards } = useDashboards({ enabled: open });
   const dashboardOptions = useMemo(
     () => [{ value: "new", label: "＋ New dashboard…" }, ...(dashboards?.map((d) => ({ value: d.id, label: d.name })) ?? [])],
     [dashboards],
@@ -72,7 +69,7 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ spec }),
       });
-      qc.invalidateQueries({ queryKey: ["dashboards"] });
+      useDashboards.invalidate(qc);
       setSavedTo({ id, name });
     } finally {
       setSaving(false);

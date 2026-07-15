@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DataSelect } from "@/components/ui/data-select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useCatalog } from "@/components/browse/use-catalog";
+import { useDashboards } from "@/components/charts/use-dashboards";
 
 const SQL_TARGET_OPTIONS: { value: "single" | "federated"; label: string }[] = [
   { value: "single", label: "single" },
@@ -163,12 +165,7 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
     error?: string;
   } | null>(null);
 
-  const { data: catalog } = useQuery<{
-    connections: { connectionName: string; error?: string }[];
-  }>({
-    queryKey: ["catalog"],
-    queryFn: async () => (await fetch("/api/catalog")).json(),
-  });
+  const { data: catalog } = useCatalog();
   const connections = catalog?.connections.filter((c) => !c.error).map((c) => c.connectionName) ?? [];
 
   const generate = async () => {
@@ -428,7 +425,7 @@ export default function DashboardPage() {
       body: JSON.stringify(fields),
     });
     qc.invalidateQueries({ queryKey: ["dashboard", id] });
-    qc.invalidateQueries({ queryKey: ["dashboards"] });
+    useDashboards.invalidate(qc);
   };
 
   if (error)

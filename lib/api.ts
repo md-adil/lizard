@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { GuardError } from "@/lib/guard/guard";
-import { CrudError } from "@/lib/data/crud";
+import { CrudError } from "@/app/api/data/crud";
 import { AuthError } from "@/lib/auth/session";
 
 export function ok(data: unknown, init?: ResponseInit) {

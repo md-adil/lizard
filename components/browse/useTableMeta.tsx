@@ -26,19 +26,9 @@ import { MarkdownCell } from "./markdown-cell";
 import { AvatarCell } from "./avatar-cell";
 import { TimezoneCell } from "./timezone-cell";
 import { TagCell } from "./tag-cell";
+import { useCatalog } from "./use-catalog";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
-
-export function useCatalog() {
-  return useQuery<CatalogResponse>({
-    queryKey: ["catalog"],
-    queryFn: async () => {
-      const res = await fetch("/api/catalog");
-      if (!res.ok) throw new Error("Failed to load catalog");
-      return res.json();
-    },
-  });
-}
 
 // Does the named connection expose a real schema namespace? A virtual FK can
 // point at a different connection (with a different engine) than its source
@@ -298,7 +288,7 @@ export function formatCell(
   }
   if (widget === "tag") {
     // normalized to string[] server-side (see normalizeTagColumns in
-    // lib/data/crud.ts) — every tag column value is an array by the time it
+    // app/api/data/crud.ts) — every tag column value is an array by the time it
     // reaches the client.
     const tags = value as string[];
     return {

@@ -20,7 +20,7 @@ const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, { catalog: ConnectionCatalog; at: number }>();
 
 export async function getCatalog(refresh = false): Promise<Catalog> {
-  const conns = listConnections();
+  const conns = listConnections().filter((c) => !c.disabled);
   const results = await Promise.all(conns.map((c) => getConnectionCatalog(c, refresh)));
   return { connections: results, virtualFks: listVirtualFks() };
 }

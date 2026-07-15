@@ -12,15 +12,17 @@ import { coerceId } from "./bson";
 type MongoFilter = Record<string, unknown>;
 
 // Escape regex metacharacters so a `contains`/`startswith`/`endswith` value is
-// matched literally, never interpreted as a pattern.
-function escapeRegex(s: string): string {
+// matched literally, never interpreted as a pattern. Exported for reuse by
+// search.ts's global-search word-start matching.
+export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Coerce a client-supplied filter value (usually a string) to the BSON type the
 // field stores, so comparisons hit the right type. Booleans/numbers already
-// arrive typed from the client for those columns.
-function coerceValue(table: TableInfo, column: string, value: unknown): unknown {
+// arrive typed from the client for those columns. Exported for reuse by
+// search.ts's exact-match global-search lookups (e.g. an ObjectId _id term).
+export function coerceValue(table: TableInfo, column: string, value: unknown): unknown {
   const col = table.columns.find((c) => c.name === column);
   const udt = col?.udtName;
   if (column === "_id" || udt === "objectid") return coerceId(value);
@@ -110,21 +112,6 @@ export function buildMongoFilter(
   if (parts.length === 0) return {};
   if (parts.length === 1) return parts[0];
   return combinator === "or" ? { $or: parts } : { $and: parts };
-}
-
-// Full-text-ish search: a case-insensitive regex OR across the table's
-// text-like columns, plus an exact _id match when the term looks like an
-// ObjectId. Mirrors the intent of lib/data/search-match.ts without needing SQL.
-export function buildMongoSearch(table: TableInfo, term: string): MongoFilter | null {
-  const t = term.trim();
-  if (!t) return null;
-  const textCols = table.columns.filter((c) => c.udtName === "text" || c.udtName === "varchar");
-  const ors: MongoFilter[] = textCols.map((c) => ({
-    [c.name]: { $regex: escapeRegex(t), $options: "i" },
-  }));
-  if (/^[0-9a-fA-F]{24}$/.test(t)) ors.push({ _id: coerceId(t) });
-  if (ors.length === 0) return null;
-  return ors.length === 1 ? ors[0] : { $or: ors };
 }
 
 // Combine a filter and a search fragment with AND (both must hold).
