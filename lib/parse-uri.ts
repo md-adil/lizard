@@ -11,8 +11,16 @@ export interface ParsedUri {
   user: string;
   password: string;
   ssl: boolean;
+  // Remaining driver options (query params other than the ones we interpret as
+  // `ssl`) as a URL query string with no leading "?", or null when there are
+  // none. Preserved so e.g. Mongo's authSource/directConnection survive.
+  options: string | null;
   name: string; // suggested identifier derived from the database name
 }
+
+// Query params we consume directly into structured fields, so they are not
+// echoed back into the free-form `options` string.
+const CONSUMED_PARAMS = new Set(["sslmode", "ssl"]);
 
 const SCHEME_ENGINE: Record<string, DbEngine> = {
   "postgres:": "postgres",
@@ -44,6 +52,13 @@ export function parseConnectionUri(raw: string): ParsedUri | null {
     sslmode === "verify-ca" ||
     sslmode === "true" ||
     sslQuery === "true";
+  // Preserve every other query param (authSource, directConnection,
+  // readPreference, replicaSet, …) so a re-built driver URI keeps them.
+  const extra = new URLSearchParams();
+  for (const [k, v] of u.searchParams) {
+    if (!CONSUMED_PARAMS.has(k)) extra.append(k, v);
+  }
+  const options = extra.toString() || null;
   return {
     engine,
     host: u.hostname || "localhost",
@@ -52,6 +67,7 @@ export function parseConnectionUri(raw: string): ParsedUri | null {
     user: decodeURIComponent(u.username || ""),
     password: decodeURIComponent(u.password || ""),
     ssl,
+    options,
     name: (database || "db")
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, "_")

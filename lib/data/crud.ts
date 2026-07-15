@@ -155,6 +155,10 @@ function selectColumnsFor(conn: ConnectionConfig, table: TableInfo, alwaysInclud
 
 export async function listRows(params: ListParams) {
   const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoListRows(conn, table, params);
+  }
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");
 
@@ -255,6 +259,10 @@ export interface GroupedListParams {
 // query the way a runaway group *size* used to.
 export async function listGroupedRows(params: GroupedListParams) {
   const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoListGroupedRows(conn, table, params);
+  }
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");
 
@@ -381,6 +389,10 @@ export async function exportRows(
   params: Omit<ListParams, "page" | "pageSize">,
 ): Promise<{ columns: string[]; rows: Record<string, unknown>[]; truncated: boolean }> {
   const { conn, table } = await resolveTable(params.connection, params.schema, params.table);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoExportRows(conn, table, params);
+  }
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");
 
@@ -446,6 +458,9 @@ export async function listLinkedRows(
   selfValue: unknown,
 ): Promise<{ rows: Record<string, unknown>[]; total: number }> {
   const { conn, table: junction } = await resolveTable(connection, junctionSchema, junctionTable);
+  if (conn.engine === "mongo") {
+    throw new CrudError("Linked-record (M2M) relationships are not supported for MongoDB connections", 501);
+  }
   assertColumn(junction, selfFkColumn);
   assertColumn(junction, otherFkColumn);
 
@@ -766,6 +781,10 @@ export async function getRow(
   pk: Record<string, unknown>,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoGetRow(conn, table, pk);
+  }
   const dialect = getDialect(conn.engine);
   const values: unknown[] = [];
   const where = lookupWhere(table, pk, values, dialect);
@@ -795,6 +814,9 @@ export async function referenceOptions(
   search: string,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  // MongoDB has no declared relationships, so there is no reference target to
+  // search here; the picker widget won't be offered for Mongo columns anyway.
+  if (conn.engine === "mongo") return [] as { id: string; label: string }[];
   assertColumn(table, refColumn);
   const display = displayColumnFor(conn, table) ?? refColumn;
   const dialect = getDialect(conn.engine);
@@ -854,6 +876,10 @@ export async function columnSuggestions(
   mode: "contains" | "prefix" = "contains",
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoColumnSuggestions(conn, table, column, search, mode);
+  }
   assertColumn(table, column);
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");
@@ -971,6 +997,10 @@ export async function createRow(
   data: Record<string, unknown>,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoCreateRow(conn, table, data);
+  }
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const dialect = getDialect(conn.engine);
   const cols = writableColumns(table, data);
@@ -1049,6 +1079,10 @@ export async function bulkInsertRows(
     throw new CrudError(`Import is capped at ${IMPORT_ROW_LIMIT} rows per request`);
   }
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoBulkInsert(conn, table, rows);
+  }
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const dialect = getDialect(conn.engine);
   const fqtn = dialect.supportsSchemas
@@ -1111,6 +1145,10 @@ export async function updateRow(
   expectedUpdatedAt?: string,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoUpdateRow(conn, table, pk, data);
+  }
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const dialect = getDialect(conn.engine);
   const key = effectiveKey(table);
@@ -1181,6 +1219,10 @@ export async function deleteRow(
   pk: Record<string, unknown>,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoDeleteRow(conn, table, pk);
+  }
   if (table.kind === "view") throw new CrudError("Views are read-only", 405);
   const dialect = getDialect(conn.engine);
   const values: unknown[] = [];
@@ -1227,6 +1269,10 @@ export async function distinctColumnValues(
   search: string,
 ) {
   const { conn, table } = await resolveTable(connection, schema, tableName);
+  if (conn.engine === "mongo") {
+    const m = await import("@/app/api/database/mongo/data");
+    return m.mongoDistinctColumnValues(conn, table, columnName, search);
+  }
   assertColumn(table, columnName);
   const dialect = getDialect(conn.engine);
   const client = await getClient(conn, "read");

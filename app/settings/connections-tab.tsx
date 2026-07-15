@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Check, Lock, TriangleAlert } from "lucide-react";
+import { Check, Lock, TriangleAlert, Loader2 } from "lucide-react";
 import { ConnectionForm, type ConnectionRow } from "@/app/settings/connection-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,8 +21,25 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 
-interface ConnectionWithStatus extends ConnectionRow {
-  status: { read: string | null; write: string | null };
+interface ConnectionStatus {
+  read: string | null;
+  write: string | null;
+}
+
+// Each connection probes its own health independently of the list, so a slow
+// or unreachable database only delays its own badges. React Query dedupes by
+// key, so the badge row and the failure line below share one request per
+// connection, and the rows fetch in parallel with one another.
+function useConnectionStatus(id: string) {
+  return useQuery<ConnectionStatus>({
+    queryKey: ["connection-status", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/connections/${id}/status`);
+      if (!res.ok) return { read: "unreachable", write: null };
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
 }
 
 // `error === null` means the credential probe succeeded.
@@ -38,13 +55,44 @@ function StatusBadge({ role, error }: { role: "read" | "write"; error: string | 
   );
 }
 
+// Read/write status badges — a pulsing placeholder while the probe is in flight.
+function ConnectionStatusBadges({ id, hasWrite }: { id: string; hasWrite: boolean }) {
+  const { data, isLoading } = useConnectionStatus(id);
+  if (isLoading || !data) {
+    return (
+      <Badge variant="secondary" className="shrink-0 animate-pulse gap-1.5" aria-label="Checking connection status">
+        <Loader2 className="size-3 animate-spin" /> checking…
+      </Badge>
+    );
+  }
+  return (
+    <>
+      <StatusBadge role="read" error={data.read} />
+      {hasWrite && <StatusBadge role="write" error={data.write} />}
+    </>
+  );
+}
+
+// The actual probe failure text, once known. Hiding it in a tooltip withholds
+// the one thing you need in order to fix it.
+function ConnectionStatusFailure({ id }: { id: string }) {
+  const { data } = useConnectionStatus(id);
+  const failure = data ? (data.read ?? data.write) : null;
+  if (!failure) return null;
+  return (
+    <p className="text-[11.5px] mt-1.5 line-clamp-2" style={{ color: "var(--destructive)" }}>
+      {failure}
+    </p>
+  );
+}
+
 export function ConnectionsTab() {
   const qc = useQueryClient();
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<ConnectionRow | null>(null);
   const [removing, setRemoving] = useState<ConnectionRow | null>(null);
 
-  const { data: connections, isLoading } = useQuery<ConnectionWithStatus[]>({
+  const { data: connections, isLoading } = useQuery<ConnectionRow[]>({
     queryKey: ["connections"],
     queryFn: async () => (await fetch("/api/connections")).json(),
   });
@@ -100,7 +148,6 @@ export function ConnectionsTab() {
 
       <div className="space-y-3">
         {connections?.map((c) => {
-          const failure = c.status.read ?? c.status.write;
           return (
             <Card key={c.id} className="px-5 py-4 gap-3 flex-row items-center flex-wrap sm:flex-nowrap">
               <Link
@@ -120,10 +167,8 @@ export function ConnectionsTab() {
                     <Badge variant="secondary" className="shrink-0">
                       {ENGINE_LABELS[c.engine]}
                     </Badge>
-                    <StatusBadge role="read" error={c.status.read} />
-                    {c.hasWrite ? (
-                      <StatusBadge role="write" error={c.status.write} />
-                    ) : (
+                    <ConnectionStatusBadges id={c.id} hasWrite={c.hasWrite} />
+                    {!c.hasWrite && (
                       <Badge variant="secondary" className="shrink-0">
                         read-only
                       </Badge>
@@ -137,13 +182,7 @@ export function ConnectionsTab() {
                   <div className="text-[12.5px] mt-1 code truncate" style={{ color: "var(--muted-foreground)" }}>
                     {c.host}:{c.port}/{c.database}
                   </div>
-                  {/* Show the actual failure. Hiding it in a tooltip withholds the
-                      one thing you need in order to fix it. */}
-                  {failure && (
-                    <p className="text-[11.5px] mt-1.5 line-clamp-2" style={{ color: "var(--destructive)" }}>
-                      {failure}
-                    </p>
-                  )}
+                  <ConnectionStatusFailure id={c.id} />
                 </div>
               </Link>
               <div className="flex gap-2 shrink-0">

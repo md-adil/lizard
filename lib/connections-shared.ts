@@ -20,6 +20,9 @@ export const connectionBaseSchema = z.object({
   writePassword: z.string().nullish(),
   ssl: z.boolean().default(false),
   allowedSchemas: z.array(z.string()).nullish(),
+  // Free-form driver options (URL query string) — e.g. Mongo's authSource /
+  // directConnection / readPreference. Preserved from a pasted URI.
+  options: z.string().nullish(),
 });
 
 // Create schema: fills the engine's default port when one wasn't supplied.

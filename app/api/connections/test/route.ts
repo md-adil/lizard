@@ -20,6 +20,7 @@ const schema = z.object({
   writeUser: z.string().nullish(),
   writePassword: z.string().nullish(),
   ssl: z.boolean().optional(),
+  options: z.string().nullish(),
 });
 
 export async function POST(req: Request) {
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     let writeUser = b.writeUser;
     let writePassword = b.writePassword ?? "";
     let ssl = b.ssl ?? false;
+    let options: string | null = b.options ?? null;
 
     const connId = b.connectionId || b.cloneFrom;
     if (connId) {
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
         writeUser = b.writeUser !== undefined ? b.writeUser : source.writeUser;
         writePassword = b.writePassword || source.writePassword || "";
         ssl = b.ssl ?? source.ssl;
+        options = b.options !== undefined ? b.options : source.options;
       }
     }
 
@@ -62,13 +65,14 @@ export async function POST(req: Request) {
       readUser = p.user;
       readPassword = p.password;
       ssl = p.ssl;
+      options = p.options;
     }
 
     if (!host || !database || !readUser) {
       return fail(new Error("host, database and read user are required to test"));
     }
 
-    const read = await probeCredentials({ engine, host, port, database, user: readUser, password: readPassword, ssl });
+    const read = await probeCredentials({ engine, host, port, database, user: readUser, password: readPassword, ssl, options });
     let write: string | null = null;
     if (writeUser) {
       write = await probeCredentials({
@@ -79,6 +83,7 @@ export async function POST(req: Request) {
         user: writeUser,
         password: writePassword,
         ssl,
+        options,
       });
     }
     return ok({ read, write });

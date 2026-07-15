@@ -181,6 +181,9 @@ interface ProbeConfig {
   user: string;
   password: string;
   ssl: boolean;
+  // Free-form Mongo driver options (authSource/directConnection/…). Ignored by
+  // the relational probes.
+  options?: string | null;
 }
 
 // One-off connectivity probe that does NOT touch the pool cache — used by the
@@ -188,7 +191,10 @@ interface ProbeConfig {
 // success or the error message. Dispatches by engine.
 export async function probeCredentials(cfg: ProbeConfig): Promise<string | null> {
   if (cfg.engine === "mysql") return probeMysql(cfg);
-  if (cfg.engine === "mongo") return "MongoDB connectivity is not available yet";
+  if (cfg.engine === "mongo") {
+    const { probeMongo } = await import("@/app/api/database/mongo/client");
+    return probeMongo(cfg);
+  }
   return probePostgres(cfg);
 }
 
@@ -245,6 +251,7 @@ export async function testConnection(conn: ConnectionConfig): Promise<{ read: st
     port: conn.port,
     database: conn.database,
     ssl: conn.ssl,
+    options: conn.options,
   };
   const read = await probeCredentials({ ...base, user: conn.readUser, password: conn.readPassword });
   let write: string | null = null;
@@ -262,6 +269,7 @@ export async function discoverDatabases(cfg: {
   user: string;
   password?: string;
   ssl: boolean;
+  options?: string | null;
 }): Promise<string[]> {
   if (cfg.engine === "mysql") {
     const mysql = await import("mysql2/promise");
@@ -285,6 +293,19 @@ export async function discoverDatabases(cfg: {
     } finally {
       if (conn) await conn.end().catch(() => {});
     }
+  }
+
+  if (cfg.engine === "mongo") {
+    const { discoverMongoDatabases } = await import("@/app/api/database/mongo/client");
+    return discoverMongoDatabases({
+      host: cfg.host,
+      port: cfg.port,
+      database: cfg.database,
+      user: cfg.user,
+      password: cfg.password,
+      ssl: cfg.ssl,
+      options: cfg.options,
+    });
   }
 
   if (cfg.engine === "postgres") {

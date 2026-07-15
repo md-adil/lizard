@@ -12,13 +12,11 @@ export async function GET() {
     const user = await requireUser();
     const readable = readableConnectionIds(user);
     const conns = listConnections().filter((c) => readable === "all" || readable.has(c.id));
-    const withStatus = await Promise.all(
-      conns.map(async (c) => {
-        const status = await testConnection(c).catch(() => ({ read: "unreachable", write: null }));
-        return { ...redact(c), status };
-      }),
-    );
-    return ok(withStatus);
+    // Return the list immediately without probing each database — health checks
+    // (especially a slow/unreachable connection) used to serialize into the
+    // page's first paint. The client fetches each connection's read/write
+    // status separately and in parallel via /api/connections/[id]/status.
+    return ok(conns.map(redact));
   } catch (e) {
     return fail(e);
   }
@@ -66,6 +64,7 @@ export async function POST(req: Request) {
       writePassword: writePassword || null,
       ssl: body.ssl,
       allowedSchemas: body.allowedSchemas?.length ? body.allowedSchemas : null,
+      options: body.options ?? null,
     });
     invalidateCatalog();
     const status = await testConnection(conn);
