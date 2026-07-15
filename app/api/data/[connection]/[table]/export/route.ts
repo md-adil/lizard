@@ -1,4 +1,4 @@
-import { exportRows } from "@/lib/data/crud";
+import { exportRows } from "@/app/api/data/crud";
 import type { FilterCondition, Combinator } from "@/lib/data/filters";
 import { requireConnectionAccess } from "@/lib/auth/session";
 

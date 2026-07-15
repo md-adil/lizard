@@ -2,7 +2,7 @@
 // cleverness: only tables an admin has opted into (`table_overrides.searchable`)
 // are ever queried, and each is searched only on its *indexed* columns via
 // lib/data/search-match.ts (shared with the per-table search box in
-// lib/data/crud.ts) — never an unindexed column, since that's exactly the
+// app/api/data/crud.ts) — never an unindexed column, since that's exactly the
 // full-scan cost this feature is built to avoid. See the plan this shipped
 // under for the full rationale.
 import { randomUUID } from "node:crypto";
@@ -14,7 +14,7 @@ import { getConnection, listTableOverridesForConnection } from "@/lib/metadata/s
 import { getDialect } from "@/app/api/database/registry";
 import { getClient } from "@/lib/db/pools";
 import { matchTargetFor, buildMatchClause, matchesTerm } from "@/lib/data/search-match";
-import { primaryKeyColumnsFor } from "@/lib/data/crud";
+import { primaryKeyColumnsFor } from "@/app/api/data/crud";
 
 export interface GlobalSearchHit {
   connection: string; // connection name, for routing/display
@@ -65,7 +65,7 @@ export function invalidateSearchTargets(): void {
 function resolveSearchTargets(connections: ConnectionCatalog[]): SearchTarget[] {
   const targets: SearchTarget[] = [];
   for (const cc of connections) {
-    if (cc.engine === "mongo" || cc.error) continue; // no Dialect/SQL to build against
+    if (cc.error) continue;
     const conn = getConnection(cc.connectionId);
     if (!conn) continue;
     const overrides = listTableOverridesForConnection(cc.connectionId);
@@ -100,6 +100,12 @@ async function searchOneTable(
 
   const target = matchTargetFor(table, term, primaryKeyColumnsFor(conn, table));
   if (target.columns.length === 0) return [];
+
+  if (conn.engine === "mongo") {
+    const { searchOneMongoCollection } = await import("@/app/api/database/mongo/search");
+    const hits = await searchOneMongoCollection(conn, table, key, target, term, PER_TABLE_LIMIT);
+    return hits.map((h) => ({ connection: conn.name, schema: schemaName, table: table.name, ...h }));
+  }
 
   const dialect = getDialect(conn.engine);
   const values: unknown[] = [];

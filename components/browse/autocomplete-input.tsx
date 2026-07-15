@@ -24,7 +24,7 @@ export interface AutocompleteTarget {
 // Both endpoints take the same {column, q} shape and return string[]:
 // "suggest" is a plain distinct-values query (the "autocomplete" widget),
 // "tags" flattens/dedupes JSON-array "tag" widget columns into individual
-// values (see distinctColumnValues in lib/data/crud.ts) — same generic
+// values (see distinctColumnValues in app/api/data/crud.ts) — same generic
 // single-value typeahead UI, just pointed at whichever source matches the
 // column's widget.
 function useSuggestions(
@@ -57,7 +57,7 @@ export function AutocompleteInput({
   target,
   path = "suggest",
   // "prefix" is the filter panel's indexed "is" fast path (see
-  // columnSuggestions in lib/data/crud.ts) — a case-sensitive `LIKE
+  // columnSuggestions in app/api/data/crud.ts) — a case-sensitive `LIKE
   // 'value%'` that can use a plain index, instead of the default
   // case-insensitive contains match no plain index can satisfy.
   mode,

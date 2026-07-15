@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 
 export interface TagCellProps {
   // the server normalizes a "tag" widget column to string[] on every read
-  // (see normalizeTagColumns in lib/data/crud.ts) — no need to defend
+  // (see normalizeTagColumns in app/api/data/crud.ts) — no need to defend
   // against a raw JSON string or other shape here.
   value: string[];
   className?: string;

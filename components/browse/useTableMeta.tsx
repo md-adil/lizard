@@ -298,7 +298,7 @@ export function formatCell(
   }
   if (widget === "tag") {
     // normalized to string[] server-side (see normalizeTagColumns in
-    // lib/data/crud.ts) — every tag column value is an array by the time it
+    // app/api/data/crud.ts) — every tag column value is an array by the time it
     // reaches the client.
     const tags = value as string[];
     return {

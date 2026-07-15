@@ -1,5 +1,5 @@
 import { ok, fail } from "@/lib/api";
-import { listRows, listGroupedRows, createRow } from "@/lib/data/crud";
+import { listRows, listGroupedRows, createRow } from "@/app/api/data/crud";
 import type { FilterCondition, Combinator } from "@/lib/data/filters";
 import { requireConnectionAccess } from "@/lib/auth/session";
 

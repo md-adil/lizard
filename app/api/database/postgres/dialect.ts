@@ -1,5 +1,5 @@
 // Postgres SQL-text primitives. This is the single source of truth for the
-// fragments currently inlined across lib/data/crud.ts and lib/data/filters.ts;
+// fragments currently inlined across app/api/data/crud.ts and lib/data/filters.ts;
 // Phase 9A migrates those consumers onto it. Behavior here mirrors today's code
 // exactly — extracting it, not changing it.
 import type { Dialect, MappedError } from "@/app/api/database/driver";

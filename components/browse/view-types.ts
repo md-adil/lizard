@@ -25,7 +25,7 @@ export const VIEW_ICONS: Record<ViewType, LucideIcon> = {
 // Below this row-estimate, listGroupedRows' DISTINCT/windowed-fetch/COUNT
 // queries are cheap enough on a full scan that we don't need an index to
 // offer a grouped view — same threshold listRows uses for exact counts (see
-// lib/data/crud.ts). Unlike defaultSortFor's indexed-only policy (an
+// app/api/data/crud.ts). Unlike defaultSortFor's indexed-only policy (an
 // invisible, automatic pick where any unindexed cost is a silent surprise),
 // kanban/calendar are a deliberate, user-initiated choice, so a small-table
 // carve-out is safe here.
@@ -33,7 +33,7 @@ const SMALL_TABLE_ROW_THRESHOLD = 100_000;
 
 // Columns worth grouping a kanban by: enum / check-IN / boolean / single FK,
 // restricted to indexed columns once the table is too big to full-scan
-// cheaply — see listGroupedRows in lib/data/crud.ts.
+// cheaply — see listGroupedRows in app/api/data/crud.ts.
 export function kanbanGroupColumns(meta: TableMeta): ColumnMeta[] {
   const smallTable = meta.table.rowEstimate < SMALL_TABLE_ROW_THRESHOLD;
   return meta.columns.filter(

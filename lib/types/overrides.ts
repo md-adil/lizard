@@ -53,7 +53,7 @@ export interface TableOverride {
   // Grid settings (customize page) — the sort applied when nobody's picked
   // one yet this session. Falls back to the last date/timestamp column
   // descending, then primary-key order, when unset (see defaultSortFor in
-  // lib/data/crud.ts).
+  // app/api/data/crud.ts).
   defaultSort: string | null;
   defaultSortDir: "asc" | "desc" | null;
 }

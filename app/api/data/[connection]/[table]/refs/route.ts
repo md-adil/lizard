@@ -1,5 +1,5 @@
 import { ok, fail } from "@/lib/api";
-import { referenceOptions } from "@/lib/data/crud";
+import { referenceOptions } from "@/app/api/data/crud";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ connection: string; table: string }> };

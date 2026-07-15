@@ -1,5 +1,5 @@
 import { ok, fail } from "@/lib/api";
-import { distinctColumnValues } from "@/lib/data/crud";
+import { distinctColumnValues } from "@/app/api/data/crud";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ connection: string; table: string }> };

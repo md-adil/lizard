@@ -66,7 +66,7 @@ function toInputValue(cm: ColumnMeta, v: unknown): string | string[] {
   // "array" editor state is held as a JSON string of the element list
   // (ChipInput's convention). "tag" is kept as a real string[] end to end —
   // the server already normalizes it to an array on every read (see
-  // normalizeTagColumns in lib/data/crud.ts), and TagInput's Combobox needs
+  // normalizeTagColumns in app/api/data/crud.ts), and TagInput's Combobox needs
   // the real array, not a serialized form of it.
   if (cm.widget === "array") return JSON.stringify(Array.isArray(v) ? v : []);
   if (cm.widget === "tag") return Array.isArray(v) ? v.map(String) : [];
@@ -271,7 +271,7 @@ export function RowEditor({ meta, row: initialRow, duplicateFrom, refetchOnOpen,
           break;
         case "array": {
           // held as a JSON string of the element list; empty → null. Sent
-          // as a real array — coerceValue (lib/data/crud.ts) is what
+          // as a real array — coerceValue (app/api/data/crud.ts) is what
           // decides whether the underlying column needs it stringified
           // (plain text/varchar) or can take it natively (json/jsonb, or a
           // real DB array type), same as the "json" widget.

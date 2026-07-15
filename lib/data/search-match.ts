@@ -1,6 +1,6 @@
 // Shared column-selection + WHERE-clause logic for both cross-table global
 // search (lib/data/global-search.ts) and the per-table search box
-// (lib/data/crud.ts's listRows/exportRows) — same rule either way: only
+// (app/api/data/crud.ts's listRows/exportRows) — same rule either way: only
 // *indexed* columns are ever searched (an unindexed column means a full
 // scan regardless of table size, which is exactly what indexed-only
 // scoping is meant to avoid), narrowed further by what the term looks like.
