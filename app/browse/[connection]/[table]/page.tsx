@@ -34,12 +34,12 @@ import {
 } from "@/components/browse/view-types";
 import {
   GalleryView,
-  KanbanView,
   CalendarView,
   TreeView,
   currentCalendarCursor,
   type CalendarCursor,
 } from "@/components/browse/table-views";
+import { KanbanView } from "@/components/browse/kanban-view";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
 import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
@@ -557,7 +557,7 @@ export default function TablePage() {
             groupBy={activeGroupBy}
             groupCounts={groupedData?.groupCounts}
             onOpen={openRow}
-            onChanged={() => refetch()}
+            onChanged={() => refetchGrouped()}
           />
         </div>
       )}

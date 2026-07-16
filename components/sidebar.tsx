@@ -39,8 +39,7 @@ import { supportsSchemas } from "@/lib/types";
 import { GlobalSearch } from "@/components/global-search";
 
 const NAV = [
-  { href: "/", label: "Home", icon: "⌂" },
-  { href: "/ai", label: "Ask AI", icon: "✦" },
+  // { href: "/ai", label: "Ask AI", icon: "✦" },
   { href: "/dashboards", label: "Dashboards", icon: "▦" },
   { href: "/audit", label: "Audit log", icon: "≡" },
   { href: "/settings", label: "Settings", icon: "⚙" },
@@ -66,13 +65,6 @@ function ThemeToggle() {
   );
 }
 
-// Placeholder rows sized like the table links they stand in for, so the
-// sidebar keeps its shape while a schema's tables load instead of collapsing
-// to nothing (switching connection refetches, which used to blank the list).
-//
-// Skeleton's default `bg-muted` is all but identical to `--sidebar`, so it
-// vanishes here — tint from the foreground instead, which stays legible in
-// both themes.
 function TableListSkeleton({ rows = 7 }: { rows?: number }) {
   const widths = [72, 54, 83, 61, 76, 48, 68, 58, 79, 52];
   return (
