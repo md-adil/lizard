@@ -3,9 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { Dashboard } from "@/lib/types";
 import { useDashboards } from "@/components/charts/use-dashboards";
+
+const UNDO_DELAY_MS = 5000;
+// Keyed by dashboard id. Deliberately module-level, not component state: a
+// setTimeout survives unmount, but if the id→timeout mapping lived in
+// useState/useRef, navigating away from this page before the undo window
+// closes would lose the ability to know the delete is still pending.
+const pendingDeletes = new Map<string, ReturnType<typeof setTimeout>>();
 
 export default function DashboardsPage() {
   const qc = useQueryClient();
@@ -27,12 +37,32 @@ export default function DashboardsPage() {
     },
   });
 
-  const remove = useMutation({
-    mutationFn: async (id: string) => {
-      await fetch(`/api/dashboards/${id}`, { method: "DELETE" });
-    },
-    onSuccess: () => useDashboards.invalidate(qc),
-  });
+  const deleteWithUndo = (d: Dashboard, index: number) => {
+    qc.setQueryData<Dashboard[]>(useDashboards.key, (old) => old?.filter((x) => x.id !== d.id));
+    const timeout = setTimeout(async () => {
+      pendingDeletes.delete(d.id);
+      await fetch(`/api/dashboards/${d.id}`, { method: "DELETE" });
+    }, UNDO_DELAY_MS);
+    pendingDeletes.set(d.id, timeout);
+    toast(`Deleted "${d.name}"`, {
+      duration: UNDO_DELAY_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const pending = pendingDeletes.get(d.id);
+          if (pending) clearTimeout(pending);
+          pendingDeletes.delete(d.id);
+          // Never actually left the server — restore from cache, no refetch.
+          qc.setQueryData<Dashboard[]>(useDashboards.key, (old) => {
+            if (old?.some((x) => x.id === d.id)) return old;
+            const next = [...(old ?? [])];
+            next.splice(index, 0, d);
+            return next;
+          });
+        },
+      },
+    });
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-8 py-10">
@@ -54,29 +84,36 @@ export default function DashboardsPage() {
         </Button>
       </div>
 
-      {isLoading && <p style={{ color: "var(--muted-foreground)" }}>Loading…</p>}
-      <div className="grid grid-cols-2 gap-3">
-        {data?.map((d) => (
-          <div key={d.id} className="panel px-5 py-4 flex items-center justify-between">
-            <Link href={`/dashboards/${d.id}`} className="min-w-0">
-              <div className="font-semibold text-[14px] truncate">{d.name}</div>
-              <div className="text-[12px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-                {d.panels.length} panel{d.panels.length === 1 ? "" : "s"}
-                {d.refreshSeconds ? ` · refreshes every ${d.refreshSeconds}s` : ""}
-              </div>
-            </Link>
-            <Button
-              variant="destructive"
-              size="sm"
-
-              onClick={() => confirm(`Delete dashboard "${d.name}"?`) && remove.mutate(d.id)}
-            >
-              ✕
-            </Button>
-          </div>
-        ))}
-      </div>
-      {data?.length === 0 && (
+      {isLoading ? (
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-16 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {data?.map((d, i) => (
+            <div key={d.id} className="panel px-5 py-4 flex items-center justify-between">
+              <Link href={`/dashboards/${d.id}`} className="min-w-0">
+                <div className="font-semibold text-[14px] truncate">{d.name}</div>
+                <div className="text-[12px] mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                  {d.panels.length} panel{d.panels.length === 1 ? "" : "s"}
+                  {d.refreshSeconds ? ` · refreshes every ${d.refreshSeconds}s` : ""}
+                </div>
+              </Link>
+              <Button
+                variant="destructive"
+                size="sm"
+                aria-label={`Delete dashboard "${d.name}"`}
+                onClick={() => deleteWithUndo(d, i)}
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!isLoading && data?.length === 0 && (
         <div className="panel px-6 py-10 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           No dashboards yet. Create one here, or hit “Visualize” on any query result.
         </div>

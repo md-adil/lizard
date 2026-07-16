@@ -156,6 +156,20 @@
   border-radius: 10px;
 }
 
+/* react-grid-layout's default placeholder is an opaque red block — theme it
+   to match the panel chrome. */
+.react-grid-placeholder {
+  background: var(--primary) !important;
+  opacity: 0.12 !important;
+  border-radius: 10px;
+}
+
+/* rgl renders resize handles even when resizing is disabled — hide them
+   outside dashboard edit mode. */
+.rgl-view .react-resizable-handle {
+  display: none;
+}
+
 
 .input {
   background: var(--background);
@@ -181,6 +195,31 @@ select.input {
 .code {
   font-family: var(--mono);
   font-size: 12.5px;
+}
+
+/* Prism SQL tokens (see components/ui/sql-editor.tsx) — themed on the app's
+   own palette so light/dark both work without a vendor theme stylesheet. */
+.sql-highlight .token.keyword {
+  color: var(--primary);
+  font-weight: 600;
+}
+.sql-highlight .token.string {
+  color: var(--success);
+}
+.sql-highlight .token.number,
+.sql-highlight .token.boolean {
+  color: var(--warning);
+}
+.sql-highlight .token.function {
+  color: var(--destructive);
+}
+.sql-highlight .token.comment {
+  color: var(--muted-foreground-faint);
+  font-style: italic;
+}
+.sql-highlight .token.operator,
+.sql-highlight .token.punctuation {
+  color: var(--muted-foreground);
 }
 
 .tag {

@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addDashboard, listDashboards } from "@/lib/metadata/store";
-import { requireUser, requireEditor } from "@/lib/auth/session";
+import { requireUser, requireEditor, filterReadablePanels } from "@/lib/auth/session";
 
 export async function GET() {
   try {
-    await requireUser();
-    return ok(listDashboards());
+    const user = await requireUser();
+    return ok(listDashboards().map((d) => filterReadablePanels(user, d)));
   } catch (e) {
     return fail(e);
   }

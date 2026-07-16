@@ -7,7 +7,7 @@ const querySchema = z.object({
   target: z.enum(["single", "federated"]),
   connections: z.array(z.string()).min(1),
   sql: z.string().min(1),
-  dialect: z.enum(["postgres", "duckdb"]),
+  dialect: z.enum(["postgres", "mysql", "duckdb"]),
 });
 
 export async function POST(req: Request) {

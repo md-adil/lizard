@@ -3,8 +3,9 @@
 // AuthError (caught by lib/api `fail`) so routes stay one-liners.
 import { cookies } from "next/headers";
 import type { User, Access } from "@/lib/auth/store";
-import { getSessionUser, canRead, canWrite, getUserById } from "@/lib/auth/store";
+import { getSessionUser, canRead, canWrite, getUserById, readableConnectionIds } from "@/lib/auth/store";
 import { getConnection } from "@/lib/metadata/store";
+import type { Dashboard } from "@/lib/types";
 
 export const SESSION_COOKIE = "lizard_session";
 
@@ -59,6 +60,26 @@ export async function requireAllReadable(connectionNames: string[]): Promise<Use
     if (!canRead(user, conn.id)) throw new AuthError(`You do not have read access to "${name}"`, 403);
   }
   return user;
+}
+
+// Dashboard reads aren't gated by role (any authenticated user can list/view
+// dashboards), but a panel's SQL/connection names shouldn't leak to someone
+// who can't read the connection it targets — the same per-connection check
+// panel *refresh* already enforces (requireAllReadable, at /api/query time)
+// has to apply at dashboard *read* time too, or listing/opening a dashboard
+// is an end-run around it.
+export function filterReadablePanels(user: User, dashboard: Dashboard): Dashboard {
+  const readable = readableConnectionIds(user);
+  if (readable === "all") return dashboard;
+  return {
+    ...dashboard,
+    panels: dashboard.panels.filter((p) =>
+      p.spec.connections.every((name) => {
+        const conn = getConnection(name);
+        return !!conn && readable.has(conn.id);
+      }),
+    ),
+  };
 }
 
 export { getUserById };

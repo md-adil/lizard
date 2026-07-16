@@ -1,46 +1,61 @@
 "use client";
 
 import type { QueryResult } from "@/lib/types";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { formatCell } from "@/components/browse/useTableMeta";
 
-export function ResultGrid({ result, maxRows = 100 }: { result: QueryResult; maxRows?: number }) {
+export function ResultGrid({
+  result,
+  maxRows = 100,
+  maxHeight = 420,
+}: {
+  result: QueryResult;
+  maxRows?: number;
+  // Bounded contexts (a dashboard panel) pass their real available height so
+  // the scroll region can't spill past the card; unbounded ones (AI console,
+  // panel-preview modal) keep the 420px default.
+  maxHeight?: number;
+}) {
   const rows = result.rows.slice(0, maxRows);
   return (
     <div>
       <div
         className="bg-card border border-border rounded-xl overflow-x-auto scrollbar-thin"
-        style={{ maxHeight: 420, overflowY: "auto" }}
+        style={{ maxHeight, overflowY: "auto" }}
       >
-        <table className="grid">
-          <thead>
-            <tr>
+        <Table>
+          <TableHeader>
+            <TableRow>
               {result.columns.map((c) => (
-                <th key={c.name} title={c.type}>
+                <TableHead key={c.name} title={c.type}>
                   {c.name}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map((row, i) => (
-              <tr key={i}>
+              <TableRow key={i}>
                 {result.columns.map((c) => {
                   const v = row[c.name];
+                  // No column metadata for an ad hoc SQL result (unlike the
+                  // browse grid's TableMeta) — formatCell without a widget
+                  // still gets consistent null/boolean/array/date formatting.
+                  const f = formatCell(v);
                   return (
-                    <td key={c.name} title={String(v ?? "")}>
-                      {v === null || v === undefined ? (
-                        <span style={{ color: "var(--muted-foreground-faint)" }}>∅</span>
-                      ) : typeof v === "object" ? (
-                        JSON.stringify(v)
-                      ) : (
-                        String(v)
-                      )}
-                    </td>
+                    <TableCell
+                      key={c.name}
+                      title={String(v ?? "")}
+                      style={{ color: f.muted ? "var(--muted-foreground-faint)" : "var(--foreground)" }}
+                    >
+                      {f.icon ?? f.text}
+                    </TableCell>
                   );
                 })}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {rows.length === 0 && (
           <p className="px-4 py-6 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
             No rows returned.

@@ -679,6 +679,27 @@ export function deletePanel(id: string): void {
   getDb().prepare("DELETE FROM panels WHERE id = ?").run(id);
 }
 
+// Bulk grid-layout persistence: one drag/resize in the dashboard grid moves
+// several panels at once (collision packing), so all positions land in one
+// transaction. node:sqlite's DatabaseSync has no `.transaction()` helper
+// (unlike better-sqlite3), so this follows the same raw BEGIN/COMMIT/ROLLBACK
+// pattern as migrations/runner.ts.
+export function updatePanelLayout(
+  dashboardId: string,
+  items: { id: string; x: number; y: number; w: number; h: number }[],
+): void {
+  const db = getDb();
+  db.exec("BEGIN");
+  try {
+    const stmt = db.prepare("UPDATE panels SET x=?, y=?, w=?, h=? WHERE id=? AND dashboard_id=?");
+    for (const it of items) stmt.run(it.x, it.y, it.w, it.h, it.id, dashboardId);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
 // ---------- audit ----------
 
 export function logAudit(entry: {
