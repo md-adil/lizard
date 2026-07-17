@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import { deleteDashboard, getDashboard, updateDashboard } from "@/lib/metadata/store";
+import { deleteDashboard, getDashboard, updateDashboard, listPinnedDashboardIds } from "@/lib/metadata/store";
 import { requireUser, requireEditor, filterReadablePanels } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
@@ -11,7 +11,7 @@ export async function GET(_req: Request, { params }: Params) {
     const { id } = await params;
     const d = getDashboard(id);
     if (!d) return fail(new Error("Dashboard not found"));
-    return ok(filterReadablePanels(user, d));
+    return ok({ ...filterReadablePanels(user, d), pinned: listPinnedDashboardIds(user.id).has(id) });
   } catch (e) {
     return fail(e);
   }

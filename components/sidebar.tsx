@@ -5,7 +5,7 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { MoreHorizontal, Search, X } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Search, X } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { useAuth } from "@/components/auth-context";
 import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
@@ -29,6 +29,9 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuAction,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,13 +40,19 @@ import { useCatalog } from "@/components/browse/use-catalog";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
 import { GlobalSearch } from "@/components/global-search";
+import { useDashboards } from "@/components/charts/use-dashboards";
 
 const NAV = [
   // { href: "/ai", label: "Ask AI", icon: "✦" },
   { href: "/dashboards", label: "Dashboards", icon: "▦" },
-  { href: "/audit", label: "Audit log", icon: "≡" },
+  // Audit log lives in Settings (admin-only tab) — it's requireAdmin
+  // server-side, so a global nav item was a dead link for non-admins.
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
+
+// Pinned dashboards shown under the Dashboards nav item — capped so pins
+// can't crowd out the schema/table browser below.
+const MAX_PINNED = 5;
 
 function loadedSchemasKey(conn: string) {
   return `lizard.schemas.${conn}`;
@@ -237,6 +246,12 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
   const { data, isFetching: catalogLoading } = useCatalog();
+  // Shares the ["dashboards"] cache with the list page — renames/deletes/pin
+  // toggles invalidate it there, so the pinned list here stays fresh.
+  const { data: dashboards } = useDashboards();
+  const pinnedDashboards = useMemo(() => dashboards?.filter((d) => d.pinned) ?? [], [dashboards]);
+  // In-memory is enough: the sidebar never unmounts across navigation.
+  const [pinsOpen, setPinsOpen] = useState(true);
 
   const connections = useMemo(() => data?.connections ?? [], [data]);
   const [selected, setSelected] = useState<string>("");
@@ -354,6 +369,38 @@ export function Sidebar() {
                     <span className="w-4 text-center">{item.icon}</span>
                     {item.label}
                   </SidebarMenuButton>
+                  {item.href === "/dashboards" && pinnedDashboards.length > 0 && (
+                    <SidebarMenuAction
+                      aria-label={pinsOpen ? "Collapse pinned dashboards" : "Expand pinned dashboards"}
+                      onClick={() => setPinsOpen((o) => !o)}
+                    >
+                      <ChevronRight className={`transition-transform ${pinsOpen ? "rotate-90" : ""}`} />
+                    </SidebarMenuAction>
+                  )}
+                  {item.href === "/dashboards" && pinsOpen && pinnedDashboards.length > 0 && (
+                    <SidebarMenuSub>
+                      {pinnedDashboards.slice(0, MAX_PINNED).map((d) => (
+                        <SidebarMenuSubItem key={d.id}>
+                          <SidebarMenuSubButton
+                            size="sm"
+                            isActive={pathname === `/dashboards/${d.id}`}
+                            render={<Link href={`/dashboards/${d.id}`} />}
+                          >
+                            <span>{d.name}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      {pinnedDashboards.length > MAX_PINNED && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton size="sm" render={<Link href="/dashboards" />}>
+                            <span style={{ color: "var(--muted-foreground-faint)" }}>
+                              +{pinnedDashboards.length - MAX_PINNED} more
+                            </span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
+                    </SidebarMenuSub>
+                  )}
                 </SidebarMenuItem>
               );
             })}

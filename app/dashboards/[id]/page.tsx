@@ -2,13 +2,13 @@
 
 // Dashboard view (Phase 6): a 12-column grid of chart panels; each panel runs
 // its own guarded query and may span different connections.
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
+import { GridLayout, useContainerWidth, type Layout, type GridLayoutProps } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Pin } from "lucide-react";
 import type { ChartSpec, Dashboard, Panel, QueryResult, SqlDialect } from "@/lib/types";
 import { ChartRenderer } from "@/components/charts/chart-renderer";
 import { SpecControls } from "@/components/charts/spec-controls";
@@ -507,7 +507,10 @@ export default function DashboardPage() {
   const [editing, setEditing] = useState<Panel | null>(null);
   // Grafana-style edit mode: viewing is the default, clean surface — panel
   // menus, drag/resize, add-panel, and rename only exist while editing.
-  const [editMode, setEditMode] = useState(false);
+  // ?edit=1 (set by the list page's create flow) opens straight into it, so
+  // a freshly created dashboard is immediately editable.
+  const searchParams = useSearchParams();
+  const [editMode, setEditMode] = useState(searchParams.get("edit") === "1");
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
   // Enter fires onKeyDown then unmounts the still-focused Input, whose
@@ -574,7 +577,40 @@ export default function DashboardPage() {
     if (res.ok) toast(`Duplicated "${p.spec.title}"`);
   };
 
-  const { width, mounted, containerRef } = useContainerWidth();
+  // measureBeforeMount: without it the hook reports mounted=true with a
+  // hardcoded 1280px default before the first real measurement, so the grid's
+  // first paint could overflow narrower windows (horizontal scroll).
+  const { width, mounted, containerRef, measureWidth } = useContainerWidth({ measureBeforeMount: true });
+
+  // The hook's own measuring effect runs on page mount, but the container div
+  // only exists once the dashboard has loaded (the !dash branch returns a
+  // skeleton without it) — that effect bails on the missing node and never
+  // re-runs, so trigger a measurement when the div actually mounts.
+  useEffect(() => {
+    if (dash) measureWidth();
+  }, [dash, measureWidth]);
+
+  // Percent-based rendering: rgl computes positions in px from the measured
+  // width, but emitting left/width as % of that same width makes the ratios
+  // exact — panels can't overflow the container horizontally even if the
+  // measurement is momentarily stale, and the view re-scales continuously
+  // with the window via CSS between measurements. Vertical stays px (fixed
+  // rowHeight). Drag/resize math still uses the px width, which is fine —
+  // it's settled by the time anyone is interacting.
+  const positionStrategy = useMemo<NonNullable<GridLayoutProps["positionStrategy"]>>(
+    () => ({
+      type: "absolute",
+      scale: 1,
+      calcStyle: (pos) => ({
+        position: "absolute",
+        left: width > 0 ? `${(pos.left / width) * 100}%` : pos.left,
+        width: width > 0 ? `${(pos.width / width) * 100}%` : pos.width,
+        top: pos.top,
+        height: pos.height,
+      }),
+    }),
+    [width],
+  );
 
   // GridLayout calls this after every drag/resize settles (and once on mount
   // with the unchanged layout — the diff check makes that a no-op). One
@@ -677,19 +713,39 @@ export default function DashboardPage() {
           <h1 className="text-lg font-semibold">{dash.name}</h1>
         )}
         <span className="flex-1" />
-        <div className="flex items-center gap-1 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+        <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
           refresh:
-          {REFRESH_OPTIONS.map((o) => (
-            <button
-              key={o.label}
-              className="tag"
-              style={dash.refreshSeconds === o.value ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-              onClick={() => patch({ refreshSeconds: o.value })}
-            >
-              {o.label}
-            </button>
-          ))}
+          <Tabs
+            value={String(dash.refreshSeconds ?? "off")}
+            onValueChange={(v) => patch({ refreshSeconds: v === "off" ? null : Number(v) })}
+          >
+            <TabsList className="h-7">
+              {REFRESH_OPTIONS.map((o) => (
+                <TabsTrigger key={o.label} value={String(o.value ?? "off")} className="px-2 text-[12px]">
+                  {o.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
+        <Button
+          variant="secondary"
+          aria-label={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          title={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          onClick={async () => {
+            const next = !dash.pinned;
+            qc.setQueryData<Dashboard>(["dashboard", id], (old) => (old ? { ...old, pinned: next } : old));
+            await fetch(`/api/dashboards/${id}/pin`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pinned: next }),
+            });
+            // the sidebar's pinned list reads the ["dashboards"] cache
+            useDashboards.invalidate(qc);
+          }}
+        >
+          <Pin className={dash.pinned ? "size-3.5 fill-current" : "size-3.5"} />
+        </Button>
         {editMode && <Button onClick={() => setAdding(true)}>＋ Add panel</Button>}
         <Button
           variant={editMode ? "default" : "secondary"}
@@ -743,6 +799,7 @@ export default function DashboardPage() {
                   gridConfig={{ cols: 12, rowHeight: 40, margin: [12, 12], containerPadding: [0, 0] }}
                   dragConfig={{ enabled: editMode, handle: ".drag-handle" }}
                   resizeConfig={{ enabled: editMode }}
+                  positionStrategy={positionStrategy}
                   onLayoutChange={saveLayout}
                 >
                   {sortedPanels.map((p, i) => (

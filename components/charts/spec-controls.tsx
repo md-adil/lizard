@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import type { ChartSpec, ChartType, QueryResult } from "@/lib/types";
 import { CHART_TYPES } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
 
 const TYPES = Object.keys(CHART_TYPES) as ChartType[];
@@ -28,18 +29,15 @@ export function SpecControls({
       </div>
       <div>
         <label className="label">Chart type</label>
-        <div className="flex gap-1 flex-wrap">
-          {TYPES.map((t) => (
-            <button
-              key={t}
-              className="tag"
-              style={spec.chartType === t ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-              onClick={() => onChange({ ...spec, chartType: t })}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+        <Tabs value={spec.chartType} onValueChange={(v) => onChange({ ...spec, chartType: v as ChartType })}>
+          <TabsList className="h-7 w-full">
+            {TYPES.map((t) => (
+              <TabsTrigger key={t} value={t} className="px-1.5 text-[12px]">
+                {CHART_TYPES[t].label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
       {CHART_TYPES[spec.chartType].needsXField && (
         <div>

@@ -49,4 +49,7 @@ export interface Dashboard {
   refreshSeconds: number | null;
   createdAt: string;
   panels: Panel[];
+  // Per-requesting-user pin state (dashboard_pins table) — stamped onto API
+  // responses by the dashboards routes, absent in raw store reads.
+  pinned?: boolean;
 }

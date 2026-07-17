@@ -640,7 +640,25 @@ export function updateDashboard(id: string, fields: { name?: string; refreshSeco
 export function deleteDashboard(id: string): void {
   const d = getDb();
   d.prepare("DELETE FROM panels WHERE dashboard_id = ?").run(id);
+  d.prepare("DELETE FROM dashboard_pins WHERE dashboard_id = ?").run(id);
   d.prepare("DELETE FROM dashboards WHERE id = ?").run(id);
+}
+
+export function listPinnedDashboardIds(userId: string): Set<string> {
+  const rows = getDb().prepare("SELECT dashboard_id FROM dashboard_pins WHERE user_id = ?").all(userId) as {
+    dashboard_id: string;
+  }[];
+  return new Set(rows.map((r) => r.dashboard_id));
+}
+
+export function setDashboardPinned(userId: string, dashboardId: string, pinned: boolean): void {
+  if (pinned) {
+    getDb()
+      .prepare("INSERT OR IGNORE INTO dashboard_pins (user_id, dashboard_id) VALUES (?, ?)")
+      .run(userId, dashboardId);
+  } else {
+    getDb().prepare("DELETE FROM dashboard_pins WHERE user_id = ? AND dashboard_id = ?").run(userId, dashboardId);
+  }
 }
 
 export function addPanel(
@@ -726,6 +744,12 @@ export function logAudit(entry: {
     );
 }
 
-export function listAudit(limit = 200): Record<string, unknown>[] {
-  return getDb().prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(limit) as Record<string, unknown>[];
+export function listAudit(limit = 200, offset = 0): Record<string, unknown>[] {
+  return getDb()
+    .prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?")
+    .all(limit, offset) as Record<string, unknown>[];
+}
+
+export function countAudit(): number {
+  return (getDb().prepare("SELECT COUNT(*) AS n FROM audit_log").get() as { n: number }).n;
 }
