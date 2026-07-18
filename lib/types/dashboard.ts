@@ -10,8 +10,15 @@ import type { QueryTarget, SqlDialect } from "./query";
 export const CHART_TYPES = {
   line: { label: "Line", needsXField: true, singleValueField: false },
   area: { label: "Area", needsXField: true, singleValueField: false },
+  "area-stacked": { label: "Area (stacked)", needsXField: true, singleValueField: false },
   bar: { label: "Bar", needsXField: true, singleValueField: false },
+  "bar-stacked": { label: "Bar (stacked)", needsXField: true, singleValueField: false },
+  "bar-horizontal": { label: "Bar (horizontal)", needsXField: true, singleValueField: false },
+  scatter: { label: "Scatter", needsXField: true, singleValueField: false },
   pie: { label: "Pie", needsXField: true, singleValueField: true },
+  donut: { label: "Donut", needsXField: true, singleValueField: true },
+  heatmap: { label: "Heatmap", needsXField: true, singleValueField: true },
+  gauge: { label: "Gauge", needsXField: false, singleValueField: true },
   stat: { label: "Stat", needsXField: false, singleValueField: true },
   table: { label: "Table", needsXField: false, singleValueField: false },
 } as const satisfies Record<string, { label: string; needsXField: boolean; singleValueField: boolean }>;

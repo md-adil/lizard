@@ -12,6 +12,7 @@ import { ChartRenderer } from "@/components/charts/chart-renderer";
 import { SpecControls } from "@/components/charts/spec-controls";
 import { ResultGrid } from "@/components/ai/result-grid";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SqlEditor, SqlCode } from "@/components/ui/sql-editor";
 import { DataSelect } from "@/components/ui/data-select";
@@ -122,7 +123,7 @@ function PanelCard({
           </DropdownMenu>
         )}
       </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
         {isLoading && <Skeleton className="h-full w-full" />}
         {error && (
           <p className="text-[12.5px] px-1" style={{ color: "var(--destructive)" }}>
@@ -257,9 +258,9 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton
-        className="w-235 max-w-[95vw] sm:max-w-[95vw] p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
+        className="w-[95vw] max-w-7xl sm:max-w-7xl p-5 max-h-[95vh] overflow-y-auto scrollbar-thin"
       >
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "ai" | "sql")} className="mb-4 pr-8">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "ai" | "sql")} className="mb-4 pr-8 min-w-0">
           <TabsList className="mb-4">
             {AI_PANEL_ENABLED && <TabsTrigger value="ai">✦ Describe it</TabsTrigger>}
             <TabsTrigger value="sql">From SQL</TabsTrigger>
@@ -267,23 +268,28 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
 
           <TabsContent value="ai">
             <div className="flex gap-1.5 mb-2 flex-wrap">
-              <button
-                className="tag"
-                style={scope.length === 0 ? { color: "var(--primary)" } : {}}
-                onClick={() => setScope([])}
+              <Badge
+                variant={scope.length === 0 ? "default" : "outline"}
+                className={scope.length === 0 ? undefined : "bg-muted"}
+                render={<button onClick={() => setScope([])} />}
               >
                 all connections
-              </button>
-              {connections.map((c) => (
-                <button
-                  key={c}
-                  className="tag"
-                  style={scope.includes(c) ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-                  onClick={() => setScope((s) => (s.includes(c) ? s.filter((x) => x !== c) : [...s, c]))}
-                >
-                  {c}
-                </button>
-              ))}
+              </Badge>
+              {connections.map((c) => {
+                const active = scope.includes(c);
+                return (
+                  <Badge
+                    key={c}
+                    variant={active ? "default" : "outline"}
+                    className={active ? undefined : "bg-muted"}
+                    render={
+                      <button onClick={() => setScope((s) => (s.includes(c) ? s.filter((x) => x !== c) : [...s, c]))} />
+                    }
+                  >
+                    {c}
+                  </Badge>
+                );
+              })}
             </div>
             <div className="flex gap-2">
               <Input
@@ -298,90 +304,125 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
             </div>
           </TabsContent>
 
-          <TabsContent value="sql" className="space-y-2">
-            <div className="flex gap-2 items-center flex-wrap">
-              <DataSelect
-                items={SQL_TARGET_OPTIONS}
-                value={SQL_TARGET_OPTIONS.find((o) => o.value === sqlTarget) ?? null}
-                onChange={(o) => o && setSqlTarget(o.value)}
-                size="sm"
-                className="w-32"
-              />
-              {sqlConnections.map((c) => (
-                <button
-                  key={c}
-                  className="tag"
-                  style={sqlConns.includes(c) ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-                  onClick={() =>
-                    setSqlConns((s) =>
-                      sqlTarget === "single" ? [c] : s.includes(c) ? s.filter((x) => x !== c) : [...s, c],
-                    )
-                  }
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-            <SqlEditor
-              placeholder={
-                sqlTarget === "federated"
-                  ? "SELECT … FROM conn_a.public.t JOIN conn_b.public.u ON …"
-                  : "SELECT … FROM schema.table …"
-              }
-              value={sql}
-              onChange={setSql}
-            />
-            <Button disabled={busy || !sql.trim() || sqlConns.length === 0} onClick={runSql}>
-              {busy ? "Running…" : "Run preview"}
-            </Button>
-          </TabsContent>
-        </Tabs>
-
-        {preview && (
-          <div>
-            {preview.error && (
+          <TabsContent value="sql" className="min-w-0 space-y-4">
+            <div className="space-y-2">
               <div
-                className="rounded-md border px-4 py-3 text-[13px] mb-3"
-                style={{
-                  color: "var(--destructive)",
-                  borderColor: "rgba(229,83,75,.4)",
-                }}
+                className="text-[11px] font-semibold tracking-wide uppercase"
+                style={{ color: "var(--muted-foreground-faint)" }}
               >
-                {preview.error}
-                {preview.spec.sql && <SqlCode sql={preview.spec.sql} className="mt-2 text-[12px]" />}
+                Data source
               </div>
-            )}
-            {preview.result && (
-              <div className="flex gap-5">
-                <div className="flex-1 min-w-0 panel p-3" style={{ background: "var(--background)" }}>
-                  <div className="text-[13px] font-medium mb-2">{preview.spec.title}</div>
-                  <ChartRenderer spec={preview.spec} result={preview.result} height={300} />
-                  <details className="mt-2">
-                    <summary className="text-[12px] cursor-pointer" style={{ color: "var(--muted-foreground-faint)" }}>
-                      SQL & data
-                    </summary>
-                    <SqlCode sql={preview.spec.sql} className="mt-1 text-[12px]" />
-                    <ResultGrid result={preview.result} maxRows={20} />
-                  </details>
+              <div className="flex gap-2 items-center flex-wrap">
+                <DataSelect
+                  items={SQL_TARGET_OPTIONS}
+                  value={SQL_TARGET_OPTIONS.find((o) => o.value === sqlTarget) ?? null}
+                  onChange={(o) => o && setSqlTarget(o.value)}
+                  size="sm"
+                  className="w-32"
+                />
+                {sqlConnections.map((c) => {
+                  const active = sqlConns.includes(c);
+                  return (
+                    <Badge
+                      key={c}
+                      variant={active ? "default" : "outline"}
+                      className={active ? undefined : "bg-muted"}
+                      render={
+                        <button
+                          onClick={() =>
+                            setSqlConns((s) =>
+                              sqlTarget === "single" ? [c] : s.includes(c) ? s.filter((x) => x !== c) : [...s, c],
+                            )
+                          }
+                        />
+                      }
+                    >
+                      {c}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-5 items-start">
+              <div className="flex-1 min-w-0 space-y-4">
+                <div className="space-y-2">
+                  <div
+                    className="text-[11px] font-semibold tracking-wide uppercase"
+                    style={{ color: "var(--muted-foreground-faint)" }}
+                  >
+                    Preview
+                  </div>
+                  <div className="panel p-3 min-w-0" style={{ background: "var(--background)" }}>
+                    {preview?.error ? (
+                      <div
+                        className="rounded-md border px-3 py-2.5 text-[13px]"
+                        style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
+                      >
+                        {preview.error}
+                        {preview.spec.sql && <SqlCode sql={preview.spec.sql} className="mt-2 text-[12px]" />}
+                      </div>
+                    ) : preview?.result ? (
+                      <>
+                        <div className="text-[13px] font-medium mb-2">{preview.spec.title}</div>
+                        <ChartRenderer spec={preview.spec} result={preview.result} height={280} />
+                        <details className="mt-2">
+                          <summary
+                            className="text-[12px] cursor-pointer"
+                            style={{ color: "var(--muted-foreground-faint)" }}
+                          >
+                            SQL & data
+                          </summary>
+                          <SqlCode sql={preview.spec.sql} className="mt-1 text-[12px]" />
+                          <ResultGrid result={preview.result} maxRows={20} />
+                        </details>
+                      </>
+                    ) : (
+                      <div className="text-[13px] text-center py-10" style={{ color: "var(--muted-foreground)" }}>
+                        Run a preview to see your chart here.
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="w-60 shrink-0">
+
+                <div className="space-y-2">
+                  <SqlEditor
+                    placeholder={
+                      sqlTarget === "federated"
+                        ? "SELECT … FROM conn_a.public.t JOIN conn_b.public.u ON …"
+                        : "SELECT … FROM schema.table …"
+                    }
+                    value={sql}
+                    onChange={setSql}
+                  />
+                  <Button disabled={busy || !sql.trim() || sqlConns.length === 0} onClick={runSql}>
+                    {busy ? "Running…" : "Run preview"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="w-72 shrink-0 space-y-3 sticky top-0">
+                {preview?.result ? (
                   <SpecControls
                     spec={preview.spec}
                     result={preview.result}
                     onChange={(spec) => setPreview((p) => (p ? { ...p, spec } : p))}
                   />
-                  <Button
-                    className="w-full justify-center mt-4"
-
-                    onClick={save}
+                ) : (
+                  <div
+                    className="panel p-3 text-[12px] text-center py-4"
+                    style={{ background: "var(--background)", color: "var(--muted-foreground-faint)" }}
                   >
-                    Add panel
-                  </Button>
-                </div>
+                    Options appear here once a preview has run.
+                  </div>
+                )}
+                <Button className="w-full justify-center" disabled={!preview?.result} onClick={save}>
+                  Add panel
+                </Button>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
@@ -445,47 +486,59 @@ function EditPanelModal({ panel, onClose, onSaved }: { panel: Panel; onClose: ()
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton
-        className="w-235 max-w-[95vw] sm:max-w-[95vw] p-5 max-h-[88vh] overflow-y-auto scrollbar-thin"
+        className="w-[95vw] max-w-7xl sm:max-w-7xl p-5 max-h-[95vh] overflow-y-auto scrollbar-thin"
       >
         <div className="text-[14px] font-semibold mb-4 pr-8">Edit panel</div>
-        <div className="flex gap-5">
-          <div className="flex-1 min-w-0 space-y-3">
-            <div className="panel p-3" style={{ background: "var(--background)" }}>
-              <div className="text-[13px] font-medium mb-2">{spec.title}</div>
-              {queryError ? (
-                <div
-                  className="rounded-md border px-4 py-3 text-[13px]"
-                  style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
-                >
-                  {queryError}
-                </div>
-              ) : result ? (
-                <ChartRenderer spec={spec} result={result} height={300} />
-              ) : (
-                <Skeleton className="h-72 w-full" />
-              )}
+        <div className="flex gap-5 items-start min-w-0">
+          <div className="flex-1 min-w-0 space-y-4">
+            <div className="space-y-2">
+              <div
+                className="text-[11px] font-semibold tracking-wide uppercase"
+                style={{ color: "var(--muted-foreground-faint)" }}
+              >
+                Preview
+              </div>
+              <div className="panel p-3 min-w-0" style={{ background: "var(--background)" }}>
+                <div className="text-[13px] font-medium mb-2">{spec.title}</div>
+                {queryError ? (
+                  <div
+                    className="rounded-md border px-4 py-3 text-[13px]"
+                    style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
+                  >
+                    {queryError}
+                  </div>
+                ) : result ? (
+                  <ChartRenderer spec={spec} result={result} height={280} />
+                ) : (
+                  <Skeleton className="h-72 w-full" />
+                )}
+              </div>
             </div>
-            <SqlEditor value={sql} onChange={setSql} />
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" disabled={busy || !sql.trim()} onClick={runEdited}>
-                {busy ? "Running…" : "Run preview"}
-              </Button>
-              {sqlDirty && (
-                <span className="text-[12px]" style={{ color: "var(--warning)" }}>
-                  SQL changed — run preview before saving
-                </span>
-              )}
+
+            <div className="space-y-2">
+              <SqlEditor value={sql} onChange={setSql} />
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" disabled={busy || !sql.trim()} onClick={runEdited}>
+                  {busy ? "Running…" : "Run preview"}
+                </Button>
+                {sqlDirty && (
+                  <span className="text-[12px]" style={{ color: "var(--warning)" }}>
+                    SQL changed — run preview before saving
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="w-60 shrink-0">
+
+          <div className="w-72 shrink-0 space-y-3 sticky top-0">
             {result ? (
               <SpecControls spec={spec} result={result} onChange={setSpec} />
             ) : (
-              <Skeleton className="h-56 w-full" />
+              <Skeleton className="h-24 w-full" />
             )}
             {/* sqlDirty gate: saving un-previewed SQL could persist a spec whose
                 x/y fields no longer exist in the new query's columns. */}
-            <Button className="w-full justify-center mt-4" disabled={saving || busy || sqlDirty} onClick={save}>
+            <Button className="w-full justify-center" disabled={saving || busy || sqlDirty} onClick={save}>
               {saving ? "Saving…" : "Save changes"}
             </Button>
           </div>
