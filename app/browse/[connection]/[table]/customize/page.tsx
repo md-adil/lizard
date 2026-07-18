@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { SAME_SCHEMA, matchesGlob, isPattern } from "@/lib/introspect/virtual-fk";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -35,6 +36,10 @@ export default function CustomizePage() {
   const qc = useQueryClient();
   const schema = useSchemaParam();
   const { meta, catalog, schemaMeta, isLoading } = useTableMeta(params.connection, schema, params.table);
+  // Called unconditionally (rules of hooks) even though it's only used in
+  // pattern mode below — cheap either way, and this page is inherently
+  // scoped to one already-selected connection.
+  const { schemas: connSchemas } = useConnectionSchemas(params.connection);
 
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
@@ -72,12 +77,7 @@ export default function CustomizePage() {
 
   const saveSchema = scope === "pattern" && pattern ? pattern : meta.resolvedSchema;
   const matchedSchemas =
-    scope === "pattern" && pattern
-      ? (catalog.connections
-          .find((c) => c.connectionName === params.connection)
-          ?.schemas.filter((s) => matchesGlob(pattern, s.name))
-          .map((s) => s.name) ?? [])
-      : [];
+    scope === "pattern" && pattern ? connSchemas.filter((s) => matchesGlob(pattern, s.name)).map((s) => s.name) : [];
 
   function invalidate() {
     useCatalog.invalidate(qc);

@@ -238,6 +238,18 @@ select.input {
   color: var(--muted-foreground);
 }
 
+/* Shared hover treatment for interactive rows (sidebar links, global search
+   results, record page menus, table tree view, ...) — referenced via
+   className="hoverable" but was never actually defined, so hover was a
+   no-op everywhere it's used. */
+.hoverable {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.hoverable:hover {
+  background: var(--muted);
+}
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;

@@ -51,6 +51,35 @@ export function invalidateCatalog(connectionId?: string): void {
   else cache.clear();
 }
 
+// Cheap, connection-scoped schema name list — no table/column/FK/index
+// introspection at all. For MySQL/Mongo a connection maps to exactly one
+// schema named after the database, so this is a pure local computation, no
+// query needed; only Postgres genuinely has to ask the server (a single
+// pg_namespace lookup, nothing like the full introspect() below). This is
+// what /api/catalog/[connection]/schemas calls, lazily, once a connection is
+// actually selected — see that route for why: the old /api/catalog listed
+// every registered connection's schemas eagerly via full introspect(),
+// which meant one slow/unreachable connection stalled the whole app.
+export async function listSchemaNames(conn: ConnectionConfig): Promise<{ name: string }[]> {
+  if (conn.engine !== "postgres") return [{ name: conn.database }];
+  const schemaNames = await listPostgresSchemaNames(conn);
+  return schemaNames.map((name) => ({ name }));
+}
+
+async function listPostgresSchemaNames(conn: ConnectionConfig): Promise<string[]> {
+  const pool = getPool(conn, "read");
+  const schemasRes = await pool.query<{ nspname: string }>(
+    `SELECT nspname FROM pg_namespace
+     WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'
+     ORDER BY nspname`,
+  );
+  let schemaNames = schemasRes.rows.map((r) => r.nspname).filter((n) => !SYSTEM_SCHEMAS.includes(n));
+  if (conn.allowedSchemas && conn.allowedSchemas.length > 0) {
+    schemaNames = schemaNames.filter((n) => conn.allowedSchemas!.includes(n));
+  }
+  return schemaNames;
+}
+
 async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   // Engine dispatch. MySQL/Mongo introspectors are lazy-imported so their
   // drivers stay out of the module graph for Postgres-only deployments.
@@ -64,16 +93,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   }
 
   const pool = getPool(conn, "read");
-
-  const schemasRes = await pool.query<{ nspname: string }>(
-    `SELECT nspname FROM pg_namespace
-     WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'
-     ORDER BY nspname`,
-  );
-  let schemaNames = schemasRes.rows.map((r) => r.nspname).filter((n) => !SYSTEM_SCHEMAS.includes(n));
-  if (conn.allowedSchemas && conn.allowedSchemas.length > 0) {
-    schemaNames = schemaNames.filter((n) => conn.allowedSchemas!.includes(n));
-  }
+  const schemaNames = await listPostgresSchemaNames(conn);
   if (schemaNames.length === 0) {
     return {
       connectionId: conn.id,

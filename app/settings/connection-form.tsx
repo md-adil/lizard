@@ -16,6 +16,7 @@ import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DatabaseSelect } from "./database-select";
 import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { useConnections } from "@/app/settings/use-connections";
 
 export interface ConnectionRow {
@@ -260,6 +261,7 @@ export function ConnectionForm({
     onSuccess: () => {
       useConnections.invalidate(qc);
       useCatalog.invalidate(qc);
+      useConnectionSchemas.invalidate(qc);
       onClose();
     },
     onError: (e: Error) => setError(e.message),

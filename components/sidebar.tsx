@@ -37,6 +37,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSchemaMeta } from "@/components/browse/useTableMeta";
 import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
 import { GlobalSearch } from "@/components/global-search";
@@ -280,7 +281,14 @@ export function Sidebar() {
   }, [params.connection, connections]);
 
   const conn = connections.find((c) => c.connectionName === selected);
-  const allSchemas = useMemo(() => conn?.schemas.map((s) => s.name) ?? [], [conn]);
+  // Schema names load lazily per connection (cheap, but still a real query
+  // for Postgres) instead of eagerly for every registered connection — see
+  // /api/catalog/[connection]/schemas. schemasError stands in for the old
+  // conn.error: a broken connection now surfaces here, at the point it's
+  // actually selected, rather than being probed up front for every
+  // connection whether the user looks at it or not.
+  const { schemas: connSchemas, isLoading: schemasLoading, error: schemasError } = useConnectionSchemas(selected);
+  const allSchemas = useMemo(() => connSchemas.map((s) => s.name), [connSchemas]);
 
   // restore loaded schemas per connection (default: first schema, or the one in the URL)
   useEffect(() => {
@@ -429,24 +437,27 @@ export function Sidebar() {
                 }
               }}
               getValue={(c) => c.connectionName}
-              getLabel={(c) => (
-                <>
-                  {c.connectionName}
-                  {c.error ? " ⚠" : ""}
-                </>
-              )}
+              getLabel={(c) => c.connectionName}
               className="w-full"
             />
           )}
-          {conn?.error && (
-            <p className="text-[11.5px] mt-1 px-2" style={{ color: "var(--destructive)" }} title={conn.error}>
+          {/* A connection's health is no longer known up front (that meant
+              probing every registered connection just to render this list) —
+              it surfaces here, lazily, once this one is actually selected
+              and its schema fetch fails. */}
+          {schemasError && (
+            <p
+              className="text-[11.5px] mt-1 px-2"
+              style={{ color: "var(--destructive)" }}
+              title={schemasError.message}
+            >
               connection error
             </p>
           )}
         </SidebarGroup>
 
         {/* schema selector */}
-        {conn && !conn.error && conn.engine === "postgres" && (
+        {conn && !schemasError && conn.engine === "postgres" && (
           <SidebarGroup>
             <div className="flex items-center justify-between mb-1">
               <SidebarGroupLabel>Schemas</SidebarGroupLabel>
@@ -553,7 +564,7 @@ export function Sidebar() {
         )}
 
         {/* table filter */}
-        {conn && !conn.error && loaded.length > 0 && (
+        {conn && !schemasError && loaded.length > 0 && (
           <div className="px-2 pb-1">
             <InputGroup className="h-8 shadow-none">
               <InputGroupAddon align="inline-start">
@@ -583,18 +594,23 @@ export function Sidebar() {
         {/* tables of loaded schemas — the one scrollable region; everything
             above (nav, database, schema selector, filter) stays fixed */}
         <SidebarGroup className="flex-1 min-h-0 pt-0 overflow-y-auto scrollbar-thin">
-          {/* Introspection drops schemas that hold no tables, so a connection can
-              legitimately have none — that is an empty state, not a pending one.
-              Only `loaded` lagging behind a connection switch means "still
-              settling", and that is what the skeleton is for. */}
-          {conn && !conn.error && allSchemas.length === 0 && (
+          {/* schemasLoading covers the schema-name fetch itself (see
+              useConnectionSchemas) — a connection just selected hasn't
+              resolved allSchemas yet, which used to be indistinguishable
+              from "genuinely has none" back when schemas arrived eagerly
+              with the rest of the catalog. Once that settles, an empty
+              schema list — or `loaded` lagging behind a connection switch —
+              is a real empty state, not a pending one, and that's what
+              TableListSkeleton below is for. */}
+          {conn && !schemasError && schemasLoading && <TableListSkeleton />}
+          {conn && !schemasError && !schemasLoading && allSchemas.length === 0 && (
             <p className="px-2.5 py-2 text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
               No tables in this database.
             </p>
           )}
-          {conn && !conn.error && allSchemas.length > 0 && shownSchemas.length === 0 && <TableListSkeleton />}
+          {conn && !schemasError && allSchemas.length > 0 && shownSchemas.length === 0 && <TableListSkeleton />}
           {conn &&
-            !conn.error &&
+            !schemasError &&
             shownSchemas.map((schemaName) => (
               <SchemaSection
                 key={schemaName}
@@ -609,7 +625,7 @@ export function Sidebar() {
                 pathname={pathname}
               />
             ))}
-          {showHidden && conn && !conn.error && (
+          {showHidden && conn && !schemasError && (
             <Button
               variant="ghost"
               className="flex items-center gap-1 mx-2.5 mt-1 mb-2 text-[12px] hoverable px-1 rounded"
@@ -619,7 +635,7 @@ export function Sidebar() {
               <span>⊘</span> hide hidden
             </Button>
           )}
-          {conn && !conn.error && tableQ && (
+          {conn && !schemasError && tableQ && (
             <p className="px-2.5 pt-1 text-[11.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
               filtering by "{tableSearch}"
             </p>

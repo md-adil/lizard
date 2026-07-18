@@ -1,8 +1,9 @@
 "use client";
 
 // ⌘K / Ctrl+K cross-table search — see lib/data/global-search.ts for the
-// scoping/column-narrowing design. Only tables an admin has opted into via
-// table customization ("Include in global search") are ever scanned.
+// scoping/column-narrowing design. Every table is searchable by default;
+// an admin can exclude one via table customization ("Include in global
+// search").
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -70,9 +71,15 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const { data, isFetching } = useQuery<GlobalSearchResult>({
     queryKey: ["global-search", debounced, sessionId],
-    queryFn: async () => {
+    // Passing `signal` through lets React Query's own cancellation (a new
+    // keystroke superseding this query, or the dialog closing and unmounting
+    // it) abort the underlying fetch — which the API route observes as
+    // req.signal and uses to stop fanning out to more tables server-side
+    // (see runGlobalSearch/runWithBudget in lib/data/global-search.ts).
+    queryFn: async ({ signal }) => {
       const res = await fetch(
         `/api/search?q=${encodeURIComponent(debounced)}&sessionId=${encodeURIComponent(sessionId!)}`,
+        { signal },
       );
       if (!res.ok) throw new Error("Search failed");
       return res.json();
@@ -107,13 +114,12 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
           {!enabled && (
             <p className="px-2 py-6 text-center text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-              Type at least 2 characters. Only tables marked "Include in global search" in table customization are
-              scanned.
+              Type at least 2 characters. Tables excluded from global search in table customization are skipped.
             </p>
           )}
           {enabled && data && data.hits.length === 0 && (
             <p className="px-2 py-6 text-center text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-              No matches{data.scannedTables === 0 ? " — no tables are opted into global search yet" : ""}.
+              No matches{data.scannedTables === 0 ? " — no readable tables to search" : ""}.
             </p>
           )}
           {data &&
@@ -154,7 +160,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
 
         {data && data.partial && (
           <p className="shrink-0 text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>
-            Search timed out before scanning all {data.scannedTables} eligible tables — results may be incomplete.
+            Search timed out before scanning all <strong>{data.scannedTables}</strong> eligible tables — results may
+            be incomplete.
           </p>
         )}
       </DialogContent>
