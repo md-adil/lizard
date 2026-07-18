@@ -1,7 +1,5 @@
 "use client";
 
-// Dashboard view (Phase 6): a 12-column grid of chart panels; each panel runs
-// its own guarded query and may span different connections.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SqlEditor, SqlCode } from "@/components/ui/sql-editor";
 import { DataSelect } from "@/components/ui/data-select";
+import { AutoRefreshSelect } from "@/components/ui/auto-refresh-select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -34,13 +33,6 @@ import { useDashboards } from "@/components/charts/use-dashboards";
 const SQL_TARGET_OPTIONS: { value: "single" | "federated"; label: string }[] = [
   { value: "single", label: "single" },
   { value: "federated", label: "federated" },
-];
-
-const REFRESH_OPTIONS = [
-  { label: "off", value: null },
-  { label: "30s", value: 30 },
-  { label: "1m", value: 60 },
-  { label: "5m", value: 300 },
 ];
 
 const UNDO_DELAY_MS = 5000;
@@ -461,7 +453,10 @@ function EditPanelModal({ panel, onClose, onSaved }: { panel: Panel; onClose: ()
             <div className="panel p-3" style={{ background: "var(--background)" }}>
               <div className="text-[13px] font-medium mb-2">{spec.title}</div>
               {queryError ? (
-                <div className="rounded-md border px-4 py-3 text-[13px]" style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}>
+                <div
+                  className="rounded-md border px-4 py-3 text-[13px]"
+                  style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
+                >
                   {queryError}
                 </div>
               ) : result ? (
@@ -713,21 +708,10 @@ export default function DashboardPage() {
           <h1 className="text-lg font-semibold">{dash.name}</h1>
         )}
         <span className="flex-1" />
-        <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-          refresh:
-          <Tabs
-            value={String(dash.refreshSeconds ?? "off")}
-            onValueChange={(v) => patch({ refreshSeconds: v === "off" ? null : Number(v) })}
-          >
-            <TabsList className="h-7">
-              {REFRESH_OPTIONS.map((o) => (
-                <TabsTrigger key={o.label} value={String(o.value ?? "off")} className="px-2 text-[12px]">
-                  {o.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
+        <AutoRefreshSelect
+          value={(dash.refreshSeconds ?? 0) * 1000}
+          onChange={(ms) => patch({ refreshSeconds: ms === 0 ? null : ms / 1000 })}
+        />
         <Button
           variant="secondary"
           aria-label={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
@@ -746,7 +730,11 @@ export default function DashboardPage() {
         >
           <Pin className={dash.pinned ? "size-3.5 fill-current" : "size-3.5"} />
         </Button>
-        {editMode && <Button onClick={() => setAdding(true)}>＋ Add panel</Button>}
+        {editMode && (
+          <Button variant="secondary" onClick={() => setAdding(true)}>
+            ＋ Add panel
+          </Button>
+        )}
         <Button
           variant={editMode ? "default" : "secondary"}
           onClick={() => {

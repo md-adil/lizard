@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { ToggleInput } from "@/components/ui/toggle-input";
 import { Textarea } from "@/components/ui/textarea";
+import { JsonEditor } from "@/components/ui/sql-editor";
 import { DataSelect } from "@/components/ui/data-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Rating } from "@/components/ui/rating";
@@ -372,6 +373,32 @@ export function RowEditor({ meta, row: initialRow, duplicateFrom, refetchOnOpen,
     setTouched((s) => new Set(s).add(name));
   };
 
+  // Live validity for "json" widget fields — buildPayload() only re-checks
+  // JSON on save, which would otherwise leave the Save button clickable (and
+  // only fail after a round trip) while the user is mid-edit on invalid
+  // JSON. Scoped to just this field's key so it never clobbers another
+  // field's stale "Required" entry from a previous failed save attempt.
+  const setJsonValidity = (name: string, raw: string) => {
+    const trimmed = raw.trim();
+    let invalid = false;
+    if (trimmed !== "") {
+      try {
+        JSON.parse(trimmed);
+      } catch {
+        invalid = true;
+      }
+    }
+    setJsonErrors((s) => {
+      if (!invalid) {
+        if (!(name in s)) return s;
+        const { [name]: _removed, ...rest } = s;
+        return rest;
+      }
+      return { ...s, [name]: "Invalid JSON" };
+    });
+  };
+  const hasInvalidJson = editable.some((cm) => cm.widget === "json" && jsonErrors[cm.col.name] === "Invalid JSON");
+
   const [mdPreviewActive, setMdPreviewActive] = useState<Record<string, boolean>>({});
 
   const [open, setOpen] = useState(true);
@@ -488,10 +515,19 @@ export function RowEditor({ meta, row: initialRow, duplicateFrom, refetchOnOpen,
                         binary — not editable here
                       </span>
                     </div>
-                  ) : cm.widget === "textarea" || cm.widget === "json" || cm.widget === "html" ? (
+                  ) : cm.widget === "json" ? (
+                    <JsonEditor
+                      value={v}
+                      onChange={(next) => {
+                        setVal(name, next);
+                        setJsonValidity(name, next);
+                      }}
+                      minRows={5}
+                    />
+                  ) : cm.widget === "textarea" || cm.widget === "html" ? (
                     <Textarea
-                      className={cm.widget === "json" || cm.widget === "html" ? "code" : undefined}
-                      rows={cm.widget === "textarea" ? 3 : cm.widget === "html" ? 8 : 5}
+                      className={cm.widget === "html" ? "code" : undefined}
+                      rows={cm.widget === "textarea" ? 3 : 8}
                       value={v}
                       onChange={(e) => setVal(name, e.target.value)}
                     />
@@ -693,7 +729,7 @@ export function RowEditor({ meta, row: initialRow, duplicateFrom, refetchOnOpen,
         )}
 
         <div className="mt-6 flex items-center gap-2">
-          <Button disabled={save.isPending} onClick={() => save.mutate()}>
+          <Button disabled={save.isPending || hasInvalidJson} onClick={() => save.mutate()}>
             {save.isPending ? "Saving…" : isCreate ? "Create row" : "Save changes"}
           </Button>
           {!isCreate && (
