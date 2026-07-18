@@ -50,7 +50,7 @@ import type { FkLabels, SavedViewConfig } from "@/lib/types";
 import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { DataSelect } from "@/components/ui/data-select";
+import { AutoRefreshSelect } from "@/components/ui/auto-refresh-select";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useInterval } from "@/hooks/use-interval";
 import { Card } from "@/components/ui/card";
@@ -61,14 +61,6 @@ interface ListResponse {
   total: number | null;
   fkLabels: FkLabels;
 }
-
-const REFRESH_MS_OPTIONS = [
-  { value: 0, label: "Refresh: off" },
-  { value: 5000, label: "Refresh: 5s" },
-  { value: 10000, label: "Refresh: 10s" },
-  { value: 30000, label: "Refresh: 30s" },
-  { value: 60000, label: "Refresh: 1m" },
-];
 
 const EMPTY_ROWS: Record<string, unknown>[] = [];
 const EMPTY_FK_LABELS: FkLabels = {};
@@ -481,13 +473,7 @@ export default function TablePage() {
         )}
         <span className="flex-1" />
         {/* Phase 8.8 — auto-refresh, default off */}
-        <DataSelect
-          items={REFRESH_MS_OPTIONS}
-          value={REFRESH_MS_OPTIONS.find((o) => o.value === refreshMs) ?? null}
-          onChange={(o) => o && setRefreshMs(o.value)}
-          size="sm"
-          className="w-auto"
-        />
+        <AutoRefreshSelect value={refreshMs} onChange={setRefreshMs} />
         <Button
           variant="secondary"
           size="icon-sm"

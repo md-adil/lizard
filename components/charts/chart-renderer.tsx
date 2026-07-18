@@ -187,9 +187,34 @@ export function ChartRenderer({
     };
   }, [spec, result, t]);
 
+  const isAxisChart = spec.chartType === "line" || spec.chartType === "area" || spec.chartType === "bar";
+  // Axis charts with no X field would "render" a frame with zero points
+  // (buildSeriesData yields no x values) — say why instead of showing an
+  // empty chart. Pie is exempt: it falls back to the first column.
+  const emptyReason =
+    isAxisChart && !spec.xField
+      ? "No X field selected"
+      : spec.chartType !== "table" && spec.chartType !== "stat" && result.rows.length === 0
+        ? "No data"
+        : null;
+  if (emptyReason) {
+    return (
+      <div
+        className="flex items-center justify-center h-full text-[13px]"
+        style={{ minHeight: height / 2, color: "var(--muted-foreground)" }}
+      >
+        {emptyReason}
+      </div>
+    );
+  }
+
   if (spec.chartType === "stat") {
     const y = spec.yFields[0] ?? result.columns[0]?.name;
-    const v = result.rows[result.rows.length - 1]?.[y ?? ""];
+    // `stat` is only well-defined for a single-row result (suggestCharts only
+    // ever suggests it then) — for a manually-picked multi-row spec there's no
+    // ORDER BY contract to pick a "latest" row by, so this is the first row,
+    // not a meaningful aggregate.
+    const v = result.rows[0]?.[y ?? ""];
     return (
       <div className="flex flex-col items-start justify-center h-full px-2" style={{ minHeight: height / 2 }}>
         <div className="text-4xl font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
@@ -202,7 +227,9 @@ export function ChartRenderer({
     );
   }
   if (spec.chartType === "table" || !option) {
-    return <ResultGrid result={result} maxRows={50} />;
+    // ~24px footer (row count / duration) renders below the scroll region —
+    // reserve it so the whole grid stays inside a fixed-height panel.
+    return <ResultGrid result={result} maxRows={50} maxHeight={height - 24} />;
   }
   return <ReactECharts key={themeName} option={option} style={{ height, width: "100%" }} notMerge />;
 }

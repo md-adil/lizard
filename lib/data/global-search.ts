@@ -1,10 +1,10 @@
 // Cross-table global search. Scope is bounded by construction, not
-// cleverness: only tables an admin has opted into (`table_overrides.searchable`)
-// are ever queried, and each is searched only on its *indexed* columns via
-// lib/data/search-match.ts (shared with the per-table search box in
-// app/api/data/crud.ts) — never an unindexed column, since that's exactly the
-// full-scan cost this feature is built to avoid. See the plan this shipped
-// under for the full rationale.
+// cleverness: every table is in scope by default (an admin can exclude one
+// via `table_overrides.searchable = false`), and each is searched only on
+// its *indexed* columns via lib/data/search-match.ts (shared with the
+// per-table search box in app/api/data/crud.ts) — never an unindexed
+// column, since that's exactly the full-scan cost this feature is built to
+// avoid. See the plan this shipped under for the full rationale.
 import { randomUUID } from "node:crypto";
 import { LRUCache } from "lru-cache";
 import { supportsSchemas, type ConnectionCatalog, type ConnectionConfig, type TableInfo } from "@/lib/types";
@@ -13,7 +13,7 @@ import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnection, listTableOverridesForConnection } from "@/lib/metadata/store";
 import { getDialect } from "@/app/api/database/registry";
 import { getClient } from "@/lib/db/pools";
-import { matchTargetFor, buildMatchClause, matchesTerm } from "@/lib/data/search-match";
+import { matchTargetFor, buildMatchClause, matchesTerm, buildEnumSets, type EnumSets } from "@/lib/data/search-match";
 import { primaryKeyColumnsFor } from "@/app/api/data/crud";
 
 export interface GlobalSearchHit {
@@ -34,7 +34,14 @@ export interface GlobalSearchResult {
 
 const PER_TABLE_LIMIT = 5;
 const TOTAL_HIT_LIMIT = 50;
-const CONCURRENCY = 8;
+// Most targets now resolve with zero DB round trip (matchTargetFor's
+// text-like/enum-match narrowing skips any table with no plausible column
+// before a connection is ever acquired — see search-match.ts) — the ones
+// that actually need a query are gated by the read pool's own `max` per
+// connection (lib/db/pools.ts), not by this number, so it's safe to keep
+// well above that: extra workers beyond the pool's capacity just queue
+// inside pg.Pool instead of idling here between batches.
+const CONCURRENCY = 24;
 
 // A searchable-table target, resolved independently of any search term — the
 // expensive part of a search (resolveTableOverride against every table of
@@ -47,6 +54,9 @@ interface SearchTarget {
   conn: ConnectionConfig;
   schemaName: string | undefined;
   table: TableInfo;
+  // Prepared once here rather than re-derived from column.enumValues on
+  // every keystroke — see buildEnumSets.
+  enumSets: EnumSets;
 }
 
 // Safety net for dialogs left open (or abandoned mid-session): a 10-minute
@@ -73,8 +83,12 @@ function resolveSearchTargets(connections: ConnectionCatalog[]): SearchTarget[] 
     for (const schema of cc.schemas) {
       for (const table of schema.tables) {
         const ov = resolveTableOverride(overrides, cc.connectionId, schema.name, table.name);
-        if (!ov?.searchable) continue;
-        targets.push({ conn, schemaName: hasSchemas ? schema.name : undefined, table });
+        // Opt-out, not opt-in: an unconfigured table (no override row at
+        // all) defaults to searchable — requiring an admin to flip a switch
+        // on every one of what could be hundreds of tables doesn't scale.
+        // Only an explicit `searchable: false` override excludes it.
+        if (ov?.searchable === false) continue;
+        targets.push({ conn, schemaName: hasSchemas ? schema.name : undefined, table, enumSets: buildEnumSets(table) });
       }
     }
   }
@@ -94,11 +108,12 @@ async function searchOneTable(
   schemaName: string | undefined,
   table: TableInfo,
   term: string,
+  enumSets: EnumSets,
 ): Promise<GlobalSearchHit[]> {
   const key = effectiveKey(table);
   if (key.length === 0) return []; // no PK/unique constraint — can't link back to a row
 
-  const target = matchTargetFor(table, term, primaryKeyColumnsFor(conn, table));
+  const target = matchTargetFor(table, term, primaryKeyColumnsFor(conn, table), enumSets);
   if (target.columns.length === 0) return [];
 
   if (conn.engine === "mongo") {
@@ -149,17 +164,28 @@ async function searchOneTable(
 // slow/hung table only costs the wait, not the whole search — the
 // underlying DB query isn't cancelled at the driver level, just no longer
 // waited on; the pooled client still releases normally whenever it resolves.
+//
+// `signal` (the client request's AbortSignal — retyping in the search box
+// or closing the dialog aborts the previous fetch) is checked the same way
+// as the deadline: a table whose task hasn't started yet is dropped
+// outright, which is the real saving, since with CONCURRENCY=8 against a
+// possibly hundreds-strong table list most tasks are still queued, not
+// running, when a fast typist moves on. A task already in flight when the
+// signal fires is, like the deadline case, only abandoned — not cancelled
+// at the driver level — for the same reason: none of the pg/mysql/mongo
+// clients here expose mid-query cancellation through this call shape.
 async function runWithBudget<T>(
   tasks: (() => Promise<T[]>)[],
   concurrency: number,
   deadline: number,
+  signal: AbortSignal | undefined,
 ): Promise<{ results: T[]; skipped: number }> {
   const results: T[] = [];
   let skipped = 0;
   let i = 0;
   async function worker() {
     while (i < tasks.length) {
-      if (Date.now() >= deadline) {
+      if (Date.now() >= deadline || signal?.aborted) {
         skipped += tasks.length - i;
         i = tasks.length;
         return;
@@ -186,17 +212,21 @@ async function runWithBudget<T>(
 // opinion of its own. `sessionId` should come from createSearchSession
 // (called once when the search dialog opens); a missing/expired/unknown one
 // falls back to resolving fresh rather than failing the search outright.
+// `signal` is the inbound request's AbortSignal (see app/api/search/route.ts)
+// — threaded through to runWithBudget so a superseded/abandoned search stops
+// fanning out to more tables instead of running to completion unobserved.
 export async function runGlobalSearch(
   connections: ConnectionCatalog[],
   term: string,
   sessionId: string | undefined,
-  budgetMs = 4000,
+  budgetMs = 6000,
+  signal?: AbortSignal,
 ): Promise<GlobalSearchResult> {
   const deadline = Date.now() + budgetMs;
   const targets = (sessionId ? sessions.get(sessionId) : undefined) ?? resolveSearchTargets(connections);
-  const tasks = targets.map((t) => () => searchOneTable(t.conn, t.schemaName, t.table, term));
+  const tasks = targets.map((t) => () => searchOneTable(t.conn, t.schemaName, t.table, term, t.enumSets));
 
-  const { results, skipped } = await runWithBudget(tasks, CONCURRENCY, deadline);
+  const { results, skipped } = await runWithBudget(tasks, CONCURRENCY, deadline, signal);
   return {
     hits: results.slice(0, TOTAL_HIT_LIMIT),
     scannedTables: targets.length,

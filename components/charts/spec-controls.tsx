@@ -3,10 +3,10 @@
 // Field controls to shape a ChartSpec against a known QueryResult.
 import { useMemo } from "react";
 import type { ChartSpec, ChartType, QueryResult } from "@/lib/types";
+import { CHART_TYPES } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { ColumnsSelect } from "@/components/browse/columns-select";
-
-const TYPES: ChartType[] = ["line", "area", "bar", "pie", "stat", "table"];
+import { ChartTypeSelect } from "@/components/charts/chart-type-select";
 
 export function SpecControls({
   spec,
@@ -27,20 +27,9 @@ export function SpecControls({
       </div>
       <div>
         <label className="label">Chart type</label>
-        <div className="flex gap-1 flex-wrap">
-          {TYPES.map((t) => (
-            <button
-              key={t}
-              className="tag"
-              style={spec.chartType === t ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-              onClick={() => onChange({ ...spec, chartType: t })}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+        <ChartTypeSelect value={spec.chartType} onChange={(chartType) => onChange({ ...spec, chartType })} />
       </div>
-      {!["stat", "table"].includes(spec.chartType) && (
+      {CHART_TYPES[spec.chartType].needsXField && (
         <div>
           <label className="label">X field</label>
           <ColumnsSelect

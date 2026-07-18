@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, TriangleAlert } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
 import { useCatalog } from "@/components/browse/use-catalog";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
@@ -9,8 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supportsSchemas, type LightConnectionCatalog } from "@/lib/types";
-import { pluralize } from "@/lib/pluralize";
+import type { LightConnectionCatalog } from "@/lib/types";
 
 function greeting() {
   const h = new Date().getHours();
@@ -149,30 +148,11 @@ function ConnectionCard({ connection: c }: { connection: LightConnectionCatalog 
               <Badge variant="secondary" className="shrink-0">
                 {ENGINE_LABELS[c.engine]}
               </Badge>
-              {c.error && (
-                <Badge variant="destructive" className="shrink-0">
-                  <TriangleAlert /> error
-                </Badge>
-              )}
             </div>
 
             <div className="text-[12.5px] mt-1 code truncate" style={{ color: "var(--muted-foreground)" }}>
               {c.database}
             </div>
-
-            {c.error ? (
-              <p className="text-[11.5px] mt-2 line-clamp-2" style={{ color: "var(--destructive)" }} title={c.error}>
-                {c.error}
-              </p>
-            ) : (
-              // Only Postgres has schemas worth counting — for MySQL/Mongo the
-              // lone synthetic schema is just the database, already shown above.
-              supportsSchemas(c.engine) && (
-                <div className="text-[11.5px] mt-2" style={{ color: "var(--muted-foreground-faint)" }}>
-                  {pluralize(c.schemas.length, "schema")}
-                </div>
-              )
-            )}
           </div>
 
           <ChevronRight

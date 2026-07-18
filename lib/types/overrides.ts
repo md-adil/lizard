@@ -46,9 +46,12 @@ export interface TableOverride {
   // fallback in pkWhere) columns to match a row on. Ignored when the table
   // already has a real PK/unique constraint.
   primaryKey: string[] | null;
-  // opts this table into cross-table global search (see lib/data/global-search.ts)
-  // — off by default, since scanning every table is the exact unbounded
-  // fan-out that feature is designed to avoid.
+  // Opts this table out of cross-table global search when explicitly set to
+  // false (see lib/data/global-search.ts) — tables default to searchable
+  // when no override row exists at all, since requiring an admin to opt in
+  // one table at a time doesn't scale to a real schema. Search itself still
+  // only ever queries indexed columns, which is what actually bounds the
+  // per-table cost regardless of how many tables are in scope.
   searchable: boolean;
   // Grid settings (customize page) — the sort applied when nobody's picked
   // one yet this session. Falls back to the last date/timestamp column

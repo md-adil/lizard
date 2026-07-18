@@ -38,7 +38,15 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
       user: role === "read" ? conn.readUser : conn.writeUser!,
       password: role === "read" ? conn.readPassword : conn.writePassword!,
       ssl: conn.ssl ? { rejectUnauthorized: false } : undefined,
-      max: 5,
+      // Read pools got a higher ceiling once global search started fanning
+      // out to every table of a connection (see CONCURRENCY in
+      // lib/data/global-search.ts) — 5 was fine when a connection saw at
+      // most a couple of concurrent reads (one table's browse/export/AI
+      // query at a time), but a multi-thousand-table schema needs more
+      // simultaneous read slots or search just serializes behind the old
+      // cap. Write pools are untouched — CRUD's write concurrency profile
+      // (locks, transactions) wasn't part of this change.
+      max: role === "read" ? 12 : 5,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 8_000,
       options: `-c statement_timeout=${role === "read" ? READ_STATEMENT_TIMEOUT_MS : WRITE_STATEMENT_TIMEOUT_MS} -c idle_in_transaction_session_timeout=15000`,

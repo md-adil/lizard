@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import { addDashboard, listDashboards } from "@/lib/metadata/store";
-import { requireUser, requireEditor } from "@/lib/auth/session";
+import { addDashboard, listDashboards, listPinnedDashboardIds } from "@/lib/metadata/store";
+import { requireUser, requireEditor, filterReadablePanels } from "@/lib/auth/session";
 
 export async function GET() {
   try {
-    await requireUser();
-    return ok(listDashboards());
+    const user = await requireUser();
+    const pinned = listPinnedDashboardIds(user.id);
+    return ok(listDashboards().map((d) => ({ ...filterReadablePanels(user, d), pinned: pinned.has(d.id) })));
   } catch (e) {
     return fail(e);
   }

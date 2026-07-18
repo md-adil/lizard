@@ -9,7 +9,7 @@ import { ResultGrid } from "@/components/ai/result-grid";
 import { VisualizeButton } from "@/components/charts/visualize-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { SqlEditor, SqlCode } from "@/components/ui/sql-editor";
 import { useCatalog } from "@/components/browse/use-catalog";
 
 interface Turn {
@@ -244,22 +244,17 @@ export default function AiConsole() {
                     </div>
                     {t.editing ? (
                       <>
-                        <Textarea
-                          className="code w-full"
-                          rows={6}
-                          value={t.editedSql}
-                          onChange={(e) =>
-                            setTurns((s) => s.map((x, j) => (j === i ? { ...x, editedSql: e.target.value } : x)))
-                          }
+                        <SqlEditor
+                          minRows={6}
+                          value={t.editedSql ?? ""}
+                          onChange={(sql) => setTurns((s) => s.map((x, j) => (j === i ? { ...x, editedSql: sql } : x)))}
                         />
                         <Button size="sm" className="mt-2" onClick={() => rerun(i, t.editedSql!)}>
                           Run edited SQL
                         </Button>
                       </>
                     ) : (
-                      <pre className="code whitespace-pre-wrap text-[12.5px]" style={{ color: "var(--foreground)" }}>
-                        {t.plan.sql}
-                      </pre>
+                      <SqlCode sql={t.plan.sql} className="text-[12.5px]" />
                     )}
                   </div>
                 </>

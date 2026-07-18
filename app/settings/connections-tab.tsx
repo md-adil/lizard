@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EngineIcon, ENGINE_LABELS } from "@/components/engine-icon";
 import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { useConnections } from "@/app/settings/use-connections";
 
 interface ConnectionStatus {
@@ -104,6 +105,7 @@ export function ConnectionsTab() {
     onSuccess: () => {
       useConnections.invalidate(qc);
       useCatalog.invalidate(qc);
+      useConnectionSchemas.invalidate(qc);
     },
   });
 
@@ -118,6 +120,7 @@ export function ConnectionsTab() {
     onSuccess: () => {
       useConnections.invalidate(qc);
       useCatalog.invalidate(qc);
+      useConnectionSchemas.invalidate(qc);
     },
   });
 

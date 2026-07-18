@@ -23,7 +23,10 @@ export async function GET(req: Request) {
       readable === "all" ? catalog.connections : catalog.connections.filter((c) => readable.has(c.connectionId));
 
     const sessionId = url.searchParams.get("sessionId") ?? undefined;
-    const result = await runGlobalSearch(connections, q, sessionId);
+    // Propagates cancellation: the client aborts the previous fetch as soon
+    // as a new keystroke (or dialog close) supersedes it — see
+    // components/global-search.tsx — which surfaces here as req.signal.
+    const result = await runGlobalSearch(connections, q, sessionId, undefined, req.signal);
     return ok(result);
   } catch (e) {
     return fail(e);

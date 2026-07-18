@@ -156,6 +156,20 @@
   border-radius: 10px;
 }
 
+/* react-grid-layout's default placeholder is an opaque red block — theme it
+   to match the panel chrome. */
+.react-grid-placeholder {
+  background: var(--primary) !important;
+  opacity: 0.12 !important;
+  border-radius: 10px;
+}
+
+/* rgl renders resize handles even when resizing is disabled — hide them
+   outside dashboard edit mode. */
+.rgl-view .react-resizable-handle {
+  display: none;
+}
+
 
 .input {
   background: var(--background);
@@ -183,6 +197,35 @@ select.input {
   font-size: 12.5px;
 }
 
+/* Prism tokens for SQL & JSON (see components/ui/sql-editor.tsx) — themed on
+   the app's own palette so light/dark both work without a vendor theme
+   stylesheet. Token class names are shared across Prism's language grammars,
+   so one rule set covers both. */
+.code-highlight .token.keyword,
+.code-highlight .token.property {
+  color: var(--primary);
+  font-weight: 600;
+}
+.code-highlight .token.string {
+  color: var(--success);
+}
+.code-highlight .token.number,
+.code-highlight .token.boolean,
+.code-highlight .token.null {
+  color: var(--warning);
+}
+.code-highlight .token.function {
+  color: var(--destructive);
+}
+.code-highlight .token.comment {
+  color: var(--muted-foreground-faint);
+  font-style: italic;
+}
+.code-highlight .token.operator,
+.code-highlight .token.punctuation {
+  color: var(--muted-foreground);
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -193,6 +236,18 @@ select.input {
   background: var(--muted);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
+}
+
+/* Shared hover treatment for interactive rows (sidebar links, global search
+   results, record page menus, table tree view, ...) — referenced via
+   className="hoverable" but was never actually defined, so hover was a
+   no-op everywhere it's used. */
+.hoverable {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.hoverable:hover {
+  background: var(--muted);
 }
 
 .scrollbar-thin::-webkit-scrollbar {

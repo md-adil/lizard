@@ -20,6 +20,7 @@ import {
   type TableMeta,
   type CatalogResponse,
 } from "@/components/browse/useTableMeta";
+import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import {
   Combobox,
   ComboboxInput,
@@ -85,6 +86,12 @@ export function VirtualFkEditor({
   // When it has none, the schema select is hidden and the server resolves the
   // connection's single schema for us.
   const toConnHasSchema = !!toConnection && connectionSupportsSchemas(catalog, toConnection);
+  // Only fetched for a target that can actually have more than one schema
+  // (Postgres) — a MySQL/Mongo target's one schema is just its database
+  // name, already known from `catalog`, no query needed at all.
+  const { schemas: toConnSchemas, isLoading: toSchemasLoading } = useConnectionSchemas(
+    toConnHasSchema ? toConnection : undefined,
+  );
   // $schema has no single concrete schema — introspect the source table's own
   // schema in the target connection as a stand-in.
   const repSchemaName = !toConnHasSchema ? undefined : toSchema === SAME_SCHEMA ? meta.resolvedSchema : toSchema;
@@ -242,10 +249,12 @@ export function VirtualFkEditor({
                     const name = picked?.connectionName ?? "";
                     setToConnection(name);
                     setToTable("");
-                    // A connection without schemas has exactly one — pick it for
-                    // the user, since there's no schema select to do it.
+                    // A connection without schemas has exactly one, named
+                    // after its database — pick it for the user, since
+                    // there's no schema select to do it (and no query needed
+                    // either: that name is already known from `catalog`).
                     const hasSchema = !!name && connectionSupportsSchemas(catalog, name);
-                    setToSchema(!picked || hasSchema ? "" : (picked.schemas[0]?.name ?? ""));
+                    setToSchema(!picked || hasSchema ? "" : picked.database);
                   }}
                   getValue={(c) => c.connectionName}
                   getLabel={(c) => c.connectionName}
@@ -259,10 +268,11 @@ export function VirtualFkEditor({
                   <DataSelect
                     items={[
                       { value: SAME_SCHEMA, label: "Same schema as row" },
-                      ...(toConn?.schemas.map((s) => ({ value: s.name, label: s.name })) ?? []),
+                      ...toConnSchemas.map((s) => ({ value: s.name, label: s.name })),
                     ]}
                     value={toSchema ? { value: toSchema, label: toSchema } : null}
                     disabled={!toConn}
+                    loading={toSchemasLoading}
                     onChange={(o) => {
                       setToSchema(o?.value ?? "");
                       setToTable("");

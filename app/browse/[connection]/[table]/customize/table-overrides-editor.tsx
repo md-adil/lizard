@@ -170,7 +170,7 @@ export function TableOverridesEditor({
   const [tableLabel, setTableLabel] = useState(tableOv?.label ?? "");
   const [displayCol, setDisplayCol] = useState(tableOv?.displayColumn ?? "");
   const [hidden, setHidden] = useState(tableOv?.hidden ?? false);
-  const [searchable, setSearchable] = useState(tableOv?.searchable ?? false);
+  const [searchable, setSearchable] = useState(tableOv?.searchable ?? true);
   const [defaultSort, setDefaultSort] = useState(tableOv?.defaultSort ?? "");
   const [defaultSortDir, setDefaultSortDir] = useState<"asc" | "desc">(tableOv?.defaultSortDir ?? "desc");
   // meta.hasRealKey reflects introspection, unaffected by any pretend-PK
@@ -188,7 +188,7 @@ export function TableOverridesEditor({
     setTableLabel(tableOv?.label ?? "");
     setDisplayCol(tableOv?.displayColumn ?? "");
     setHidden(tableOv?.hidden ?? false);
-    setSearchable(tableOv?.searchable ?? false);
+    setSearchable(tableOv?.searchable ?? true);
     setDefaultSort(tableOv?.defaultSort ?? "");
     setDefaultSortDir(tableOv?.defaultSortDir ?? "desc");
     setPkCols(tableOv?.primaryKey ?? []);
@@ -284,7 +284,7 @@ export function TableOverridesEditor({
           </label>
           <label className="flex items-center gap-2 text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
             <input type="checkbox" checked={searchable} onChange={(e) => setSearchable(e.target.checked)} />
-            Include in global search (⌘K)
+            Include in global search (⌘K) — on by default; uncheck to exclude this table
           </label>
 
           {!hasRealKey && (

@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSchemaMeta } from "@/components/browse/useTableMeta";
 import { useCatalog } from "@/components/browse/use-catalog";
+import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
+import { SchemaSelect } from "@/components/browse/schema-select";
 import { supportsSchemas, type TableInfo } from "@/lib/types";
 import {
   Breadcrumb,
@@ -64,35 +66,26 @@ function SchemaGrid({
   connection,
   schemaName,
   search,
-  multiSchema,
   includeSchemaInUrl,
 }: {
   connection: string;
   schemaName: string;
   search: string;
-  multiSchema: boolean;
   includeSchemaInUrl: boolean;
 }) {
+  // Tables load only for this one, already-selected schema — see
+  // ConnectionPage below for why: a connection can have thousands of
+  // schemas, and firing one of these per schema (as this page used to,
+  // rendering every schema's grid at once) meant that many concurrent
+  // introspection requests on a single page load.
   const { schemaMeta: schemaData, isLoading, error } = useSchemaMeta(connection, schemaName);
   const q = search.trim().toLowerCase();
 
-  const heading = multiSchema && (
-    <div
-      className="text-[12px] font-semibold mb-2 uppercase tracking-wide"
-      style={{ color: "var(--muted-foreground-faint)" }}
-    >
-      {schemaName}
-    </div>
-  );
-
   if (error) {
     return (
-      <div className="mb-6">
-        {heading}
-        <p className="text-[12.5px]" style={{ color: "var(--destructive)" }}>
-          Failed to load tables for {schemaName}.
-        </p>
-      </div>
+      <p className="text-[12.5px]" style={{ color: "var(--destructive)" }}>
+        Failed to load tables for {schemaName}.
+      </p>
     );
   }
 
@@ -100,16 +93,13 @@ function SchemaGrid({
   // the tables land.
   if (isLoading || !schemaData) {
     return (
-      <div className="mb-6">
-        {heading}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2" aria-hidden>
-          {Array.from({ length: 8 }, (_, i) => (
-            <div key={i} className="panel px-4 py-3">
-              <Skeleton className="h-3.5" style={{ width: `${[70, 55, 82, 61][i % 4]}%` }} />
-              <Skeleton className="h-2.5 mt-2" style={{ width: "40%" }} />
-            </div>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2" aria-hidden>
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="panel px-4 py-3">
+            <Skeleton className="h-3.5" style={{ width: `${[70, 55, 82, 61][i % 4]}%` }} />
+            <Skeleton className="h-2.5 mt-2" style={{ width: "40%" }} />
+          </div>
+        ))}
       </div>
     );
   }
@@ -119,21 +109,24 @@ function SchemaGrid({
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  if (tables.length === 0) return null;
+  if (tables.length === 0) {
+    return (
+      <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
+        No tables{q ? " match your search" : ""}.
+      </p>
+    );
+  }
 
   return (
-    <div className="mb-6">
-      {heading}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-        {tables.map((t) => (
-          <TableCard
-            key={t.name}
-            connection={connection}
-            schema={includeSchemaInUrl ? schemaName : undefined}
-            table={t}
-          />
-        ))}
-      </div>
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+      {tables.map((t) => (
+        <TableCard
+          key={t.name}
+          connection={connection}
+          schema={includeSchemaInUrl ? schemaName : undefined}
+          table={t}
+        />
+      ))}
     </div>
   );
 }
@@ -142,14 +135,36 @@ export default function ConnectionPage() {
   const { connection } = useParams<{ connection: string }>();
   const { data: catalog, isLoading, error } = useCatalog();
   const [search, setSearch] = useState("");
+  // Which one schema's tables are actually loaded — a connection can have
+  // thousands of schemas (multi-tenant "org_*"-style Postgres DBs are
+  // common), so this page loads exactly one at a time instead of firing a
+  // table-introspection request per schema. Defaults to the first schema
+  // (preferring "public") once the schema list itself arrives.
+  const [activeSchema, setActiveSchema] = useState<string | null>(null);
 
   const conn = useMemo(() => catalog?.connections.find((c) => c.connectionName === connection), [catalog, connection]);
+  // Schema names for this one connection load lazily here (this page only
+  // ever needs its own connection's schemas, not the whole fleet's) — see
+  // /api/catalog/[connection]/schemas.
+  const {
+    schemas,
+    isLoading: schemasLoading,
+    error: schemasError,
+  } = useConnectionSchemas(conn?.connectionName);
+
+  const sortedSchemas = useMemo(() => schemas.slice().sort((a, b) => a.name.localeCompare(b.name)), [schemas]);
+
+  useEffect(() => {
+    if (activeSchema && sortedSchemas.some((s) => s.name === activeSchema)) return;
+    if (sortedSchemas.length === 0) return;
+    setActiveSchema(sortedSchemas.find((s) => s.name === "public")?.name ?? sortedSchemas[0].name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedSchemas]);
 
   if (isLoading) return <PagePad>Loading…</PagePad>;
   if (error) return <PagePad style={{ color: "var(--destructive)" }}>Failed to load catalog.</PagePad>;
   if (!conn) return <PagePad>Connection &quot;{connection}&quot; not found.</PagePad>;
 
-  const sortedSchemas = conn.schemas.slice().sort((a, b) => a.name.localeCompare(b.name));
   const multiSchema = sortedSchemas.length > 1;
 
   return (
@@ -168,42 +183,69 @@ export default function ConnectionPage() {
 
       <h1 className="text-xl font-semibold mb-1">{conn.connectionName}</h1>
       <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
-        {conn.database} · {conn.schemas.length} schema{conn.schemas.length !== 1 ? "s" : ""}
+        {conn.database}
+        {!schemasLoading && !schemasError && ` · ${schemas.length} schema${schemas.length !== 1 ? "s" : ""}`}
       </p>
 
-      {conn.error && (
+      {schemasError && (
         <p
           className="text-[13px] mb-4 px-3 py-2 rounded-md border"
           style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
         >
-          {conn.error}
+          {schemasError.message}
         </p>
       )}
 
-      <InputGroup className="mb-4" style={{ maxWidth: 320 }}>
-        <InputGroupAddon align="inline-start">
-          <Search className="size-3.5" />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Search tables…" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
-        {search && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton size="icon-xs" title="Clear" aria-label="Clear" onClick={() => setSearch("")}>
-              <X />
-            </InputGroupButton>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <InputGroup style={{ maxWidth: 320 }}>
+          <InputGroupAddon align="inline-start">
+            <Search className="size-3.5" />
           </InputGroupAddon>
-        )}
-      </InputGroup>
+          <InputGroupInput
+            placeholder="Search tables…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+          />
+          {search && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton size="icon-xs" title="Clear" aria-label="Clear" onClick={() => setSearch("")}>
+                <X />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
 
-      {sortedSchemas.map((schema) => (
+        {multiSchema && (
+          <SchemaSelect
+            items={sortedSchemas}
+            value={activeSchema}
+            onChange={(name) => name && setActiveSchema(name)}
+            className="w-48"
+          />
+        )}
+      </div>
+
+      {schemasLoading && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2" aria-hidden>
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="panel px-4 py-3">
+              <Skeleton className="h-3.5" style={{ width: `${[70, 55, 82, 61][i % 4]}%` }} />
+              <Skeleton className="h-2.5 mt-2" style={{ width: "40%" }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!schemasLoading && activeSchema && (
         <SchemaGrid
-          key={schema.name}
+          key={activeSchema}
           connection={connection}
-          schemaName={schema.name}
+          schemaName={activeSchema}
           search={search}
-          multiSchema={multiSchema}
           includeSchemaInUrl={supportsSchemas(conn.engine)}
         />
-      ))}
+      )}
     </div>
   );
 }

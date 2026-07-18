@@ -4,6 +4,7 @@ import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 import { Providers } from "./providers";
 import { AppShell } from "@/components/app-shell";
+import { Toaster } from "@/components/ui/sonner";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>
+        <Toaster />
       </body>
     </html>
   );

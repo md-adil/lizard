@@ -1,16 +1,19 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addPanel, getDashboard } from "@/lib/metadata/store";
-import type { ChartSpec } from "@/lib/types";
+import type { ChartSpec, ChartType } from "@/lib/types";
+import { CHART_TYPES } from "@/lib/types";
 import { requireEditor } from "@/lib/auth/session";
+
+const CHART_TYPE_KEYS = Object.keys(CHART_TYPES) as [ChartType, ...ChartType[]];
 
 const specSchema = z.object({
   title: z.string(),
-  chartType: z.enum(["line", "bar", "pie", "stat", "table", "area"]),
+  chartType: z.enum(CHART_TYPE_KEYS),
   target: z.enum(["single", "federated"]),
   connections: z.array(z.string()).min(1),
   sql: z.string().min(1),
-  dialect: z.enum(["postgres", "duckdb"]),
+  dialect: z.enum(["postgres", "mysql", "duckdb"]),
   xField: z.string().nullable(),
   yFields: z.array(z.string()),
   seriesField: z.string().nullable(),

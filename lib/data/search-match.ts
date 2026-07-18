@@ -24,6 +24,19 @@ export interface MatchTarget {
   columns: MatchColumn[];
 }
 
+// column name -> Set of its enum members, for O(1) membership checks. Built
+// once per table (see buildEnumSets) rather than re-derived from
+// col.enumValues on every keystroke of a cross-table search.
+export type EnumSets = Map<string, Set<string>>;
+
+export function buildEnumSets(table: TableInfo): EnumSets {
+  const sets: EnumSets = new Map();
+  for (const c of table.columns) {
+    if (c.enumValues?.length) sets.set(c.name, new Set(c.enumValues));
+  }
+  return sets;
+}
+
 // Whether `term`, as typed, is a value the database can actually cast into a
 // column of this type — e.g. `CAST('amil' AS int4)` isn't "no match", it's a
 // runtime SQL error, so an incompatible pairing must never reach "exact"
@@ -32,6 +45,17 @@ function isCastCompatible(udtName: string, term: string): boolean {
   if (NUMERIC_UDTS.has(udtName)) return INT_RE.test(term);
   if (udtName === "uuid") return UUID_RE.test(term);
   return true; // text-like types accept any string as a candidate value
+}
+
+// An enum column is a small fixed vocabulary, not a "starts with" target —
+// the term either names one of its members exactly or it can't possibly
+// match, so there's no LIKE-worthy middle ground the way there is for free
+// text. Falls back to building the Set inline when the caller has no
+// precomputed one (the single-table search box has no session to prepare it
+// in — see app/api/data/crud.ts).
+function isEnumMatch(col: ColumnInfo, term: string, enumSets?: EnumSets): boolean {
+  const set = enumSets?.get(col.name) ?? (col.enumValues?.length ? new Set(col.enumValues) : undefined);
+  return !!set?.has(term);
 }
 
 // Which columns of `table` are worth searching for a term of this shape, and
@@ -51,7 +75,12 @@ function isCastCompatible(udtName: string, term: string): boolean {
 //    are always compatible by construction, so this only ever matters for a
 //    PK reached through the word-start/general branch.
 // Empty columns means "skip this table/search" — no query is issued for it.
-export function matchTargetFor(table: TableInfo, term: string, pkColumnNames: string[]): MatchTarget {
+export function matchTargetFor(
+  table: TableInfo,
+  term: string,
+  pkColumnNames: string[],
+  enumSets?: EnumSets,
+): MatchTarget {
   const indexed = new Set(table.indexedColumns);
   const pk = new Set(pkColumnNames);
 
@@ -68,13 +97,33 @@ export function matchTargetFor(table: TableInfo, term: string, pkColumnNames: st
     if (EMAIL_RE.test(term) && emailColumns.length > 0) {
       shapeColumns = emailColumns;
     } else {
-      shapeColumns = table.columns.filter((c) => indexed.has(c.name));
+      // A word-start LIKE only ever makes sense against a text-like column
+      // (or a matching enum, handled as its own exact case below) — a
+      // numeric/date/boolean/jsonb column can never contain the term as a
+      // substring, so including it here would just force a wasted,
+      // non-sargable ::text cast+compare per row for a column that has zero
+      // chance of matching. At a schema with thousands of tables, most of
+      // whose indexed columns are ids/fks/timestamps rather than free text,
+      // this is what keeps a search from issuing a query against every
+      // single table: a table with no text-like (or enum-matching) indexed
+      // column now falls out to zero shapeColumns and is skipped entirely,
+      // before ever touching a connection — see the target.columns.length
+      // === 0 check at this function's call sites.
+      shapeColumns = table.columns.filter(
+        (c) =>
+          indexed.has(c.name) &&
+          (TEXT_UDTS.has(c.udtName) || !!c.enumValues?.length) &&
+          (!c.enumValues?.length || isEnumMatch(c, term, enumSets)),
+      );
     }
     defaultMode = "wordstart";
   }
 
   const columns = shapeColumns.map((c) => {
-    const exact = defaultMode === "exact" || (pk.has(c.name) && isCastCompatible(c.udtName, term));
+    const exact =
+      defaultMode === "exact" ||
+      (pk.has(c.name) && isCastCompatible(c.udtName, term)) ||
+      (!!c.enumValues?.length && isEnumMatch(c, term, enumSets));
     return { col: c, mode: exact ? ("exact" as const) : ("wordstart" as const) };
   });
   return { columns };
