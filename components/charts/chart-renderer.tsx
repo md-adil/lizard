@@ -79,6 +79,109 @@ function axisStyle(t: ChartTheme) {
   };
 }
 
+function buildPieOption(spec: ChartSpec, result: QueryResult, t: ChartTheme, donut: boolean) {
+  const x = spec.xField ?? result.columns[0]?.name;
+  const y = spec.yFields[0] ?? result.columns[1]?.name;
+  return {
+    ...baseOption(t),
+    tooltip: { ...baseOption(t).tooltip, trigger: "item" as const },
+    legend: { bottom: 0, textStyle: { color: t.textDim, fontSize: 11 }, icon: "circle" },
+    series: [
+      {
+        type: "pie",
+        radius: donut ? ["58%", "80%"] : ["45%", "72%"],
+        top: 0,
+        bottom: 24,
+        itemStyle: { borderColor: t.surface, borderWidth: 2 },
+        label: { color: t.textDim, fontSize: 11 },
+        data: result.rows.slice(0, 8).map((r) => ({ name: String(r[x]), value: Number(r[y]) })),
+      },
+    ],
+  };
+}
+
+// No configurable min/max on ChartSpec yet, so the ceiling is a heuristic:
+// 100 covers the common percentage case, otherwise 25% headroom over value.
+function buildGaugeOption(spec: ChartSpec, result: QueryResult, t: ChartTheme) {
+  const y = spec.yFields[0] ?? result.columns[0]?.name;
+  const v = Number(result.rows[0]?.[y ?? ""] ?? 0);
+  const max = v >= 0 && v <= 100 ? 100 : Math.max(10, Math.ceil((v * 1.25) / 10) * 10);
+  return {
+    ...baseOption(t),
+    series: [
+      {
+        type: "gauge",
+        min: 0,
+        max,
+        progress: { show: true, width: 14 },
+        axisLine: { lineStyle: { width: 14, color: [[1, t.gridLine]] } },
+        axisTick: { show: false },
+        splitLine: { length: 10, lineStyle: { color: t.gridLine } },
+        axisLabel: { color: t.textDim, fontSize: 10, distance: 14 },
+        pointer: { show: false },
+        anchor: { show: false },
+        title: { show: false },
+        detail: {
+          valueAnimation: true,
+          formatter: (val: number) => formatNumber(val),
+          color: t.tooltipText,
+          fontSize: 22,
+          offsetCenter: [0, "0%"],
+        },
+        data: [{ value: v, name: y }],
+      },
+    ],
+  };
+}
+
+// Heatmap needs three dimensions but ChartSpec only carries x/y/series — so it
+// borrows seriesField as the second (row) axis instead of a series splitter,
+// and yFields[0] as the cell's value metric.
+function buildHeatmapOption(spec: ChartSpec, result: QueryResult, t: ChartTheme) {
+  const xField = spec.xField ?? result.columns[0]?.name;
+  const yField = spec.seriesField ?? result.columns[1]?.name;
+  const valueField = spec.yFields[0] ?? result.columns[2]?.name ?? result.columns[1]?.name;
+  const xCats = [...new Set(result.rows.map((r) => String(r[xField!])))].slice(0, 60);
+  const yCats = [...new Set(result.rows.map((r) => String(r[yField!])))].slice(0, 30);
+  const xIndex = new Map(xCats.map((v, i) => [v, i]));
+  const yIndex = new Map(yCats.map((v, i) => [v, i]));
+  const data: [number, number, number][] = [];
+  let max = 0;
+  for (const r of result.rows) {
+    const xi = xIndex.get(String(r[xField!]));
+    const yi = yIndex.get(String(r[yField!]));
+    if (xi === undefined || yi === undefined) continue;
+    const v = Number(r[valueField!]);
+    data.push([xi, yi, v]);
+    if (v > max) max = v;
+  }
+  return {
+    ...baseOption(t),
+    tooltip: { ...baseOption(t).tooltip, trigger: "item" as const },
+    grid: { left: 8, right: 16, top: 16, bottom: 40, containLabel: true },
+    xAxis: { type: "category" as const, data: xCats, ...axisStyle(t), splitArea: { show: true } },
+    yAxis: { type: "category" as const, data: yCats, ...axisStyle(t), splitArea: { show: true } },
+    visualMap: {
+      min: 0,
+      max: max || 1,
+      calculable: true,
+      orient: "horizontal" as const,
+      left: "center",
+      bottom: 0,
+      textStyle: { color: t.textDim, fontSize: 10 },
+      inRange: { color: [t.surface, t.palette[0]] },
+    },
+    series: [
+      {
+        type: "heatmap",
+        data,
+        label: { show: false },
+        itemStyle: { borderColor: t.surface, borderWidth: 1 },
+      },
+    ],
+  };
+}
+
 // pivot rows by seriesField: one series per distinct seriesField value
 function buildSeriesData(spec: ChartSpec, result: QueryResult) {
   const xField = spec.xField;
@@ -124,70 +227,75 @@ export function ChartRenderer({
 
   const option = useMemo(() => {
     if (spec.chartType === "stat" || spec.chartType === "table") return null;
-    if (spec.chartType === "pie") {
-      const x = spec.xField ?? result.columns[0]?.name;
-      const y = spec.yFields[0] ?? result.columns[1]?.name;
-      return {
-        ...baseOption(t),
-        tooltip: { ...baseOption(t).tooltip, trigger: "item" as const },
-        legend: { bottom: 0, textStyle: { color: t.textDim, fontSize: 11 }, icon: "circle" },
-        series: [
-          {
-            type: "pie",
-            radius: ["45%", "72%"],
-            top: 0,
-            bottom: 24,
-            itemStyle: { borderColor: t.surface, borderWidth: 2 },
-            label: { color: t.textDim, fontSize: 11 },
-            data: result.rows.slice(0, 8).map((r) => ({ name: String(r[x]), value: Number(r[y]) })),
-          },
-        ],
-      };
+    if (spec.chartType === "pie" || spec.chartType === "donut") {
+      return buildPieOption(spec, result, t, spec.chartType === "donut");
     }
+    if (spec.chartType === "gauge") return buildGaugeOption(spec, result, t);
+    if (spec.chartType === "heatmap") return buildHeatmapOption(spec, result, t);
 
     const { xValues, series } = buildSeriesData(spec, result);
     const multi = series.length > 1;
+    const horizontal = spec.chartType === "bar-horizontal";
+    const categoryAxis = { type: "category" as const, data: xValues, ...axisStyle(t), splitLine: { show: false } };
+    const valueAxis = {
+      type: "value" as const,
+      ...axisStyle(t),
+      axisLine: { show: false },
+      axisLabel: { ...axisStyle(t).axisLabel, formatter: (v: number) => formatNumber(v) },
+    };
     const common = {
       ...baseOption(t),
       legend: multi ? { top: 0, left: 0, textStyle: { color: t.textDim, fontSize: 11 }, icon: "circle" } : undefined,
-      xAxis: { type: "category" as const, data: xValues, ...axisStyle(t), splitLine: { show: false } },
-      yAxis: {
-        type: "value" as const,
-        ...axisStyle(t),
-        axisLine: { show: false },
-        axisLabel: { ...axisStyle(t).axisLabel, formatter: (v: number) => formatNumber(v) },
-      },
+      xAxis: horizontal ? valueAxis : categoryAxis,
+      yAxis: horizontal ? categoryAxis : valueAxis,
     };
-    if (spec.chartType === "bar") {
+    if (spec.chartType === "bar" || spec.chartType === "bar-stacked" || spec.chartType === "bar-horizontal") {
+      const stacked = spec.chartType === "bar-stacked";
       return {
         ...common,
         series: series.map((s) => ({
           name: s.name,
           type: "bar",
           data: s.data,
+          stack: stacked ? "total" : undefined,
           barMaxWidth: 28,
-          itemStyle: { borderRadius: [4, 4, 0, 0] },
+          itemStyle: { borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0] },
           barGap: "10%",
         })),
       };
     }
-    // line / area
+    if (spec.chartType === "scatter") {
+      return {
+        ...common,
+        series: series.map((s) => ({
+          name: s.name,
+          type: "scatter",
+          data: s.data,
+          symbolSize: 8,
+        })),
+      };
+    }
+    // line / area / area-stacked
+    const stacked = spec.chartType === "area-stacked";
     return {
       ...common,
       series: series.map((s) => ({
         name: s.name,
         type: "line",
         data: s.data,
+        stack: stacked ? "total" : undefined,
         smooth: false,
         showSymbol: xValues.length <= 40,
         symbolSize: 6,
         lineStyle: { width: 2 },
-        areaStyle: spec.chartType === "area" ? { opacity: 0.18 } : undefined,
+        areaStyle: spec.chartType === "area" || stacked ? { opacity: stacked ? 0.5 : 0.18 } : undefined,
       })),
     };
   }, [spec, result, t]);
 
-  const isAxisChart = spec.chartType === "line" || spec.chartType === "area" || spec.chartType === "bar";
+  const isAxisChart = ["line", "area", "area-stacked", "bar", "bar-stacked", "bar-horizontal", "scatter"].includes(
+    spec.chartType,
+  );
   // Axis charts with no X field would "render" a frame with zero points
   // (buildSeriesData yields no x values) — say why instead of showing an
   // empty chart. Pie is exempt: it falls back to the first column.
