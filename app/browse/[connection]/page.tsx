@@ -8,14 +8,7 @@ import { useCatalog } from "@/components/browse/use-catalog";
 import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { SchemaSelect } from "@/components/browse/schema-select";
 import { supportsSchemas, type TableInfo } from "@/lib/types";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -169,17 +162,7 @@ export default function ConnectionPage() {
 
   return (
     <div className="px-8 py-8 max-w-5xl">
-      <Breadcrumb className="mb-5">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{conn.connectionName}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      <Breadcrumbs className="mb-5" items={[{ label: "Home", link: "/" }, { label: conn.connectionName }]} />
 
       <h1 className="text-xl font-semibold mb-1">{conn.connectionName}</h1>
       <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>

@@ -4,22 +4,26 @@
 // in the settings page's Variables list (app/dashboards/[id]/settings) —
 // no dialog, since the page already has the room. A "select" variable's
 // option source (static list vs. live query) is a tab within the type, not
-// a third top-level type — keeping the type count at two (text, select)
-// while still covering both cases.
+// a third top-level type. Prebuilt kinds are added deliberately (each fully
+// realized, e.g. "daterange" gets a real range picker) rather than growing
+// into a wide menu of thin stubs.
 import { useState } from "react";
 import type { ChartSpec, DashboardVariable, QueryResult, SelectSource, VariableOption } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { SqlEditor } from "@/components/ui/sql-editor";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
 import { useCatalog } from "@/components/browse/use-catalog";
-import { SearchableSelect, optionsFromResult } from "@/components/charts/variable-controls";
+import { SearchableSelect, optionsFromResult, DateRangeField } from "@/components/charts/variable-controls";
 
 const VAR_TYPE_OPTIONS: { value: DashboardVariable["type"]; label: string }[] = [
   { value: "text", label: "Text" },
   { value: "select", label: "Select" },
+  { value: "daterange", label: "Date range" },
 ];
 
 // name must stay identifier-shaped (matched by \{\{(\w+)\}\} in
@@ -74,12 +78,23 @@ function OptionsEditor({ options, onChange }: { options: VariableOption[]; onCha
   );
 }
 
+// A date range is a single dashboard-wide concept (like Grafana's built-in
+// time picker), not something you'd name differently per instance — so
+// unlike text/select it gets a fixed name/label instead of user input.
+const DATERANGE_NAME = "daterange";
+const DATERANGE_LABEL = "Date range";
+
 export function VariableFormCard({
   initial,
+  disableDateRange = false,
   onCancel,
   onSave,
 }: {
   initial: DashboardVariable | null;
+  // Hide "Date range" from the type picker — passed by the settings page
+  // when another date range variable already exists (there's only one
+  // dashboard-wide range, so a second one would collide on DATERANGE_NAME).
+  disableDateRange?: boolean;
   onCancel: () => void;
   onSave: (variable: DashboardVariable) => void | Promise<void>;
 }) {
@@ -89,14 +104,15 @@ export function VariableFormCard({
   const queryConnections = (catalog?.connections ?? []).filter((c) => !c.error && c.engine !== "mongo");
   const [preview, setPreview] = useState<{ result?: QueryResult; error?: string } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const typeOptions = VAR_TYPE_OPTIONS.filter((o) => o.value !== "daterange" || !disableDateRange);
 
   const setType = (type: DashboardVariable["type"]) => {
-    setDraft(
-      (d): DashboardVariable =>
-        type === "text"
-          ? { name: d.name, label: d.label, type, value: "" }
-          : { name: d.name, label: d.label, type, source: defaultStaticSource(), value: "" },
-    );
+    setDraft((d): DashboardVariable => {
+      if (type === "text") return { name: d.name, label: d.label, type, value: "" };
+      if (type === "daterange")
+        return { name: DATERANGE_NAME, label: DATERANGE_LABEL, type, from: "", to: "", includeTime: false };
+      return { name: d.name, label: d.label, type, source: defaultStaticSource(), value: "" };
+    });
     setPreview(null);
   };
 
@@ -148,11 +164,12 @@ export function VariableFormCard({
     querySource && preview?.result ? optionsFromResult(preview.result, querySource.valueField, querySource.labelField) : [];
 
   const canSave =
-    draft.label.trim().length > 0 &&
-    /^\w+$/.test(draft.name) &&
-    (draft.type !== "select" ||
-      draft.source.kind === "static" ||
-      (draft.source.connections.length > 0 && draft.source.sql.trim().length > 0));
+    draft.type === "daterange" ||
+    (draft.label.trim().length > 0 &&
+      /^\w+$/.test(draft.name) &&
+      (draft.type !== "select" ||
+        draft.source.kind === "static" ||
+        (draft.source.connections.length > 0 && draft.source.sql.trim().length > 0)));
 
   const save = async () => {
     setSaving(true);
@@ -164,32 +181,64 @@ export function VariableFormCard({
   };
 
   return (
-    <div className="panel p-4 space-y-4" style={{ background: "var(--background)" }}>
+    <Card className="p-4">
       <div className="text-[13px] font-semibold">{initial ? "Edit variable" : "New variable"}</div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <div>
-          <label className="label">Label</label>
-          <Input value={draft.label} placeholder="Order status" autoFocus onChange={(e) => setLabel(e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Name</label>
-          <Input
-            value={draft.name}
-            placeholder="status"
-            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }) as DashboardVariable)}
-          />
-        </div>
-        <div>
-          <label className="label">Type</label>
-          <SearchableSelect
-            items={VAR_TYPE_OPTIONS}
-            value={VAR_TYPE_OPTIONS.find((o) => o.value === draft.type) ?? null}
-            onChange={(o) => o && setType(o.value)}
-            className="w-full"
-          />
-        </div>
+      <div>
+        <label className="label">Type</label>
+        <SearchableSelect
+          items={typeOptions}
+          value={typeOptions.find((o) => o.value === draft.type) ?? null}
+          onChange={(o) => o && setType(o.value)}
+          className="w-full sm:w-64"
+        />
       </div>
+
+      {/* A date range is one fixed dashboard-wide concept (Grafana's built-in
+          time picker) — no name/label to pick, unlike text/select which can
+          have any number of differently-named instances. */}
+      {draft.type !== "daterange" && (
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Label</label>
+            <Input value={draft.label} placeholder="Order status" autoFocus onChange={(e) => setLabel(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Name</label>
+            <Input
+              value={draft.name}
+              placeholder="status"
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }) as DashboardVariable)}
+            />
+          </div>
+        </div>
+      )}
+
+      {draft.type === "daterange" && (
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer">
+            <Switch
+              size="sm"
+              checked={draft.includeTime}
+              onCheckedChange={(checked) =>
+                // Reset from/to on format change — a bare "yyyy-MM-dd" and a
+                // "yyyy-MM-dd HH:mm" shouldn't be silently reinterpreted.
+                setDraft((d) => (d.type === "daterange" ? { ...d, includeTime: checked, from: "", to: "" } : d))
+              }
+            />
+            Include time
+          </label>
+          <div>
+            <label className="label">Default range</label>
+            <DateRangeField
+              from={draft.from}
+              to={draft.to}
+              includeTime={draft.includeTime}
+              onChange={(patch) => setDraft((d) => ({ ...d, ...patch }) as DashboardVariable)}
+            />
+          </div>
+        </div>
+      )}
 
       {draft.type === "text" && (
         <div>
@@ -335,7 +384,16 @@ export function VariableFormCard({
         {draft.type === "select" &&
           draft.source.kind === "query" &&
           "The value column is substituted into panel SQL; the label column is only for display. "}
-        Use <span className="code">{`{{${draft.name || "name"}}}`}</span> in panel SQL.
+        {draft.type === "daterange" ? (
+          <>
+            Use <span className="code">{`{{${DATERANGE_NAME}.from}}`}</span>/
+            <span className="code">{`{{${DATERANGE_NAME}.to}}`}</span> in panel SQL.
+          </>
+        ) : (
+          <>
+            Use <span className="code">{`{{${draft.name || "name"}}}`}</span> in panel SQL.
+          </>
+        )}
       </p>
 
       <div className="flex justify-end gap-2">
@@ -346,6 +404,6 @@ export function VariableFormCard({
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }

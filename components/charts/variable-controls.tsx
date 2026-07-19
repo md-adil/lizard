@@ -5,6 +5,9 @@
 // editor on the dashboard settings page (app/dashboards/[id]/settings).
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
+import { CalendarDays } from "lucide-react";
 import type { DashboardVariable, QueryResult, VariableOption } from "@/lib/types";
 import {
   Combobox,
@@ -15,16 +18,22 @@ import {
   ComboboxEmpty,
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 // Drop-in replacement for DataSelect (same getValue/getLabel/placeholder
 // prop shape) backed by Combobox instead of Select, so every variable-related
 // dropdown is searchable — worth it once a connection/column/option list
-// runs past a handful of entries.
-export function SearchableSelect<T, V extends string>({
+// runs past a handful of entries. Operates on the item type T directly
+// (rather than flattening to a value string and re-`.find()`-ing it), using
+// base-ui's itemToStringValue/itemToStringLabel so the trigger shows the
+// label while value/equality are still keyed by getValue.
+export function SearchableSelect<T>({
   items,
   value,
   onChange,
-  getValue = (item: T) => (item as { value: V }).value,
+  getValue = (item: T) => (item as { value: string }).value,
   getLabel = (item: T) => String((item as { label: unknown }).label),
   placeholder = "— select —",
   className,
@@ -34,26 +43,33 @@ export function SearchableSelect<T, V extends string>({
   items: T[];
   value: T | null;
   onChange: (item: T | null) => void;
-  getValue?: (item: T) => V;
+  getValue?: (item: T) => string;
   getLabel?: (item: T) => string;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
   loading?: boolean;
 }) {
-  const labelByValue = new Map(items.map((item) => [getValue(item), getLabel(item)]));
-  const values = items.map(getValue);
   return (
     <Combobox
-      items={values}
-      value={value ? getValue(value) : null}
-      onValueChange={(v) => onChange(v ? (items.find((i) => getValue(i) === v) ?? null) : null)}
+      items={items}
+      value={value}
+      onValueChange={(item) => onChange(item)}
+      itemToStringValue={getValue}
+      itemToStringLabel={getLabel}
+      isItemEqualToValue={(a, b) => getValue(a) === getValue(b)}
       disabled={disabled || loading}
     >
       <ComboboxInput placeholder={loading ? "Loading…" : placeholder} className={className} disabled={disabled || loading} />
       <ComboboxContent>
         <ComboboxEmpty>No results</ComboboxEmpty>
-        <ComboboxList>{(v: V) => <ComboboxItem key={v} value={v}>{labelByValue.get(v) ?? v}</ComboboxItem>}</ComboboxList>
+        <ComboboxList>
+          {(item: T) => (
+            <ComboboxItem key={getValue(item)} value={item}>
+              {getLabel(item)}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
       </ComboboxContent>
     </Combobox>
   );
@@ -79,18 +95,103 @@ export function optionsFromResult(
   return [...byValue].map(([value, label]) => ({ label, value }));
 }
 
+// "yyyy-MM-dd" or "yyyy-MM-dd HH:mm" → [datePart, timePart ("" if none)].
+function splitDateTime(s: string): [string, string] {
+  const [date, time] = s.split(" ");
+  return [date ?? "", time ?? ""];
+}
+
+// Shared date-range picker (shadcn Calendar in range mode, behind a
+// Popover) — used both by the live toolbar (daterange variable) and the
+// variable creation/edit card. includeTime adds a from/to time-of-day
+// alongside the calendar, same from/to fields either way (just
+// "yyyy-MM-dd" vs. "yyyy-MM-dd HH:mm").
+export function DateRangeField({
+  from,
+  to,
+  includeTime = false,
+  onChange,
+}: {
+  from: string;
+  to: string;
+  includeTime?: boolean;
+  onChange: (patch: { from: string; to: string }) => void;
+}) {
+  const [fromDate, fromTime] = splitDateTime(from);
+  const [toDate, toTime] = splitDateTime(to);
+  const range: DateRange | undefined = {
+    from: fromDate ? new Date(fromDate) : undefined,
+    to: toDate ? new Date(toDate) : undefined,
+  };
+
+  const commit = (nextRange: DateRange | undefined, nextFromTime: string, nextToTime: string) => {
+    const fromStr = nextRange?.from
+      ? includeTime
+        ? `${format(nextRange.from, "yyyy-MM-dd")} ${nextFromTime || "00:00"}`
+        : format(nextRange.from, "yyyy-MM-dd")
+      : "";
+    const toStr = nextRange?.to
+      ? includeTime
+        ? `${format(nextRange.to, "yyyy-MM-dd")} ${nextToTime || "23:59"}`
+        : format(nextRange.to, "yyyy-MM-dd")
+      : "";
+    onChange({ from: fromStr, to: toStr });
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger render={<Button variant="secondary" size="sm" className="justify-start gap-1.5" />}>
+        <CalendarDays className="size-3.5" />
+        {from && to ? `${from} – ${to}` : "Pick a range"}
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar mode="range" selected={range} onSelect={(r) => commit(r, fromTime, toTime)} numberOfMonths={2} />
+        {includeTime && (
+          <div className="flex items-center gap-2 p-3 border-t" style={{ borderColor: "var(--border)" }}>
+            <Input
+              type="time"
+              className="w-28"
+              value={fromTime}
+              disabled={!range.from}
+              onChange={(e) => commit(range, e.target.value, toTime)}
+            />
+            <span style={{ color: "var(--muted-foreground-faint)" }}>–</span>
+            <Input
+              type="time"
+              className="w-28"
+              value={toTime}
+              disabled={!range.to}
+              onChange={(e) => commit(range, fromTime, e.target.value)}
+            />
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // The live "pick a value" control shown in the dashboard toolbar — as
-// opposed to VariableFormDialog, which defines what the variable IS, this
+// opposed to VariableFormCard, which defines what the variable IS, this
 // just lets a viewer change its current value.
 export function VariableValueControl({
   variable,
   onChange,
 }: {
   variable: DashboardVariable;
-  onChange: (value: string) => void;
+  onChange: (patch: Partial<DashboardVariable>) => void;
 }) {
   if (variable.type === "text") {
-    return <Input className="w-36 h-8" value={variable.value} onChange={(e) => onChange(e.target.value)} />;
+    return <Input className="w-36 h-8" value={variable.value} onChange={(e) => onChange({ value: e.target.value })} />;
+  }
+  if (variable.type === "daterange") {
+    return (
+      <DateRangeField
+        from={variable.from}
+        to={variable.to}
+        includeTime={variable.includeTime}
+        onChange={(patch) => onChange(patch)}
+      />
+    );
   }
   if (variable.source.kind === "static") {
     const options = variable.source.options;
@@ -98,12 +199,12 @@ export function VariableValueControl({
       <SearchableSelect
         items={options}
         value={options.find((o) => o.value === variable.value) ?? null}
-        onChange={(o) => onChange(o?.value ?? "")}
+        onChange={(o) => onChange({ value: o?.value ?? "" })}
         className="w-36"
       />
     );
   }
-  return <QueryBackedSelect source={variable.source} value={variable.value} onChange={onChange} />;
+  return <QueryBackedSelect source={variable.source} value={variable.value} onChange={(value) => onChange({ value })} />;
 }
 
 function QueryBackedSelect({

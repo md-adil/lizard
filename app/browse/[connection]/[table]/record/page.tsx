@@ -27,14 +27,7 @@ import { Card } from "@/components/ui/card";
 import { widgetIcons, type Widget } from "@/lib/data/widgets";
 import { Check, X, CalendarDays, Link2, Copy, Maximize2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 function RelatedCard({
   title,
@@ -953,33 +946,18 @@ function RecordView() {
 
   return (
     <div className="px-8 py-7 max-w-6xl">
-      <Breadcrumb className="mb-4">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link href={tableHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
-              }
-            >
-              {meta.label}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>
-              {meta.displayColumn && row ? String(row[meta.displayColumn] ?? pkText) : pkText}
-            </BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: "Home", link: "/" },
+          { label: params.connection, link: `/browse/${params.connection}` },
+          {
+            label: meta.label,
+            link: tableHref({ connection: params.connection, schema: meta.schema, table: params.table }),
+          },
+          { label: meta.displayColumn && row ? String(row[meta.displayColumn] ?? pkText) : pkText },
+        ]}
+      />
 
       <div className="flex items-center gap-3 mb-5">
         <h1 className="text-lg font-semibold">

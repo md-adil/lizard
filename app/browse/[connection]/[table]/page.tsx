@@ -6,14 +6,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import Link from "next/link";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { RowEditor } from "@/components/browse/row-editor";
 import { DataGrid } from "@/components/browse/data-grid";
 import { useColumnVisibility } from "@/components/browse/use-column-visibility";
@@ -326,21 +319,14 @@ export default function TablePage() {
 
   return (
     <div className="px-8 py-8">
-      <Breadcrumb className="mb-4">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{meta.label}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: "Home", link: "/" },
+          { label: params.connection, link: `/browse/${params.connection}` },
+          { label: meta.label },
+        ]}
+      />
       <div className="flex items-start justify-between mb-1">
         <div>
           <div className="flex items-center gap-2.5">

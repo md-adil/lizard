@@ -13,6 +13,7 @@ import { ChartRenderer, type EchartsExportHandle } from "@/components/charts/cha
 import { SpecControls } from "@/components/charts/spec-controls";
 import { ResultGrid } from "@/components/ai/result-grid";
 import { VariableValueControl } from "@/components/charts/variable-controls";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -667,13 +668,17 @@ export default function DashboardPage() {
   const { data: allDashboards } = useDashboards();
   const otherDashboards = (allDashboards ?? []).filter((d) => d.id !== id);
 
-  const updateVar = (name: string, value: string) =>
-    setVarValues((vs) => vs.map((v) => (v.name === name ? { ...v, value } : v)));
+  const updateVar = (name: string, patch: Partial<DashboardVariable>) =>
+    setVarValues((vs) => vs.map((v) => (v.name === name ? ({ ...v, ...patch } as DashboardVariable) : v)));
 
   // Bar/pie click on a category whose field matches a variable's name — a
   // no-op if no such variable exists (see ChartRenderer's CROSS_FILTER_TYPES
-  // comment for why only categorical charts wire this).
-  const crossFilter = updateVar;
+  // comment for why only categorical charts wire this) or if it's a date
+  // range (a single clicked category isn't a range to filter by).
+  const crossFilter = (field: string, value: string) => {
+    const match = varValues.find((v) => v.name === field);
+    if (match && match.type !== "daterange") updateVar(field, { value });
+  };
 
   const copyPanelTo = async (p: Panel, targetId: string, targetName: string) => {
     const res = await fetch(`/api/dashboards/${targetId}/panels`, {
@@ -825,6 +830,10 @@ export default function DashboardPage() {
 
   return (
     <div className="px-6 py-6">
+      <Breadcrumbs
+        className="mb-4"
+        items={[{ label: "Home", link: "/" }, { label: "Dashboards", link: "/dashboards" }, { label: dash.name }]}
+      />
       <div className="flex items-center gap-3 mb-5">
         <h1 className="text-lg font-semibold">{dash.name}</h1>
         <span className="flex-1" />
@@ -881,7 +890,7 @@ export default function DashboardPage() {
               <span className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
                 {v.label || v.name}
               </span>
-              <VariableValueControl variable={v} onChange={(value) => updateVar(v.name, value)} />
+              <VariableValueControl variable={v} onChange={(patch) => updateVar(v.name, patch)} />
             </div>
           ))}
         </div>

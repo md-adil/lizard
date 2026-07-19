@@ -6,19 +6,23 @@
 // dashboard settings page rather than bolting config controls onto the view.
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dashboard, DashboardVariable } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AutoRefreshSelect } from "@/components/ui/auto-refresh-select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { VariableFormCard } from "@/components/charts/variable-form-card";
 import { useDashboards } from "@/components/charts/use-dashboards";
-import { ChevronLeft } from "lucide-react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
-const VAR_TYPE_LABEL: Record<DashboardVariable["type"], string> = { text: "Text", select: "Select" };
+const VAR_TYPE_LABEL: Record<DashboardVariable["type"], string> = {
+  text: "Text",
+  select: "Select",
+  daterange: "Date range",
+};
 
 export default function DashboardSettingsPage() {
   const { id } = useParams<{ id: string }>();
@@ -66,6 +70,12 @@ export default function DashboardSettingsPage() {
     setEditing(null);
   };
 
+  // There's only one dashboard-wide date range (like Grafana's built-in time
+  // picker) — hide the option once one exists, unless we're editing that
+  // very variable.
+  const hasDateRange = dash?.variables.some((v) => v.type === "daterange") ?? false;
+  const editingIsDateRange = editing !== "new" && editing?.variable.type === "daterange";
+
   if (!dash) {
     return (
       <div className="px-6 py-6 space-y-3">
@@ -77,14 +87,15 @@ export default function DashboardSettingsPage() {
 
   return (
     <div className="px-6 py-6 max-w-3xl">
-      <Link
-        href={`/dashboards/${id}`}
-        className="inline-flex items-center gap-1 text-[13px] mb-4"
-        style={{ color: "var(--muted-foreground)" }}
-      >
-        <ChevronLeft className="size-3.5" />
-        Back to {dash.name}
-      </Link>
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: "Home", link: "/" },
+          { label: "Dashboards", link: "/dashboards" },
+          { label: dash.name, link: `/dashboards/${id}` },
+          { label: "Settings" },
+        ]}
+      />
       <h1 className="text-lg font-semibold mb-5">Dashboard settings</h1>
 
       <Tabs defaultValue="general">
@@ -94,7 +105,7 @@ export default function DashboardSettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
-          <div className="panel p-4 space-y-4" style={{ background: "var(--background)" }}>
+          <Card className="p-4 space-y-4">
             <div>
               <label className="label">Name</label>
               <Input
@@ -113,29 +124,30 @@ export default function DashboardSettingsPage() {
                 />
               </div>
             </div>
-          </div>
+          </Card>
         </TabsContent>
 
         <TabsContent value="variables" className="space-y-3">
           {dash.variables.length === 0 && (
-            <div className="panel px-6 py-10 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+            <Card className="px-6 py-10 text-center text-[13px]" style={{ color: "var(--muted-foreground)" }}>
               No variables yet. Variables let a viewer filter every panel at once — add one and reference it in a
               panel's SQL as <span className="code">{"{{name}}"}</span>.
-            </div>
+            </Card>
           )}
           {dash.variables.map((v, i) =>
             editing !== "new" && editing?.index === i ? (
               <VariableFormCard
                 key={i}
                 initial={editing.variable}
+                disableDateRange={hasDateRange && !editingIsDateRange}
                 onCancel={() => setEditing(null)}
                 onSave={upsertVariable}
               />
             ) : (
-              <div key={i} className="panel p-3 flex items-center gap-2" style={{ background: "var(--background)" }}>
+              <Card key={i} className="p-3 flex-row items-center gap-2">
                 <span className="text-[13px] font-medium">{v.label || v.name}</span>
                 <span className="text-[11px] code" style={{ color: "var(--muted-foreground-faint)" }}>
-                  {`{{${v.name}}}`}
+                  {v.type === "daterange" ? `{{${v.name}.from}}/{{${v.name}.to}}` : `{{${v.name}}}`}
                 </span>
                 <span className="tag" style={{ fontSize: 10 }}>
                   {VAR_TYPE_LABEL[v.type]}
@@ -152,11 +164,16 @@ export default function DashboardSettingsPage() {
                 <Button variant="secondary" size="sm" aria-label="Remove variable" onClick={() => removeVariable(i)}>
                   ✕
                 </Button>
-              </div>
+              </Card>
             ),
           )}
           {editing === "new" && (
-            <VariableFormCard initial={null} onCancel={() => setEditing(null)} onSave={upsertVariable} />
+            <VariableFormCard
+              initial={null}
+              disableDateRange={hasDateRange}
+              onCancel={() => setEditing(null)}
+              onSave={upsertVariable}
+            />
           )}
           {editing === null && (
             <Button variant="secondary" onClick={() => setEditing("new")}>

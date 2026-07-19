@@ -55,6 +55,14 @@ export async function PATCH(req: Request, { params }: Params) {
                 ]),
                 value: z.string(),
               }),
+              z.object({
+                name: z.string().regex(/^\w+$/, "Name must be letters, numbers, or underscore"),
+                label: z.string(),
+                type: z.literal("daterange"),
+                from: z.string(),
+                to: z.string(),
+                includeTime: z.boolean(),
+              }),
             ]),
           )
           .optional(),
