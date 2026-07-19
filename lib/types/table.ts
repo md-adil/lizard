@@ -27,6 +27,10 @@ export interface ColumnInfo {
   // in a schema-per-tenant layout). Needed to schema-qualify a cast to this
   // type; null for non-enum columns and engines with no type namespace.
   enumSchema: string | null;
+  // Same idea, for an array column whose *element* type is a custom enum
+  // (udtName here names the anonymous array wrapper type, not the enum) —
+  // needed to schema-qualify a `<elem_type>[]` cast. Null otherwise.
+  arrayElementEnumSchema: string | null;
   maxLength: number | null;
   numeric: ColumnNumericInfo | null;
 }

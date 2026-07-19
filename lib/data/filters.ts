@@ -226,11 +226,11 @@ export function buildFilterClause(
         }
         if (!dialect.supportsArrays) continue;
         const colInfo = table.columns.find((c) => c.name === f.column)!;
-        const elemCast = isArrayColumn(colInfo)
-          ? arrayElementUdt(colInfo)
-          : "text";
+        const isArray = isArrayColumn(colInfo);
+        const elemCast = isArray ? arrayElementUdt(colInfo) : "text";
+        const elemSchema = isArray ? colInfo.arrayElementEnumSchema : null;
         const sym = f.op === "arraycontains" ? "@>" : "&&";
-        parts.push(`${col} ${sym} ${dialect.cast(push(arr), `${elemCast}[]`)}`);
+        parts.push(`${col} ${sym} ${dialect.cast(push(arr), `${elemCast}[]`, elemSchema)}`);
         break;
       }
       case "jsonbcontains":
