@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { GridLayout, useContainerWidth, type Layout, type GridLayoutProps } from "react-grid-layout";
@@ -36,7 +36,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useCatalog } from "@/components/browse/use-catalog";
 import { useDashboards } from "@/components/charts/use-dashboards";
-import { substituteVariables } from "@/lib/dashboard-variables";
+import { substituteVariables, applySearchParamsToVariables, withVariablesInSearchParams } from "@/lib/dashboard-variables";
 import { resultToCsv, downloadBlob } from "@/lib/csv";
 
 const SQL_TARGET_OPTIONS: { value: "single" | "federated"; label: string }[] = [
@@ -630,21 +630,31 @@ function EditPanelModal({ panel, onClose, onSaved }: { panel: Panel; onClose: ()
 
 export default function DashboardPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Panel | null>(null);
   // Grafana-style edit mode: viewing is the default, clean surface — panel
   // menus, drag/resize, and add-panel only exist while editing. Renaming and
   // other dashboard-level config live on the dedicated settings page, not
-  // here. ?edit=1 (set by the list page's create flow) opens straight into
-  // it, so a freshly created dashboard is immediately editable.
+  // here. Driven entirely by ?edit=1 (not local state) so it's shareable and
+  // survives a refresh — the list page's create flow already links straight
+  // into it, and toggling "Edit" just updates the query string.
   const searchParams = useSearchParams();
-  const [editMode, setEditMode] = useState(searchParams.get("edit") === "1");
+  const editMode = searchParams.get("edit") === "1";
+  const setEditMode = (next: boolean) => {
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set("edit", "1");
+    else params.delete("edit");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
   // Live variable values as the user edits/cross-filters them — session
   // state, distinct from dash.variables (the saved defaults). Only
   // (re)seeded from the fetched dashboard the first time it loads for a
   // given id, not on every poll refetch, or a live pick would keep getting
-  // stomped back to the saved default every refreshSeconds tick.
+  // stomped back to the saved default every refreshSeconds tick. Seeded from
+  // the URL's var-* params first (so a shared/bookmarked link reproduces the
+  // filter state it was copied with), falling back to the saved defaults.
   const [varValues, setVarValues] = useState<DashboardVariable[]>([]);
   const varsInitializedFor = useRef<string | null>(null);
 
@@ -660,16 +670,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (dash && varsInitializedFor.current !== dash.id) {
-      setVarValues(dash.variables);
+      setVarValues(applySearchParamsToVariables(dash.variables, searchParams));
       varsInitializedFor.current = dash.id;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dash]);
 
   const { data: allDashboards } = useDashboards();
   const otherDashboards = (allDashboards ?? []).filter((d) => d.id !== id);
 
+  // Keeps the URL's var-* params in sync with the live values — no full
+  // navigation, just the query string (scroll/panel state stays put).
   const updateVar = (name: string, patch: Partial<DashboardVariable>) =>
-    setVarValues((vs) => vs.map((v) => (v.name === name ? ({ ...v, ...patch } as DashboardVariable) : v)));
+    setVarValues((vs) => {
+      const next = vs.map((v) => (v.name === name ? ({ ...v, ...patch } as DashboardVariable) : v));
+      const params = withVariablesInSearchParams(new URLSearchParams(searchParams), next);
+      router.replace(`?${params.toString()}`, { scroll: false });
+      return next;
+    });
 
   // Bar/pie click on a category whose field matches a variable's name — a
   // no-op if no such variable exists (see ChartRenderer's CROSS_FILTER_TYPES
@@ -876,7 +894,7 @@ export default function DashboardPage() {
             ＋ Add panel
           </Button>
         )}
-        <Button variant={editMode ? "default" : "secondary"} onClick={() => setEditMode((m) => !m)}>
+        <Button variant={editMode ? "default" : "secondary"} onClick={() => setEditMode(!editMode)}>
           {editMode ? "Done" : "✎ Edit"}
         </Button>
       </div>

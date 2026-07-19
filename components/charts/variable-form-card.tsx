@@ -81,7 +81,7 @@ function OptionsEditor({ options, onChange }: { options: VariableOption[]; onCha
 // A date range is a single dashboard-wide concept (like Grafana's built-in
 // time picker), not something you'd name differently per instance — so
 // unlike text/select it gets a fixed name/label instead of user input.
-const DATERANGE_NAME = "daterange";
+const DATERANGE_NAME = "datetime";
 const DATERANGE_LABEL = "Date range";
 
 export function VariableFormCard({

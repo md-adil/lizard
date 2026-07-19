@@ -3,9 +3,9 @@
 // Shared pieces for dashboard variables, used by both the live toolbar on
 // the dashboard view (app/dashboards/[id]/page.tsx) and the definition
 // editor on the dashboard settings page (app/dashboards/[id]/settings).
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, subDays, subMinutes } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { CalendarDays } from "lucide-react";
 import type { DashboardVariable, QueryResult, VariableOption } from "@/lib/types";
@@ -60,7 +60,11 @@ export function SearchableSelect<T>({
       isItemEqualToValue={(a, b) => getValue(a) === getValue(b)}
       disabled={disabled || loading}
     >
-      <ComboboxInput placeholder={loading ? "Loading…" : placeholder} className={className} disabled={disabled || loading} />
+      <ComboboxInput
+        placeholder={loading ? "Loading…" : placeholder}
+        className={className}
+        disabled={disabled || loading}
+      />
       <ComboboxContent>
         <ComboboxEmpty>No results</ComboboxEmpty>
         <ComboboxList>
@@ -101,11 +105,47 @@ function splitDateTime(s: string): [string, string] {
   return [date ?? "", time ?? ""];
 }
 
+// Quick-pick shortcuts — day-granularity ranges when the variable is
+// date-only, minute/hour-granularity "last N" ranges when it includes time
+// (Grafana's quick-range convention). Each is a single deliberate choice, so
+// unlike manual calendar clicks it commits immediately instead of staging.
+const DATE_PRESETS = [
+  { label: "Today", from: (now: Date) => now },
+  { label: "Last 7 days", from: (now: Date) => subDays(now, 6) },
+  { label: "Last 30 days", from: (now: Date) => subDays(now, 29) },
+];
+const TIME_PRESETS = [
+  { label: "Last 15 minutes", from: (now: Date) => subMinutes(now, 15) },
+  { label: "Last 30 minutes", from: (now: Date) => subMinutes(now, 30) },
+  { label: "Last 1 hour", from: (now: Date) => subMinutes(now, 60) },
+  { label: "Last 3 hours", from: (now: Date) => subMinutes(now, 180) },
+  { label: "Last 6 hours", from: (now: Date) => subMinutes(now, 360) },
+  { label: "Last 12 hours", from: (now: Date) => subMinutes(now, 720) },
+  { label: "Last 24 hours", from: (now: Date) => subMinutes(now, 1440) },
+];
+
+function PresetButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      className="text-left text-[12.5px] px-2.5 py-1.5 rounded-md transition-colors cursor-pointer hover:bg-accent"
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
 // Shared date-range picker (shadcn Calendar in range mode, behind a
 // Popover) — used both by the live toolbar (daterange variable) and the
 // variable creation/edit card. includeTime adds a from/to time-of-day
 // alongside the calendar, same from/to fields either way (just
 // "yyyy-MM-dd" vs. "yyyy-MM-dd HH:mm").
+//
+// Picking a range is several clicks (start day, end day, from time, to
+// time) — calling onChange after every one of them would re-run every panel
+// on the dashboard mid-pick. Instead this holds its own draft state and only
+// calls onChange once, when "Apply" is pressed; closing without applying
+// just discards the draft (re-opening reseeds it from the last-applied from/to).
 export function DateRangeField({
   from,
   to,
@@ -117,56 +157,116 @@ export function DateRangeField({
   includeTime?: boolean;
   onChange: (patch: { from: string; to: string }) => void;
 }) {
-  const [fromDate, fromTime] = splitDateTime(from);
-  const [toDate, toTime] = splitDateTime(to);
-  const range: DateRange | undefined = {
-    from: fromDate ? new Date(fromDate) : undefined,
-    to: toDate ? new Date(toDate) : undefined,
+  const [open, setOpen] = useState(false);
+  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined);
+  const [draftFromTime, setDraftFromTime] = useState("");
+  const [draftToTime, setDraftToTime] = useState("");
+
+  const openChange = (next: boolean) => {
+    if (next) {
+      const [fromDate, fromTime] = splitDateTime(from);
+      const [toDate, toTime] = splitDateTime(to);
+      setDraftRange({ from: fromDate ? new Date(fromDate) : undefined, to: toDate ? new Date(toDate) : undefined });
+      setDraftFromTime(fromTime);
+      setDraftToTime(toTime);
+    }
+    setOpen(next);
   };
 
-  const commit = (nextRange: DateRange | undefined, nextFromTime: string, nextToTime: string) => {
-    const fromStr = nextRange?.from
+  const apply = () => {
+    const fromStr = draftRange?.from
       ? includeTime
-        ? `${format(nextRange.from, "yyyy-MM-dd")} ${nextFromTime || "00:00"}`
-        : format(nextRange.from, "yyyy-MM-dd")
+        ? `${format(draftRange.from, "yyyy-MM-dd")} ${draftFromTime || "00:00"}`
+        : format(draftRange.from, "yyyy-MM-dd")
       : "";
-    const toStr = nextRange?.to
+    const toStr = draftRange?.to
       ? includeTime
-        ? `${format(nextRange.to, "yyyy-MM-dd")} ${nextToTime || "23:59"}`
-        : format(nextRange.to, "yyyy-MM-dd")
+        ? `${format(draftRange.to, "yyyy-MM-dd")} ${draftToTime || "23:59"}`
+        : format(draftRange.to, "yyyy-MM-dd")
       : "";
     onChange({ from: fromStr, to: toStr });
+    setOpen(false);
+  };
+
+  // A preset names a single deliberate range — unlike manual calendar
+  // clicks, it commits immediately and closes rather than waiting for Apply.
+  const applyPreset = (presetFrom: Date) => {
+    const now = new Date();
+    const fromStr = includeTime ? format(presetFrom, "yyyy-MM-dd HH:mm") : format(presetFrom, "yyyy-MM-dd");
+    const toStr = includeTime ? format(now, "yyyy-MM-dd HH:mm") : format(now, "yyyy-MM-dd");
+    onChange({ from: fromStr, to: toStr });
+    setOpen(false);
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={openChange}>
       <PopoverTrigger render={<Button variant="secondary" size="sm" className="justify-start gap-1.5" />}>
         <CalendarDays className="size-3.5" />
         {from && to ? `${from} – ${to}` : "Pick a range"}
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar mode="range" selected={range} onSelect={(r) => commit(r, fromTime, toTime)} numberOfMonths={2} />
-        {includeTime && (
-          <div className="flex items-center gap-2 p-3 border-t" style={{ borderColor: "var(--border)" }}>
-            <Input
-              type="time"
-              className="w-28"
-              value={fromTime}
-              disabled={!range.from}
-              onChange={(e) => commit(range, e.target.value, toTime)}
-            />
-            <span style={{ color: "var(--muted-foreground-faint)" }}>–</span>
-            <Input
-              type="time"
-              className="w-28"
-              value={toTime}
-              disabled={!range.to}
-              onChange={(e) => commit(range, fromTime, e.target.value)}
-            />
+        <div className="flex">
+          <div
+            className="flex flex-col gap-0.5 p-2 w-40 shrink-0"
+            style={{ borderRight: "1px solid var(--border)" }}
+          >
+            {(includeTime ? TIME_PRESETS : DATE_PRESETS).map((p) => (
+              <PresetButton key={p.label} label={p.label} onClick={() => applyPreset(p.from(new Date()))} />
+            ))}
           </div>
-        )}
+          <div className="flex flex-col">
+            <Calendar mode="range" selected={draftRange} onSelect={setDraftRange} numberOfMonths={2} />
+            {includeTime && (
+              <div
+                className="flex items-center justify-between gap-3 p-3 border-t"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <Input
+                  type="time"
+                  className="w-34"
+                  value={draftFromTime}
+                  disabled={!draftRange?.from}
+                  onChange={(e) => setDraftFromTime(e.target.value)}
+                />
+                <span style={{ color: "var(--muted-foreground-faint)" }}>–</span>
+                <Input
+                  type="time"
+                  className="w-34"
+                  value={draftToTime}
+                  disabled={!draftRange?.to}
+                  onChange={(e) => setDraftToTime(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="flex justify-end p-3 border-t" style={{ borderColor: "var(--border)" }}>
+              <Button size="sm" disabled={!draftRange?.from || !draftRange?.to} onClick={apply}>
+                Apply
+              </Button>
+            </div>
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// Commits on blur/Enter rather than on every keystroke — same reasoning as
+// DateRangeField's Apply button, just via the more idiomatic gesture for a
+// text field (matches the dashboard-name-rename input elsewhere in the app).
+function TextVariableInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onChange(draft);
+  };
+  return (
+    <Input
+      className="w-36 h-8"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && commit()}
+    />
   );
 }
 
@@ -181,7 +281,7 @@ export function VariableValueControl({
   onChange: (patch: Partial<DashboardVariable>) => void;
 }) {
   if (variable.type === "text") {
-    return <Input className="w-36 h-8" value={variable.value} onChange={(e) => onChange({ value: e.target.value })} />;
+    return <TextVariableInput value={variable.value} onChange={(value) => onChange({ value })} />;
   }
   if (variable.type === "daterange") {
     return (
@@ -204,7 +304,9 @@ export function VariableValueControl({
       />
     );
   }
-  return <QueryBackedSelect source={variable.source} value={variable.value} onChange={(value) => onChange({ value })} />;
+  return (
+    <QueryBackedSelect source={variable.source} value={variable.value} onChange={(value) => onChange({ value })} />
+  );
 }
 
 function QueryBackedSelect({
