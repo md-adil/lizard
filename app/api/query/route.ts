@@ -8,6 +8,7 @@ const querySchema = z.object({
   connections: z.array(z.string()).min(1),
   sql: z.string().min(1),
   dialect: z.enum(["postgres", "mysql", "duckdb"]),
+  cacheSeconds: z.number().min(0).max(3600).optional(),
 });
 
 export async function POST(req: Request) {

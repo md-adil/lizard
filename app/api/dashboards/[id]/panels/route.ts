@@ -7,6 +7,20 @@ import { requireEditor } from "@/lib/auth/session";
 
 const CHART_TYPE_KEYS = Object.keys(CHART_TYPES) as [ChartType, ...ChartType[]];
 
+const linkTargetSchema = z.object({
+  connection: z.string(),
+  schema: z.string().nullable().optional(),
+  table: z.string(),
+  keyField: z.string(),
+  keyColumn: z.string(),
+});
+
+const thresholdsSchema = z.object({
+  warn: z.number().nullable(),
+  crit: z.number().nullable(),
+  highIsBad: z.boolean(),
+});
+
 const specSchema = z.object({
   title: z.string(),
   chartType: z.enum(CHART_TYPE_KEYS),
@@ -17,6 +31,9 @@ const specSchema = z.object({
   xField: z.string().nullable(),
   yFields: z.array(z.string()),
   seriesField: z.string().nullable(),
+  linkTo: linkTargetSchema.nullable(),
+  thresholds: thresholdsSchema.nullable(),
+  cacheSeconds: z.number().min(0).max(3600).nullable(),
 });
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {

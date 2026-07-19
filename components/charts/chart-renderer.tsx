@@ -3,9 +3,23 @@
 // Renders a ChartSpec + QueryResult with ECharts, themed to Lizard's UI.
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
-import type { ChartSpec, QueryResult } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import type { ChartSpec, ChartThresholds, QueryResult } from "@/lib/types";
 import { ResultGrid } from "@/components/ai/result-grid";
+import { recordHref } from "@/components/browse/use-schema-param";
 import { useTheme, type ThemeName } from "@/components/useTheme";
+
+// Categorical chart types where a click unambiguously names one x/category
+// value — wired to cross-filter a same-named dashboard variable. Axis charts
+// with a continuous or multi-series x (line/area/scatter) are excluded: a
+// click there doesn't name a single filterable value as cleanly.
+const CROSS_FILTER_TYPES = new Set<ChartSpec["chartType"]>(["bar", "bar-stacked", "bar-horizontal", "pie", "donut"]);
+
+// Minimal shape of the echarts-for-react instance passed to onChartReady —
+// only what the PNG-export button needs, so no echarts type dependency here.
+export interface EchartsExportHandle {
+  getDataURL(opts: { pixelRatio?: number; backgroundColor?: string }): string;
+}
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
@@ -100,6 +114,24 @@ function buildPieOption(spec: ChartSpec, result: QueryResult, t: ChartTheme, don
   };
 }
 
+// Splits a gauge's 0..max range into good/warn/bad color stops from
+// ChartThresholds — highIsBad decides which end of the range reads as bad.
+// With no thresholds configured, the whole range stays neutral (gridLine).
+function buildGaugeAxisColor(thresholds: ChartThresholds | null, max: number, t: ChartTheme): [number, string][] {
+  const warn = thresholds?.warn ?? null;
+  const crit = thresholds?.crit ?? null;
+  if (warn === null && crit === null) return [[1, t.gridLine]];
+  const highIsBad = thresholds?.highIsBad ?? true;
+  const good = "var(--success)";
+  const warnColor = "var(--warning)";
+  const bad = "var(--destructive)";
+  const colorsAsc = highIsBad ? [good, warnColor, bad] : [bad, warnColor, good];
+  const points = [warn, crit].filter((n): n is number => n !== null).sort((a, b) => a - b);
+  const segColors = points.length === 1 ? [colorsAsc[0], colorsAsc[2]] : colorsAsc;
+  const boundaries = [...points.map((p) => Math.min(1, Math.max(0, p / max))), 1];
+  return boundaries.map((b, i) => [b, segColors[i] ?? segColors[segColors.length - 1]]);
+}
+
 // No configurable min/max on ChartSpec yet, so the ceiling is a heuristic:
 // 100 covers the common percentage case, otherwise 25% headroom over value.
 function buildGaugeOption(spec: ChartSpec, result: QueryResult, t: ChartTheme) {
@@ -114,7 +146,7 @@ function buildGaugeOption(spec: ChartSpec, result: QueryResult, t: ChartTheme) {
         min: 0,
         max,
         progress: { show: true, width: 14 },
-        axisLine: { lineStyle: { width: 14, color: [[1, t.gridLine]] } },
+        axisLine: { lineStyle: { width: 14, color: buildGaugeAxisColor(spec.thresholds, max, t) } },
         axisTick: { show: false },
         splitLine: { length: 10, lineStyle: { color: t.gridLine } },
         axisLabel: { color: t.textDim, fontSize: 10, distance: 14 },
@@ -217,13 +249,23 @@ export function ChartRenderer({
   spec,
   result,
   height = 300,
+  onCrossFilter,
+  onReady,
 }: {
   spec: ChartSpec;
   result: QueryResult;
   height?: number;
+  // Called when a bar/pie/donut data point is clicked and its category field
+  // matches a dashboard variable's name — the dashboard page owns the actual
+  // variable state, this just reports "field X was clicked with value Y".
+  onCrossFilter?: (field: string, value: string) => void;
+  // Called once the ECharts instance mounts, so the panel's export button can
+  // rasterize it to PNG on demand.
+  onReady?: (instance: EchartsExportHandle) => void;
 }) {
   const themeName = useTheme();
   const t = CHART_THEMES[themeName];
+  const router = useRouter();
 
   const option = useMemo(() => {
     if (spec.chartType === "stat" || spec.chartType === "table") return null;
@@ -318,26 +360,117 @@ export function ChartRenderer({
 
   if (spec.chartType === "stat") {
     const y = spec.yFields[0] ?? result.columns[0]?.name;
-    // `stat` is only well-defined for a single-row result (suggestCharts only
-    // ever suggests it then) — for a manually-picked multi-row spec there's no
-    // ORDER BY contract to pick a "latest" row by, so this is the first row,
-    // not a meaningful aggregate.
-    const v = result.rows[0]?.[y ?? ""];
+    // A manually-picked multi-row stat spec has no ORDER BY contract, but if
+    // there IS more than one row, the caller almost always means "a series —
+    // show me the latest point plus a sparkline/delta of the rest", so the
+    // last row is the headline value (a single-row result is unaffected:
+    // first === last).
+    const values = result.rows.map((r) => Number(r[y ?? ""]));
+    const v = result.rows[result.rows.length - 1]?.[y ?? ""];
+    const numV = Number(v);
+    const first = values[0];
+    const last = values[values.length - 1];
+    const hasDelta = values.length > 1 && Number.isFinite(first) && Number.isFinite(last);
+    const delta = hasDelta ? last - first : null;
+    const deltaPct = hasDelta && first !== 0 ? (delta! / Math.abs(first)) * 100 : null;
+
+    let valueColor = "var(--foreground)";
+    if (spec.thresholds && (spec.thresholds.warn !== null || spec.thresholds.crit !== null)) {
+      const { warn, crit, highIsBad } = spec.thresholds;
+      const isBad = (threshold: number) => (highIsBad ? numV >= threshold : numV <= threshold);
+      if (crit !== null && isBad(crit)) valueColor = "var(--destructive)";
+      else if (warn !== null && isBad(warn)) valueColor = "var(--warning)";
+      else valueColor = "var(--success)";
+    }
+    // Default assumption (no thresholds configured, or highIsBad left at its
+    // default): higher is good, e.g. revenue/users. Only flipped when
+    // thresholds explicitly mark high values as bad (error rate, latency).
+    const highIsBad = spec.thresholds?.highIsBad ?? false;
+    const deltaGood = delta === null ? null : highIsBad ? delta <= 0 : delta >= 0;
+
+    const sparklineOption =
+      values.length > 1
+        ? {
+            grid: { left: 0, right: 0, top: 2, bottom: 2 },
+            xAxis: { type: "category" as const, show: false, data: values.map((_, i) => i) },
+            yAxis: { type: "value" as const, show: false },
+            series: [
+              {
+                type: "line",
+                data: values,
+                showSymbol: false,
+                lineStyle: { width: 1.5, color: t.palette[0] },
+                areaStyle: { opacity: 0.12, color: t.palette[0] },
+              },
+            ],
+          }
+        : null;
+
     return (
-      <div className="flex flex-col items-start justify-center h-full px-2" style={{ minHeight: height / 2 }}>
-        <div className="text-4xl font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
-          {formatNumber(v)}
+      <div className="flex flex-col items-start justify-center h-full px-2 gap-1" style={{ minHeight: height / 2 }}>
+        <div className="flex items-baseline gap-2">
+          <div className="text-4xl font-semibold tracking-tight" style={{ color: valueColor }}>
+            {formatNumber(v)}
+          </div>
+          {deltaPct !== null && (
+            <span
+              className="text-[12px] font-medium"
+              style={{ color: deltaGood ? "var(--success)" : "var(--destructive)" }}
+            >
+              {delta! >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}%
+            </span>
+          )}
         </div>
-        <div className="text-[12px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+        <div className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
           {y}
         </div>
+        {sparklineOption && (
+          <ReactECharts option={sparklineOption} style={{ height: 32, width: "100%" }} notMerge opts={{ renderer: "svg" }} />
+        )}
       </div>
     );
   }
   if (spec.chartType === "table" || !option) {
+    const onRowClick = spec.linkTo
+      ? (row: Record<string, unknown>) => {
+          const link = spec.linkTo!;
+          router.push(
+            recordHref({
+              connection: link.connection,
+              schema: link.schema ?? undefined,
+              table: link.table,
+              params: { pk: JSON.stringify({ [link.keyColumn]: row[link.keyField] }) },
+            }),
+          );
+        }
+      : undefined;
     // ~24px footer (row count / duration) renders below the scroll region —
     // reserve it so the whole grid stays inside a fixed-height panel.
-    return <ResultGrid result={result} maxRows={50} maxHeight={height - 24} />;
+    return <ResultGrid result={result} maxRows={50} maxHeight={height - 24} onRowClick={onRowClick} />;
   }
-  return <ReactECharts key={themeName} option={option} style={{ height, width: "100%" }} notMerge />;
+
+  const crossFilterField = !CROSS_FILTER_TYPES.has(spec.chartType)
+    ? null
+    : spec.chartType === "pie" || spec.chartType === "donut"
+      ? (spec.xField ?? result.columns[0]?.name ?? null)
+      : spec.xField;
+  const onEvents =
+    onCrossFilter && crossFilterField
+      ? {
+          click: (params: { name?: string }) => {
+            if (params.name) onCrossFilter(crossFilterField, params.name);
+          },
+        }
+      : undefined;
+
+  return (
+    <ReactECharts
+      key={themeName}
+      option={option}
+      style={{ height, width: "100%" }}
+      notMerge
+      onEvents={onEvents}
+      onChartReady={onReady}
+    />
+  );
 }

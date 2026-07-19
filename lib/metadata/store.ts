@@ -609,6 +609,7 @@ export function listDashboards(): Dashboard[] {
     name: r.name as string,
     refreshSeconds: r.refresh_seconds as number | null,
     createdAt: r.created_at as string,
+    variables: JSON.parse((r.variables as string) || "[]") as Dashboard["variables"],
     panels: (
       d.prepare("SELECT * FROM panels WHERE dashboard_id = ?").all(r.id as string) as Record<string, unknown>[]
     ).map(rowToPanel),
@@ -625,14 +626,18 @@ export function addDashboard(name: string, refreshSeconds: number | null = null)
   return getDashboard(id)!;
 }
 
-export function updateDashboard(id: string, fields: { name?: string; refreshSeconds?: number | null }): void {
+export function updateDashboard(
+  id: string,
+  fields: { name?: string; refreshSeconds?: number | null; variables?: Dashboard["variables"] },
+): void {
   const existing = getDashboard(id);
   if (!existing) return;
   getDb()
-    .prepare("UPDATE dashboards SET name = ?, refresh_seconds = ? WHERE id = ?")
+    .prepare("UPDATE dashboards SET name = ?, refresh_seconds = ?, variables = ? WHERE id = ?")
     .run(
       fields.name ?? existing.name,
       fields.refreshSeconds === undefined ? existing.refreshSeconds : fields.refreshSeconds,
+      JSON.stringify(fields.variables ?? existing.variables),
       id,
     );
 }

@@ -210,5 +210,8 @@ export async function planChart(prompt: string, scope?: string[]): Promise<Chart
 
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") throw new Error("Model did not return a chart spec");
-  return chartSpecSchema.parse(block.input);
+  const parsed = chartSpecSchema.parse(block.input);
+  // linkTo/thresholds/cacheSeconds are user-configured in SpecControls after
+  // the fact, not something worth asking the model to guess at — default null.
+  return { ...parsed, linkTo: null, thresholds: null, cacheSeconds: null };
 }

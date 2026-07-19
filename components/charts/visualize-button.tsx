@@ -43,6 +43,9 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
       xField: best.xField,
       yFields: best.yFields,
       seriesField: best.seriesField,
+      linkTo: null,
+      thresholds: null,
+      cacheSeconds: null,
     });
     setSavedTo(null);
     setOpen(true);

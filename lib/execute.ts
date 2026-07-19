@@ -7,6 +7,7 @@ import { getConnection, logAudit } from "@/lib/metadata/store";
 import { getClient } from "@/lib/db/pools";
 import { runFederated } from "@/lib/federation/duckdb";
 import { getDialect } from "@/app/api/database/registry";
+import { cacheKeyFor, getCached, setCached } from "@/lib/query-cache";
 
 // minimal OID → type-name map for result column labels
 const OID_TYPES: Record<number, string> = {
@@ -66,6 +67,22 @@ export async function runGuardedQuery(req: QueryRequest, actor = "admin"): Promi
     throw new GuardError("Federated queries must use the duckdb dialect");
   }
 
+  const cacheKey = req.cacheSeconds ? cacheKeyFor(req) : null;
+  if (cacheKey) {
+    const cached = getCached(cacheKey);
+    if (cached) {
+      logAudit({
+        actor,
+        action: "query_cached",
+        sql: req.sql,
+        connections: req.connections,
+        rowCount: cached.rowCount,
+        durationMs: 0,
+      });
+      return cached;
+    }
+  }
+
   const guarded = guardSql(req.sql, req.dialect);
   const started = Date.now();
   try {
@@ -81,6 +98,7 @@ export async function runGuardedQuery(req: QueryRequest, actor = "admin"): Promi
       rowCount: result.rowCount,
       durationMs: result.durationMs,
     });
+    if (cacheKey && req.cacheSeconds) setCached(cacheKey, result, req.cacheSeconds);
     return result;
   } catch (e) {
     logAudit({

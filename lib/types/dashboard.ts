@@ -25,6 +25,26 @@ export const CHART_TYPES = {
 
 export type ChartType = keyof typeof CHART_TYPES;
 
+// Row/point click on this panel navigates to the target table's record page
+// (component/browse's recordHref) instead of doing nothing. keyField is the
+// query result column holding the id value; keyColumn is the target table's
+// column to match it against (usually its effective primary key).
+export interface ChartLinkTarget {
+  connection: string;
+  schema?: string | null;
+  table: string;
+  keyField: string;
+  keyColumn: string;
+}
+
+// Stat/gauge value coloring. highIsBad flips which threshold direction reads
+// as "bad" (e.g. error rate vs. uptime %).
+export interface ChartThresholds {
+  warn: number | null;
+  crit: number | null;
+  highIsBad: boolean;
+}
+
 export interface ChartSpec {
   title: string;
   chartType: ChartType;
@@ -35,6 +55,12 @@ export interface ChartSpec {
   xField: string | null;
   yFields: string[];
   seriesField: string | null; // categorical column that splits into series
+  linkTo: ChartLinkTarget | null;
+  thresholds: ChartThresholds | null;
+  // Server-side query-result cache TTL in seconds — null/0 means always
+  // re-execute (today's behavior). Distinct from the dashboard's
+  // refreshSeconds, which only controls how often the browser re-asks.
+  cacheSeconds: number | null;
 }
 
 export interface Panel {
@@ -50,12 +76,49 @@ export interface Panel {
   h: number;
 }
 
+// A dropdown option's displayed label can differ from the value actually
+// substituted into SQL (e.g. label "Pending orders", value "pending").
+export interface VariableOption {
+  label: string;
+  value: string;
+}
+
+// A "select" variable's option list either comes from a hand-typed list
+// (static) or is fetched live via /api/query (query) — e.g. "every distinct
+// status in the orders table" instead of an enum that goes stale. valueField
+// is the output column substituted into SQL; labelField (defaults to
+// valueField when null) is only for display, e.g. an id/name pair.
+export type SelectSource =
+  | { kind: "static"; options: VariableOption[] }
+  | {
+      kind: "query";
+      target: QueryTarget;
+      connections: string[];
+      sql: string;
+      dialect: SqlDialect;
+      valueField: string | null;
+      labelField: string | null;
+    };
+
+// Dashboard-wide filter, substituted into panel SQL via {{name}} before the
+// panel's query runs. Deliberately just two types — a free-text value and a
+// dropdown (static or query-backed) — rather than a wide menu of variable
+// kinds; each is meant to be fully supported rather than a thin stub.
+// name is the token used in SQL ({{name}}) — must stay identifier-shaped
+// (\w+) since it's matched by that regex in substituteVariables. label is
+// purely the human-readable text shown in the toolbar/settings list, so a
+// variable can be named `status` but labeled "Order status".
+export type DashboardVariable =
+  | { name: string; label: string; type: "text"; value: string }
+  | { name: string; label: string; type: "select"; source: SelectSource; value: string };
+
 export interface Dashboard {
   id: string;
   name: string;
   refreshSeconds: number | null;
   createdAt: string;
   panels: Panel[];
+  variables: DashboardVariable[];
   // Per-requesting-user pin state (dashboard_pins table) — stamped onto API
   // responses by the dashboards routes, absent in raw store reads.
   pinned?: boolean;
