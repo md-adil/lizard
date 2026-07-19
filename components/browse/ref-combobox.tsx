@@ -6,6 +6,7 @@
 // re-implementing the refs-search fetch + dropdown.
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { dataApiUrl } from "./data-api";
 import {
   Combobox,
@@ -15,6 +16,7 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import { InputGroupAddon } from "@/components/ui/input-group";
 
 export interface RefTarget {
   connection: string;
@@ -67,7 +69,7 @@ export function RefCombobox({
 }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const { data: options } = useRefOptions(target, search, open);
+  const { data: options, isFetching } = useRefOptions(target, search, open);
   // resolves the label of a pre-existing value the user never searched for
   // (e.g. a row loaded with a value that isn't in the current result page)
   const { data: initial } = useRefOptions(target, value ?? "", !!value && !open);
@@ -102,7 +104,13 @@ export function RefCombobox({
       filter={null}
       itemToStringLabel={(id) => (id ? (labels[id] ?? id) : nullable ? "∅ null" : "")}
     >
-      <ComboboxInput placeholder={placeholder ?? `Search ${target.table}…`} className={className} />
+      <ComboboxInput placeholder={placeholder ?? `Search ${target.table}…`} className={className} showClear>
+        {isFetching && (
+          <InputGroupAddon align="inline-start">
+            <Loader2 className="size-3.5 animate-spin" />
+          </InputGroupAddon>
+        )}
+      </ComboboxInput>
       <ComboboxContent>
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>

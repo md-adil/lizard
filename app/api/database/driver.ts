@@ -35,9 +35,14 @@ export interface Dialect {
   // PG: `expr::text`; MySQL: `CAST(expr AS CHAR)`.
   castToText(expr: string): string;
 
-  // Cast an expression to an (already sanitized) type name.
-  // PG: `expr::type`; MySQL: `CAST(expr AS type)`.
-  cast(expr: string, type: string): string;
+  // Cast an expression to an (already sanitized) type name. `typeSchema`,
+  // when given, is the schema the named type itself lives in (e.g. an enum
+  // shared across every tenant schema in a schema-per-tenant layout) — an
+  // unqualified type name only resolves via the connection's search_path,
+  // which a per-tenant connection may not include.
+  // PG: `expr::type` (or `expr::schema.type` when typeSchema is given);
+  // MySQL: `CAST(expr AS type)` (typeSchema is ignored — no type namespace).
+  cast(expr: string, type: string, typeSchema?: string | null): string;
 
   // A case-insensitive LIKE predicate: `expr` matched against the bound
   // `placeholder`. PG: `expr::text ILIKE ph`; MySQL: `LOWER(expr) LIKE LOWER(ph)`.

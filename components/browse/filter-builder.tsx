@@ -16,6 +16,7 @@ import { ToggleInput } from "@/components/ui/toggle-input";
 import { DataSelect } from "@/components/ui/data-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
+import { Filter } from "lucide-react";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
 
@@ -373,27 +374,20 @@ function ConditionRow({
               onClose={() => setBrowsing(false)}
             />
           )}
-          {cond.value ? (
-            <span className="tag" style={{ color: "var(--primary)" }}>
-              {refLabels[strValue(cond.value)] ?? cond.value}
-              <Button
-                variant="ghost"
-                className="ml-1.5"
-
-                onClick={() => onChange({ ...cond, value: "" })}
-              >
-                ✕
-              </Button>
-            </span>
-          ) : (
-            <RefCombobox
-              target={cm.ref!}
-              className="flex-1 min-w-35"
-              onSelect={(id, label) => {
-                setRefLabels((m) => ({ ...m, [id]: label ?? id }));
-                onChange({ ...cond, value: id });
-              }}
-            />
+          <RefCombobox
+            target={cm.ref!}
+            value={strValue(cond.value)}
+            nullable={cm.col.nullable}
+            className="flex-1 min-w-35"
+            onSelect={(id, label) => {
+              setRefLabels((m) => ({ ...m, [id]: label ?? id }));
+              onChange({ ...cond, value: id });
+            }}
+          />
+          {cond.value && (
+            <Button variant="ghost" title="Clear" onClick={() => onChange({ ...cond, value: "" })}>
+              ✕
+            </Button>
           )}
           <Button
             variant="secondary"
@@ -528,7 +522,10 @@ export function FilterPanel({
     if (value.conditions.length > 0) return value;
     const col = defaultColumn();
     if (!col) return value;
-    return { ...value, conditions: [{ column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }] };
+    return {
+      ...value,
+      conditions: [{ column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }],
+    };
   });
 
   const complete = (s: FilterSet): FilterSet => ({
@@ -660,45 +657,6 @@ export function FilterPanel({
           Apply filters
         </Button>
       </div>
-    </div>
-  );
-}
-
-// Trigger button + inline FilterPanel (standalone, self-contained).
-export function FilterBuilder({
-  columns,
-  target,
-  value,
-  onChange,
-}: {
-  columns: ColumnMeta[];
-  target: FilterTarget;
-  value: FilterSet;
-  onChange: (set: FilterSet) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const activeCount = value.conditions.filter(isComplete).length;
-
-  return (
-    <div>
-      <Button
-        variant="secondary"
-        className="shrink-0"
-
-        style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-        onClick={() => setOpen((o) => !o)}
-      >
-        ⛃ Filter
-        {activeCount > 0 && (
-          <span className="ml-1 tag" style={{ fontSize: 10, color: "var(--primary)" }}>
-            {activeCount}
-          </span>
-        )}
-        <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
-      </Button>
-      {open && (
-        <FilterPanel columns={columns} target={target} value={value} onChange={onChange} onClose={() => setOpen(false)} />
-      )}
     </div>
   );
 }

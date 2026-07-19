@@ -19,8 +19,9 @@ export const postgresDialect: Dialect = {
     return `${expr}::text`;
   },
 
-  cast(expr, type) {
-    return `${expr}::${type}`;
+  cast(expr, type, typeSchema) {
+    const qualifiedType = typeSchema ? `${this.quoteIdent(typeSchema)}.${type}` : type;
+    return `${expr}::${qualifiedType}`;
   },
 
   caseInsensitiveLike(expr, placeholder) {
@@ -70,6 +71,8 @@ export const postgresDialect: Dialect = {
         return { status: 400, message: `Invalid value format: ${err.message}` };
       case "42501":
         return { status: 403, message: "The write role lacks permission for this operation" };
+      case "42704":
+        return { status: 400, message: `Referenced type or object does not exist${err.message ? `: ${err.message}` : ""}` };
       default:
         return null;
     }

@@ -63,10 +63,14 @@ export function isComplete(c: FilterCondition): boolean {
   return !isEmptyValue(c.value);
 }
 
-// sanitized column type for casting text params to the column's type
-function castType(table: TableInfo, column: string): string {
+// sanitized column type for casting text params to the column's type, plus
+// the schema the type itself is defined in (enums only — see
+// ColumnInfo.enumSchema) so a schema-per-tenant connection whose search_path
+// doesn't cover the type's home schema can still resolve it.
+function castType(table: TableInfo, column: string): { type: string; schema: string | null } {
   const col = table.columns.find((c) => c.name === column);
-  return (col?.udtName ?? "text").replace(/[^a-z0-9_ ]/gi, "") || "text";
+  const type = (col?.udtName ?? "text").replace(/[^a-z0-9_ ]/gi, "") || "text";
+  return { type, schema: col?.enumSchema ?? null };
 }
 
 // Whether a value already carries the column's native JS type, so it can be
@@ -122,9 +126,11 @@ export function buildFilterClause(
     return dialect.placeholder(startIndex + values.length);
   };
   // binds a value natively when it's already the column's native JS type
-  // (see bindsNative above), otherwise falls back to the text-cast round-trip.
-  const bindOrCast = (cast: string, raw: unknown) =>
-    bindsNative(cast, raw) ? push(raw) : dialect.cast(dialect.castToText(push(String(raw))), cast);
+  // (see bindsNative above), otherwise casts the bound (already-stringified)
+  // parameter straight to the column's type — no need to round-trip through
+  // ::text first, since the parameter is text already.
+  const bindOrCast = (cast: { type: string; schema: string | null }, raw: unknown) =>
+    bindsNative(cast.type, raw) ? push(raw) : dialect.cast(push(String(raw)), cast.type, cast.schema);
 
   for (const f of conditions) {
     if (!table.columns.some((c) => c.name === f.column)) continue;
@@ -190,7 +196,7 @@ export function buildFilterClause(
         const arr = (f.values ?? []).map(String);
         if (dialect.supportsArrays) {
           // `col = ANY($1::int4[])` — the array literal is cast, not the column.
-          parts.push(`${col} = ANY(${dialect.cast(push(arr), `${cast}[]`)})`);
+          parts.push(`${col} = ANY(${dialect.cast(push(arr), `${cast.type}[]`, cast.schema)})`);
         } else {
           parts.push(`${col} IN (${arr.map((val) => bindOrCast(cast, val)).join(", ")})`);
         }

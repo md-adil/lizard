@@ -156,7 +156,7 @@ export function buildMatchClause(target: MatchTarget, term: string, values: unkn
       // to compare ("illegal mix of collations"). Bound bare, the parameter
       // adopts the column's own collation.
       const bound = push(term);
-      const rhs = TEXT_UDTS.has(col.udtName) ? bound : dialect.cast(dialect.castToText(bound), col.udtName);
+      const rhs = TEXT_UDTS.has(col.udtName) ? bound : dialect.cast(bound, col.udtName, col.enumSchema);
       return `${dialect.quoteIdent(col.name)} = ${rhs}`;
     }
     const c = dialect.quoteIdent(col.name);

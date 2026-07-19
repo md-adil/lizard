@@ -22,6 +22,11 @@ export interface ColumnInfo {
   ordinal: number;
   comment: string | null;
   enumValues: string[] | null;
+  // The schema the enum type itself is defined in — may differ from the
+  // column's own table schema (e.g. one enum shared by every tenant schema
+  // in a schema-per-tenant layout). Needed to schema-qualify a cast to this
+  // type; null for non-enum columns and engines with no type namespace.
+  enumSchema: string | null;
   maxLength: number | null;
   numeric: ColumnNumericInfo | null;
 }

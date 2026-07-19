@@ -121,7 +121,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   // columns (with enum values, comments, generated flag)
   const columnsRes = await pool.query(
     `SELECT c.table_schema, c.table_name, c.column_name, c.ordinal_position,
-            c.is_nullable, c.column_default, c.data_type, c.udt_name,
+            c.is_nullable, c.column_default, c.data_type, c.udt_name, c.udt_schema,
             c.character_maximum_length, c.numeric_precision, c.numeric_scale,
             (c.is_generated = 'ALWAYS' OR c.identity_generation IS NOT NULL
              OR c.column_default LIKE 'nextval(%') AS is_generated,
@@ -207,6 +207,7 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
       ordinal: c.ordinal_position,
       comment: c.comment,
       enumValues: c.enum_values ?? null,
+      enumSchema: c.enum_values ? c.udt_schema : null,
       maxLength: c.character_maximum_length,
       // Postgres has no unsigned integer types.
       numeric:

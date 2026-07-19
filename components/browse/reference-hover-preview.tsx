@@ -7,6 +7,8 @@
 // one eagerly would be its own N+1 problem.
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { Eye } from "lucide-react";
 import {
   PreviewCard,
   PreviewCardTrigger,
@@ -14,8 +16,11 @@ import {
   PreviewCardPositioner,
   PreviewCardPopup,
 } from "@/components/ui/preview-card";
+import { Button } from "@/components/ui/button";
 import { useTableMeta, formatCell } from "./useTableMeta";
 import { dataApiUrl } from "./data-api";
+import { recordHref } from "./use-schema-param";
+import { effectiveKey } from "@/lib/introspect/heuristics";
 import { PreviewSkeleton } from "./preview-skeleton";
 
 export interface ReferenceTarget {
@@ -67,6 +72,17 @@ export function ReferenceHoverPreview({
     .filter((c) => !c.hidden && !c.hiddenInGrid && !c.redacted && c.col.name !== meta?.displayColumn)
     .slice(0, PREVIEW_FIELD_LIMIT);
 
+  const rowKey = meta ? effectiveKey(meta.table) : [];
+  const viewHref =
+    data && rowKey.length > 0
+      ? recordHref({
+          connection: target.connection,
+          schema: target.schema,
+          table: target.table,
+          params: { pk: JSON.stringify(Object.fromEntries(rowKey.map((k) => [k, data[k]]))) },
+        })
+      : null;
+
   return (
     <PreviewCard open={open} onOpenChange={setOpen}>
       <PreviewCardTrigger render={<span className="inline" />}>{children}</PreviewCardTrigger>
@@ -79,8 +95,22 @@ export function ReferenceHoverPreview({
               <p className="text-[12px] text-muted-foreground">Row not found.</p>
             ) : (
               <div className="space-y-1">
-                <div className="mb-1.5 truncate text-[13px] font-semibold">
-                  {meta?.displayColumn ? String(data[meta.displayColumn] ?? "—") : String(value)}
+                <div className="mb-1.5 flex min-w-0 items-center justify-between gap-1.5">
+                  <span className="truncate text-[13px] font-semibold">
+                    {meta?.displayColumn ? String(data[meta.displayColumn] ?? "—") : String(value)}
+                  </span>
+                  {viewHref && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="shrink-0"
+                      title="View row"
+                      nativeButton={false}
+                      render={<Link href={viewHref} onClick={() => setOpen(false)} />}
+                    >
+                      <Eye />
+                    </Button>
+                  )}
                 </div>
                 {previewCols.map((cm) => {
                   const v = data[cm.col.name];

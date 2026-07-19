@@ -57,7 +57,12 @@ function searchClauseFor(
   dialect: Dialect,
 ): string {
   const target = matchTargetFor(table, term, primaryKeyColumnsFor(conn, table));
-  if (target.columns.length === 0) return "";
+  // No indexed column can possibly match this term (shape mismatch, or an
+  // enum whose members it isn't one of) — that means zero rows match, not
+  // "no filter": an empty clause here would fall out of the `[filterClause,
+  // searchClause].filter(Boolean)` join in listRows/exportRows and silently
+  // return the whole unfiltered table for what the user typed as a search.
+  if (target.columns.length === 0) return "1 = 0";
   return buildMatchClause(target, term, values, dialect);
 }
 
