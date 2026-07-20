@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 // Drop-in replacement for DataSelect (same getValue/getLabel/placeholder
 // prop shape) backed by Combobox instead of Select, so every variable-related
@@ -151,11 +152,16 @@ export function DateRangeField({
   to,
   includeTime = false,
   onChange,
+  triggerClassName,
 }: {
   from: string;
   to: string;
   includeTime?: boolean;
   onChange: (patch: { from: string; to: string }) => void;
+  // Merged onto the trigger button — lets a caller that's grouping this with
+  // other controls (e.g. the dashboard header's button group) override its
+  // rounding/border without reaching into the Popover internals.
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined);
@@ -200,7 +206,7 @@ export function DateRangeField({
 
   return (
     <Popover open={open} onOpenChange={openChange}>
-      <PopoverTrigger render={<Button variant="secondary" size="sm" className="justify-start gap-1.5" />}>
+      <PopoverTrigger render={<Button variant="secondary" size="sm" className={cn("justify-start gap-1.5", triggerClassName)} />}>
         <CalendarDays className="size-3.5" />
         {from && to ? `${from} – ${to}` : "Pick a range"}
       </PopoverTrigger>
@@ -216,29 +222,28 @@ export function DateRangeField({
           </div>
           <div className="flex flex-col">
             <Calendar mode="range" selected={draftRange} onSelect={setDraftRange} numberOfMonths={2} />
-            {includeTime && (
-              <div
-                className="flex items-center justify-between gap-3 p-3 border-t"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <Input
-                  type="time"
-                  className="w-34"
-                  value={draftFromTime}
-                  disabled={!draftRange?.from}
-                  onChange={(e) => setDraftFromTime(e.target.value)}
-                />
-                <span style={{ color: "var(--muted-foreground-faint)" }}>–</span>
-                <Input
-                  type="time"
-                  className="w-34"
-                  value={draftToTime}
-                  disabled={!draftRange?.to}
-                  onChange={(e) => setDraftToTime(e.target.value)}
-                />
-              </div>
-            )}
-            <div className="flex justify-end p-3 border-t" style={{ borderColor: "var(--border)" }}>
+            <div className="flex items-center justify-between gap-3 p-3 border-t" style={{ borderColor: "var(--border)" }}>
+              {includeTime ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="time"
+                    className="w-34"
+                    value={draftFromTime}
+                    disabled={!draftRange?.from}
+                    onChange={(e) => setDraftFromTime(e.target.value)}
+                  />
+                  <span style={{ color: "var(--muted-foreground-faint)" }}>–</span>
+                  <Input
+                    type="time"
+                    className="w-34"
+                    value={draftToTime}
+                    disabled={!draftRange?.to}
+                    onChange={(e) => setDraftToTime(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <span />
+              )}
               <Button size="sm" disabled={!draftRange?.from || !draftRange?.to} onClick={apply}>
                 Apply
               </Button>
@@ -253,7 +258,15 @@ export function DateRangeField({
 // Commits on blur/Enter rather than on every keystroke — same reasoning as
 // DateRangeField's Apply button, just via the more idiomatic gesture for a
 // text field (matches the dashboard-name-rename input elsewhere in the app).
-function TextVariableInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function TextVariableInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = () => {
@@ -261,7 +274,7 @@ function TextVariableInput({ value, onChange }: { value: string; onChange: (valu
   };
   return (
     <Input
-      className="w-36 h-8"
+      className={cn("w-36 h-8", className)}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -276,12 +289,17 @@ function TextVariableInput({ value, onChange }: { value: string; onChange: (valu
 export function VariableValueControl({
   variable,
   onChange,
+  className,
 }: {
   variable: DashboardVariable;
   onChange: (patch: Partial<DashboardVariable>) => void;
+  // Reaches the actual bordered control (button/input/trigger) — for a
+  // caller visually grouping this with sibling controls (e.g. the dashboard
+  // header's button group) to override rounding/borders.
+  className?: string;
 }) {
   if (variable.type === "text") {
-    return <TextVariableInput value={variable.value} onChange={(value) => onChange({ value })} />;
+    return <TextVariableInput value={variable.value} onChange={(value) => onChange({ value })} className={className} />;
   }
   if (variable.type === "daterange") {
     return (
@@ -290,6 +308,7 @@ export function VariableValueControl({
         to={variable.to}
         includeTime={variable.includeTime}
         onChange={(patch) => onChange(patch)}
+        triggerClassName={className}
       />
     );
   }
@@ -300,12 +319,17 @@ export function VariableValueControl({
         items={options}
         value={options.find((o) => o.value === variable.value) ?? null}
         onChange={(o) => onChange({ value: o?.value ?? "" })}
-        className="w-36"
+        className={cn("w-36", className)}
       />
     );
   }
   return (
-    <QueryBackedSelect source={variable.source} value={variable.value} onChange={(value) => onChange({ value })} />
+    <QueryBackedSelect
+      source={variable.source}
+      value={variable.value}
+      onChange={(value) => onChange({ value })}
+      className={className}
+    />
   );
 }
 
@@ -313,10 +337,12 @@ function QueryBackedSelect({
   source,
   value,
   onChange,
+  className,
 }: {
   source: Extract<DashboardVariable, { type: "select" }>["source"] & { kind: "query" };
   value: string;
   onChange: (value: string) => void;
+  className?: string;
 }) {
   const { data, isLoading, error } = useQuery<QueryResult>({
     queryKey: ["dashboard-var-options", source.sql, source.connections, source.dialect, source.target],
@@ -353,7 +379,7 @@ function QueryBackedSelect({
       items={options}
       value={options.find((o) => o.value === value) ?? null}
       onChange={(o) => onChange(o?.value ?? "")}
-      className="w-36"
+      className={cn("w-36", className)}
       loading={isLoading}
       placeholder={error ? "query failed" : "— select —"}
     />

@@ -343,7 +343,7 @@ export default function TablePage() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           <SavedViewsBar
             connectionId={meta.connectionId}
             schema={meta.resolvedSchema}
@@ -403,7 +403,7 @@ export default function TablePage() {
 
       {/* Phase 8.4 — view-type switcher (table stays the source of truth for
         pagination; alternate views render the currently-loaded page). */}
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-1 mb-3">
         {views.length > 1 && (
           <Tabs
             value={viewType}
@@ -426,7 +426,7 @@ export default function TablePage() {
           </Tabs>
         )}
         {viewType === "kanban" && groupCols.length > 1 && (
-          <div className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+          <div className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             Group by
             <ColumnsSelect
               items={groupColItems}
@@ -458,7 +458,6 @@ export default function TablePage() {
           </div>
         )}
         <span className="flex-1" />
-        {/* Phase 8.8 — auto-refresh, default off */}
         <AutoRefreshSelect value={refreshMs} onChange={setRefreshMs} />
         <Button
           variant="secondary"

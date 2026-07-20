@@ -171,6 +171,21 @@
 }
 
 
+/* Every form field across the app does <label className="label">X</label>
+   followed by its control, expecting the label to sit on its own line above
+   it — but with no rule defined, <label> fell back to the browser default
+   (display: inline), so it only "worked" wherever the control happened to be
+   wide enough to force a wrap. A field capped with a fixed max-width (e.g.
+   Dashboard settings' Name input) had room to sit beside the label instead
+   of under it. */
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
 .input {
   background: var(--background);
   border: 1px solid var(--input);

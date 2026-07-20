@@ -4,29 +4,28 @@
 // in the settings page's Variables list (app/dashboards/[id]/settings) —
 // no dialog, since the page already has the room. A "select" variable's
 // option source (static list vs. live query) is a tab within the type, not
-// a third top-level type. Prebuilt kinds are added deliberately (each fully
-// realized, e.g. "daterange" gets a real range picker) rather than growing
-// into a wide menu of thin stubs.
+// a third top-level type. The dashboard's time range is NOT one of these —
+// it's a built-in feature on every dashboard (see app/dashboards/[id]/page.tsx),
+// not something managed here.
 import { useState } from "react";
 import type { ChartSpec, DashboardVariable, QueryResult, SelectSource, VariableOption } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { SqlEditor } from "@/components/ui/sql-editor";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
 import { useCatalog } from "@/components/browse/use-catalog";
-import { SearchableSelect, optionsFromResult, DateRangeField } from "@/components/charts/variable-controls";
+import { SearchableSelect, optionsFromResult } from "@/components/charts/variable-controls";
 
-const VAR_TYPE_OPTIONS: { value: DashboardVariable["type"]; label: string }[] = [
+const VAR_TYPE_OPTIONS: { value: Exclude<DashboardVariable["type"], "daterange">; label: string }[] = [
   { value: "text", label: "Text" },
   { value: "select", label: "Select" },
-  { value: "daterange", label: "Date range" },
 ];
 
-// name must stay identifier-shaped (matched by \{\{(\w+)\}\} in
+// name must stay identifier-shaped (matched by \$\{(\w+)\} in
 // substituteVariables), so a label like "Order status" becomes "order_status".
 function slugify(label: string): string {
   return label
@@ -78,23 +77,12 @@ function OptionsEditor({ options, onChange }: { options: VariableOption[]; onCha
   );
 }
 
-// A date range is a single dashboard-wide concept (like Grafana's built-in
-// time picker), not something you'd name differently per instance — so
-// unlike text/select it gets a fixed name/label instead of user input.
-const DATERANGE_NAME = "datetime";
-const DATERANGE_LABEL = "Date range";
-
 export function VariableFormCard({
   initial,
-  disableDateRange = false,
   onCancel,
   onSave,
 }: {
   initial: DashboardVariable | null;
-  // Hide "Date range" from the type picker — passed by the settings page
-  // when another date range variable already exists (there's only one
-  // dashboard-wide range, so a second one would collide on DATERANGE_NAME).
-  disableDateRange?: boolean;
   onCancel: () => void;
   onSave: (variable: DashboardVariable) => void | Promise<void>;
 }) {
@@ -104,15 +92,13 @@ export function VariableFormCard({
   const queryConnections = (catalog?.connections ?? []).filter((c) => !c.error && c.engine !== "mongo");
   const [preview, setPreview] = useState<{ result?: QueryResult; error?: string } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
-  const typeOptions = VAR_TYPE_OPTIONS.filter((o) => o.value !== "daterange" || !disableDateRange);
 
-  const setType = (type: DashboardVariable["type"]) => {
-    setDraft((d): DashboardVariable => {
-      if (type === "text") return { name: d.name, label: d.label, type, value: "" };
-      if (type === "daterange")
-        return { name: DATERANGE_NAME, label: DATERANGE_LABEL, type, from: "", to: "", includeTime: false };
-      return { name: d.name, label: d.label, type, source: defaultStaticSource(), value: "" };
-    });
+  const setType = (type: Exclude<DashboardVariable["type"], "daterange">) => {
+    setDraft((d): DashboardVariable =>
+      type === "text"
+        ? { name: d.name, label: d.label, type, value: "" }
+        : { name: d.name, label: d.label, type, source: defaultStaticSource(), value: "" },
+    );
     setPreview(null);
   };
 
@@ -164,12 +150,11 @@ export function VariableFormCard({
     querySource && preview?.result ? optionsFromResult(preview.result, querySource.valueField, querySource.labelField) : [];
 
   const canSave =
-    draft.type === "daterange" ||
-    (draft.label.trim().length > 0 &&
-      /^\w+$/.test(draft.name) &&
-      (draft.type !== "select" ||
-        draft.source.kind === "static" ||
-        (draft.source.connections.length > 0 && draft.source.sql.trim().length > 0)));
+    draft.label.trim().length > 0 &&
+    /^\w+$/.test(draft.name) &&
+    (draft.type !== "select" ||
+      draft.source.kind === "static" ||
+      (draft.source.connections.length > 0 && draft.source.sql.trim().length > 0));
 
   const save = async () => {
     setSaving(true);
@@ -184,108 +169,78 @@ export function VariableFormCard({
     <Card className="p-4">
       <div className="text-[13px] font-semibold">{initial ? "Edit variable" : "New variable"}</div>
 
-      <div>
-        <label className="label">Type</label>
-        <SearchableSelect
-          items={typeOptions}
-          value={typeOptions.find((o) => o.value === draft.type) ?? null}
-          onChange={(o) => o && setType(o.value)}
-          className="w-full sm:w-64"
-        />
-      </div>
+      <FieldGroup>
+        <Field>
+          <FieldLabel>Type</FieldLabel>
+          <SearchableSelect
+            items={VAR_TYPE_OPTIONS}
+            value={VAR_TYPE_OPTIONS.find((o) => o.value === draft.type) ?? null}
+            onChange={(o) => o && setType(o.value)}
+            className="w-full sm:w-64"
+          />
+        </Field>
 
-      {/* A date range is one fixed dashboard-wide concept (Grafana's built-in
-          time picker) — no name/label to pick, unlike text/select which can
-          have any number of differently-named instances. */}
-      {draft.type !== "daterange" && (
         <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label className="label">Label</label>
+          <Field>
+            <FieldLabel>Label</FieldLabel>
             <Input value={draft.label} placeholder="Order status" autoFocus onChange={(e) => setLabel(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Name</label>
+          </Field>
+          <Field>
+            <FieldLabel>Name</FieldLabel>
             <Input
               value={draft.name}
               placeholder="status"
               onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }) as DashboardVariable)}
             />
-          </div>
+          </Field>
         </div>
-      )}
 
-      {draft.type === "daterange" && (
-        <div className="space-y-3">
-          <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer">
-            <Switch
-              size="sm"
-              checked={draft.includeTime}
-              onCheckedChange={(checked) =>
-                // Reset from/to on format change — a bare "yyyy-MM-dd" and a
-                // "yyyy-MM-dd HH:mm" shouldn't be silently reinterpreted.
-                setDraft((d) => (d.type === "daterange" ? { ...d, includeTime: checked, from: "", to: "" } : d))
-              }
+        {draft.type === "text" && (
+          <Field>
+            <FieldLabel>Default value</FieldLabel>
+            <Input
+              value={draft.value}
+              onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }) as DashboardVariable)}
             />
-            Include time
-          </label>
+          </Field>
+        )}
+
+        {draft.type === "select" && (
           <div>
-            <label className="label">Default range</label>
-            <DateRangeField
-              from={draft.from}
-              to={draft.to}
-              includeTime={draft.includeTime}
-              onChange={(patch) => setDraft((d) => ({ ...d, ...patch }) as DashboardVariable)}
-            />
-          </div>
-        </div>
-      )}
-
-      {draft.type === "text" && (
-        <div>
-          <label className="label">Default value</label>
-          <Input
-            value={draft.value}
-            onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }) as DashboardVariable)}
-          />
-        </div>
-      )}
-
-      {draft.type === "select" && (
-        <div>
-          <Tabs value={draft.source.kind} onValueChange={(v) => setSourceKind(v as SelectSource["kind"])} className="mb-3">
-            <TabsList>
-              <TabsTrigger value="static">Static list</TabsTrigger>
-              <TabsTrigger value="query">From query</TabsTrigger>
-            </TabsList>
-          </Tabs>
+            <Tabs value={draft.source.kind} onValueChange={(v) => setSourceKind(v as SelectSource["kind"])} className="mb-3">
+              <TabsList>
+                <TabsTrigger value="static">Static list</TabsTrigger>
+                <TabsTrigger value="query">From query</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
           {draft.source.kind === "static" && (
-            <div className="space-y-3">
-              <div>
-                <label className="label">Options</label>
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Options</FieldLabel>
                 <OptionsEditor
                   options={draft.source.options}
                   onChange={(options) =>
                     setDraft((d) => (d.type === "select" ? { ...d, source: { kind: "static", options } } : d))
                   }
                 />
-              </div>
-              <div>
-                <label className="label">Default value</label>
+              </Field>
+              <Field>
+                <FieldLabel>Default value</FieldLabel>
                 <SearchableSelect
                   items={draft.source.options}
                   value={draft.source.options.find((o) => o.value === draft.value) ?? null}
                   onChange={(o) => setDraft((d) => ({ ...d, value: o?.value ?? "" }) as DashboardVariable)}
                   className="w-full"
                 />
-              </div>
-            </div>
+              </Field>
+            </FieldGroup>
           )}
 
           {querySource && (
-            <div className="space-y-3">
-              <div>
-                <label className="label">Connection</label>
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Connection</FieldLabel>
                 <SearchableSelect
                   items={queryConnections}
                   value={queryConnections.find((c) => c.connectionName === querySource.connections[0]) ?? null}
@@ -300,15 +255,15 @@ export function VariableFormCard({
                   placeholder="— connection —"
                   className="w-full"
                 />
-              </div>
-              <div>
-                <label className="label">SQL</label>
+              </Field>
+              <Field>
+                <FieldLabel>SQL</FieldLabel>
                 <SqlEditor
                   placeholder="SELECT id, name FROM statuses"
                   value={querySource.sql}
                   onChange={(sql) => patchQuerySource({ sql })}
                 />
-              </div>
+              </Field>
               <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
@@ -334,8 +289,8 @@ export function VariableFormCard({
               )}
               {preview?.result && (
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">Value column</label>
+                  <Field>
+                    <FieldLabel>Value column</FieldLabel>
                     <ColumnsSelect
                       items={preview.result.columns}
                       value={preview.result.columns.find((c) => c.name === querySource.valueField) ?? null}
@@ -343,9 +298,9 @@ export function VariableFormCard({
                       placeholder={preview.result.columns[0]?.name ?? "— column —"}
                       className="w-full"
                     />
-                  </div>
-                  <div>
-                    <label className="label">Label column (optional)</label>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Label column (optional)</FieldLabel>
                     <ColumnsSelect
                       items={preview.result.columns}
                       value={preview.result.columns.find((c) => c.name === querySource.labelField) ?? null}
@@ -353,7 +308,7 @@ export function VariableFormCard({
                       placeholder="same as value column"
                       className="w-full"
                     />
-                  </div>
+                  </Field>
                 </div>
               )}
               {preview?.result && (
@@ -375,25 +330,17 @@ export function VariableFormCard({
                   ))}
                 </div>
               )}
-            </div>
+            </FieldGroup>
           )}
         </div>
       )}
+      </FieldGroup>
 
       <p className="text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>
         {draft.type === "select" &&
           draft.source.kind === "query" &&
           "The value column is substituted into panel SQL; the label column is only for display. "}
-        {draft.type === "daterange" ? (
-          <>
-            Use <span className="code">{`{{${DATERANGE_NAME}.from}}`}</span>/
-            <span className="code">{`{{${DATERANGE_NAME}.to}}`}</span> in panel SQL.
-          </>
-        ) : (
-          <>
-            Use <span className="code">{`{{${draft.name || "name"}}}`}</span> in panel SQL.
-          </>
-        )}
+        Use <span className="code">{`\${${draft.name || "name"}}`}</span> in panel SQL.
       </p>
 
       <div className="flex justify-end gap-2">

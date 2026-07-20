@@ -15,10 +15,19 @@ import { useTheme, type ThemeName } from "@/components/useTheme";
 // click there doesn't name a single filterable value as cleanly.
 const CROSS_FILTER_TYPES = new Set<ChartSpec["chartType"]>(["bar", "bar-stacked", "bar-horizontal", "pie", "donut"]);
 
+// Continuous-axis chart types where a drag-select unambiguously names a time
+// window — wired to set the dashboard's datetime variable (Grafana's
+// "drag the graph to zoom the time range"). Deliberately disjoint from
+// CROSS_FILTER_TYPES (bar/pie use click, these use drag) so the two gestures
+// never compete for the same pointer interaction on one chart.
+const TIME_BRUSH_TYPES = new Set<ChartSpec["chartType"]>(["line", "area", "area-stacked", "scatter"]);
+
 // Minimal shape of the echarts-for-react instance passed to onChartReady —
-// only what the PNG-export button needs, so no echarts type dependency here.
+// only what the PNG-export button and the time-brush setup need, so no
+// echarts type dependency here.
 export interface EchartsExportHandle {
   getDataURL(opts: { pixelRatio?: number; backgroundColor?: string }): string;
+  dispatchAction?(action: Record<string, unknown>): void;
 }
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
@@ -242,7 +251,7 @@ function buildSeriesData(spec: ChartSpec, result: QueryResult) {
       series.push({ name: y, data: xValues.map((x) => byX.get(x) ?? null) });
     }
   }
-  return { xValues, series };
+  return { xValues, series, temporal: !!temporal };
 }
 
 export function ChartRenderer({
@@ -250,6 +259,7 @@ export function ChartRenderer({
   result,
   height = 300,
   onCrossFilter,
+  onTimeRangeSelect,
   onReady,
 }: {
   spec: ChartSpec;
@@ -259,6 +269,11 @@ export function ChartRenderer({
   // matches a dashboard variable's name — the dashboard page owns the actual
   // variable state, this just reports "field X was clicked with value Y".
   onCrossFilter?: (field: string, value: string) => void;
+  // Called when a drag-select on a temporal line/area/scatter chart settles —
+  // reports the selected [from, to] as the same "yyyy-MM-dd" strings the
+  // chart's own x-axis uses. The dashboard page decides whether there's a
+  // datetime variable to update; this component doesn't know either way.
+  onTimeRangeSelect?: (from: string, to: string) => void;
   // Called once the ECharts instance mounts, so the panel's export button can
   // rasterize it to PNG on demand.
   onReady?: (instance: EchartsExportHandle) => void;
@@ -266,6 +281,9 @@ export function ChartRenderer({
   const themeName = useTheme();
   const t = CHART_THEMES[themeName];
   const router = useRouter();
+
+  const seriesData = useMemo(() => buildSeriesData(spec, result), [spec, result]);
+  const enableTimeBrush = TIME_BRUSH_TYPES.has(spec.chartType) && seriesData.temporal && !!onTimeRangeSelect;
 
   const option = useMemo(() => {
     if (spec.chartType === "stat" || spec.chartType === "table") return null;
@@ -275,7 +293,7 @@ export function ChartRenderer({
     if (spec.chartType === "gauge") return buildGaugeOption(spec, result, t);
     if (spec.chartType === "heatmap") return buildHeatmapOption(spec, result, t);
 
-    const { xValues, series } = buildSeriesData(spec, result);
+    const { xValues, series } = seriesData;
     const multi = series.length > 1;
     const horizontal = spec.chartType === "bar-horizontal";
     const categoryAxis = { type: "category" as const, data: xValues, ...axisStyle(t), splitLine: { show: false } };
@@ -290,6 +308,20 @@ export function ChartRenderer({
       legend: multi ? { top: 0, left: 0, textStyle: { color: t.textDim, fontSize: 11 }, icon: "circle" } : undefined,
       xAxis: horizontal ? valueAxis : categoryAxis,
       yAxis: horizontal ? categoryAxis : valueAxis,
+      // Lets the user drag directly across the plotted data to select a time
+      // window (see the takeGlobalCursor dispatch in handleChartReady below,
+      // which puts the chart in brush mode without needing a toolbox button).
+      ...(enableTimeBrush
+        ? {
+            brush: {
+              xAxisIndex: 0 as const,
+              brushType: "lineX" as const,
+              throttleType: "debounce" as const,
+              throttleDelay: 300,
+              removeOnClick: true,
+            },
+          }
+        : {}),
     };
     if (spec.chartType === "bar" || spec.chartType === "bar-stacked" || spec.chartType === "bar-horizontal") {
       const stacked = spec.chartType === "bar-stacked";
@@ -333,7 +365,7 @@ export function ChartRenderer({
         areaStyle: spec.chartType === "area" || stacked ? { opacity: stacked ? 0.5 : 0.18 } : undefined,
       })),
     };
-  }, [spec, result, t]);
+  }, [spec, result, t, seriesData, enableTimeBrush]);
 
   const isAxisChart = ["line", "area", "area-stacked", "bar", "bar-stacked", "bar-horizontal", "scatter"].includes(
     spec.chartType,
@@ -454,14 +486,39 @@ export function ChartRenderer({
     : spec.chartType === "pie" || spec.chartType === "donut"
       ? (spec.xField ?? result.columns[0]?.name ?? null)
       : spec.xField;
-  const onEvents =
-    onCrossFilter && crossFilterField
-      ? {
-          click: (params: { name?: string }) => {
-            if (params.name) onCrossFilter(crossFilterField, params.name);
-          },
-        }
-      : undefined;
+
+  const onEvents: Record<string, (params: never) => void> = {};
+  if (onCrossFilter && crossFilterField) {
+    onEvents.click = (params: { name?: string }) => {
+      if (params.name) onCrossFilter(crossFilterField, params.name);
+    };
+  }
+  if (enableTimeBrush) {
+    // coordRange is the brush box's span in the x-axis's own data coordinates
+    // — for a category axis that's fractional indices into xValues, not
+    // dates, so round/clamp back to real indices before reading the dates out.
+    onEvents.brushEnd = (params: { areas?: { coordRange?: [number, number] }[] }) => {
+      const range = params?.areas?.[0]?.coordRange;
+      const xValues = seriesData.xValues;
+      if (!range || xValues.length === 0) return;
+      const lo = Math.max(0, Math.min(xValues.length - 1, Math.round(Math.min(range[0], range[1]))));
+      const hi = Math.max(0, Math.min(xValues.length - 1, Math.round(Math.max(range[0], range[1]))));
+      const from = xValues[lo];
+      const to = xValues[hi];
+      if (from !== undefined && to !== undefined && from !== to) onTimeRangeSelect!(from, to);
+    };
+  }
+
+  // Puts the chart in brush-select mode as soon as it mounts, so dragging
+  // across the plotted data works immediately — no toolbox button to find
+  // first (that's the "click, drag directly on the chart" gesture the
+  // dashboard's Apply-gated date-range picker can't offer on its own).
+  const handleChartReady = (inst: EchartsExportHandle) => {
+    onReady?.(inst);
+    if (enableTimeBrush) {
+      inst.dispatchAction?.({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
+    }
+  };
 
   return (
     <ReactECharts
@@ -470,7 +527,7 @@ export function ChartRenderer({
       style={{ height, width: "100%" }}
       notMerge
       onEvents={onEvents}
-      onChartReady={onReady}
+      onChartReady={handleChartReady}
     />
   );
 }

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { GridLayout, useContainerWidth, type Layout, type GridLayoutProps } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import Link from "next/link";
-import { Settings2, GripVertical, Pin, Download } from "lucide-react";
+import { Settings2, GripVertical, Pin, Download, Edit } from "lucide-react";
 import type { ChartSpec, Dashboard, DashboardVariable, Panel, QueryResult, SqlDialect } from "@/lib/types";
 import { ChartRenderer, type EchartsExportHandle } from "@/components/charts/chart-renderer";
 import { SpecControls } from "@/components/charts/spec-controls";
@@ -15,6 +15,7 @@ import { ResultGrid } from "@/components/ai/result-grid";
 import { VariableValueControl } from "@/components/charts/variable-controls";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SqlEditor, SqlCode } from "@/components/ui/sql-editor";
@@ -36,7 +37,14 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useCatalog } from "@/components/browse/use-catalog";
 import { useDashboards } from "@/components/charts/use-dashboards";
-import { substituteVariables, applySearchParamsToVariables, withVariablesInSearchParams } from "@/lib/dashboard-variables";
+import {
+  substituteVariables,
+  applySearchParamsToVariables,
+  withVariablesInSearchParams,
+  applySearchParamsToDatetime,
+  withDatetimeInSearchParams,
+  defaultDatetimeVariable,
+} from "@/lib/dashboard-variables";
 import { resultToCsv, downloadBlob } from "@/lib/csv";
 
 const SQL_TARGET_OPTIONS: { value: "single" | "federated"; label: string }[] = [
@@ -62,11 +70,12 @@ function PanelCard({
   onDuplicate,
   onCopyTo,
   onCrossFilter,
+  onTimeRangeSelect,
 }: {
   panel: Panel;
   refreshSeconds: number | null;
   // Current values of the dashboard's variables — substituted into spec.sql
-  // ({{name}} tokens) before every fetch, and part of the query key so
+  // (${name} tokens) before every fetch, and part of the query key so
   // changing one refetches only the panels whose SQL actually uses it... in
   // practice all panels share one key shape, so all refetch, but only the
   // ones referencing the token see different SQL.
@@ -80,6 +89,7 @@ function PanelCard({
   onDuplicate: () => void;
   onCopyTo: (dashboardId: string, dashboardName: string) => void;
   onCrossFilter: (field: string, value: string) => void;
+  onTimeRangeSelect: (from: string, to: string) => void;
 }) {
   const qc = useQueryClient();
   const { spec } = panel;
@@ -146,7 +156,9 @@ function PanelCard({
         {/* Export stays available in view mode too — it's a read action, not
             an edit one. */}
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="secondary" size="sm" aria-label="Export panel" title="Export" />}>
+          <DropdownMenuTrigger
+            render={<Button variant="secondary" size="sm" aria-label="Export panel" title="Export" />}
+          >
             <Download className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
@@ -206,6 +218,7 @@ function PanelCard({
             result={data}
             height={panel.h * 52 - 76}
             onCrossFilter={onCrossFilter}
+            onTimeRangeSelect={onTimeRangeSelect}
             onReady={(inst) => {
               chartRef.current = inst;
             }}
@@ -653,9 +666,15 @@ export default function DashboardPage() {
   // (re)seeded from the fetched dashboard the first time it loads for a
   // given id, not on every poll refetch, or a live pick would keep getting
   // stomped back to the saved default every refreshSeconds tick. Seeded from
-  // the URL's var-* params first (so a shared/bookmarked link reproduces the
+  // the URL's ~-params first (so a shared/bookmarked link reproduces the
   // filter state it was copied with), falling back to the saved defaults.
   const [varValues, setVarValues] = useState<DashboardVariable[]>([]);
+  // The dashboard's time range — unlike varValues, this is NOT a user-managed
+  // variable (no Settings > Variables entry, nothing in Dashboard.variables).
+  // Every dashboard just has one, like Grafana's built-in time picker, always
+  // starting from the same fresh default and living only in the URL + this
+  // session state.
+  const [datetime, setDatetime] = useState(defaultDatetimeVariable());
   const varsInitializedFor = useRef<string | null>(null);
 
   const { data: dash, error } = useQuery<Dashboard>({
@@ -671,6 +690,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (dash && varsInitializedFor.current !== dash.id) {
       setVarValues(applySearchParamsToVariables(dash.variables, searchParams));
+      setDatetime(applySearchParamsToDatetime(defaultDatetimeVariable(), searchParams));
       varsInitializedFor.current = dash.id;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -679,7 +699,7 @@ export default function DashboardPage() {
   const { data: allDashboards } = useDashboards();
   const otherDashboards = (allDashboards ?? []).filter((d) => d.id !== id);
 
-  // Keeps the URL's var-* params in sync with the live values — no full
+  // Keeps the URL's ~-params in sync with the live variable values — no full
   // navigation, just the query string (scroll/panel state stays put).
   const updateVar = (name: string, patch: Partial<DashboardVariable>) =>
     setVarValues((vs) => {
@@ -689,14 +709,26 @@ export default function DashboardPage() {
       return next;
     });
 
+  // The time range gets its own plain ?from=&to= — not tied to the ~<name>
+  // variable scheme, since it isn't a variable.
+  const updateDatetime = (patch: Partial<DashboardVariable>) =>
+    setDatetime((d) => {
+      const next = { ...d, ...patch } as typeof datetime;
+      const params = withDatetimeInSearchParams(new URLSearchParams(searchParams), next);
+      router.replace(`?${params.toString()}`, { scroll: false });
+      return next;
+    });
+
   // Bar/pie click on a category whose field matches a variable's name — a
   // no-op if no such variable exists (see ChartRenderer's CROSS_FILTER_TYPES
-  // comment for why only categorical charts wire this) or if it's a date
-  // range (a single clicked category isn't a range to filter by).
+  // comment for why only categorical charts wire this).
   const crossFilter = (field: string, value: string) => {
-    const match = varValues.find((v) => v.name === field);
-    if (match && match.type !== "daterange") updateVar(field, { value });
+    if (varValues.some((v) => v.name === field)) updateVar(field, { value });
   };
+
+  // Drag-select on a temporal axis chart (line/area/scatter) — Grafana's
+  // "zoom the graph to set the dashboard time range."
+  const handleTimeRangeSelect = (from: string, to: string) => updateDatetime({ from, to });
 
   const copyPanelTo = async (p: Panel, targetId: string, targetName: string) => {
     const res = await fetch(`/api/dashboards/${targetId}/panels`, {
@@ -852,55 +884,59 @@ export default function DashboardPage() {
         className="mb-4"
         items={[{ label: "Home", link: "/" }, { label: "Dashboards", link: "/dashboards" }, { label: dash.name }]}
       />
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-1 mb-5">
         <h1 className="text-lg font-semibold">{dash.name}</h1>
         <span className="flex-1" />
+        <VariableValueControl variable={datetime} onChange={updateDatetime} />
         <AutoRefreshSelect
           value={(dash.refreshSeconds ?? 0) * 1000}
           onChange={(ms) => patch({ refreshSeconds: ms === 0 ? null : ms / 1000 })}
         />
-        <Button
-          variant="secondary"
-          aria-label={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
-          title={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
-          onClick={async () => {
-            const next = !dash.pinned;
-            qc.setQueryData<Dashboard>(["dashboard", id], (old) => (old ? { ...old, pinned: next } : old));
-            await fetch(`/api/dashboards/${id}/pin`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ pinned: next }),
-            });
-            // the sidebar's pinned list reads the ["dashboards"] cache
-            useDashboards.invalidate(qc);
-          }}
-        >
-          <Pin className={dash.pinned ? "size-3.5 fill-current" : "size-3.5"} />
-        </Button>
-        {/* Name, refresh defaults, and variables all live on the dedicated
-            settings page (Grafana's model) rather than as inline controls
-            here — this page is purely for viewing/arranging panels. */}
-        <Button
-          variant="secondary"
-          aria-label="Dashboard settings"
-          title="Dashboard settings"
-          nativeButton={false}
-          render={<Link href={`/dashboards/${id}/settings`} />}
-        >
-          <Settings2 className="size-3.5" />
-        </Button>
-        {editMode && (
-          <Button variant="secondary" onClick={() => setAdding(true)}>
-            ＋ Add panel
+        <ButtonGroup>
+          <Button
+            variant="secondary"
+            aria-label={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+            title={dash.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+            onClick={async () => {
+              const next = !dash.pinned;
+              qc.setQueryData<Dashboard>(["dashboard", id], (old) => (old ? { ...old, pinned: next } : old));
+              await fetch(`/api/dashboards/${id}/pin`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pinned: next }),
+              });
+              // the sidebar's pinned list reads the ["dashboards"] cache
+              useDashboards.invalidate(qc);
+            }}
+          >
+            <Pin className={dash.pinned ? "size-3.5 fill-current" : "size-3.5"} />
           </Button>
-        )}
-        <Button variant={editMode ? "default" : "secondary"} onClick={() => setEditMode(!editMode)}>
-          {editMode ? "Done" : "✎ Edit"}
-        </Button>
+          {/* Name, refresh defaults, and variables all live on the dedicated
+              settings page (Grafana's model) rather than as inline controls
+              here — this page is purely for viewing/arranging panels. */}
+          <Button
+            variant="secondary"
+            aria-label="Dashboard settings"
+            title="Dashboard settings"
+            nativeButton={false}
+            render={<Link href={`/dashboards/${id}/settings`} />}
+          >
+            <Settings2 className="size-3.5" />
+          </Button>
+          {editMode && (
+            <Button variant="secondary" onClick={() => setAdding(true)}>
+              ＋ Add panel
+            </Button>
+          )}
+          <Button variant={editMode ? "default" : "secondary"} onClick={() => setEditMode(!editMode)}>
+            {editMode ? "Done" : <Edit />}
+          </Button>
+        </ButtonGroup>
       </div>
 
       {/* Variable controls stay visible in view mode too — they're a read/filter
-          affordance, not an editing one. */}
+          affordance, not an editing one. The time range renders in the
+          header instead (see above) — it's not part of this list at all. */}
       {varValues.length > 0 && (
         <div className="flex items-center gap-3 mb-5 flex-wrap">
           {varValues.map((v) => (
@@ -926,7 +962,7 @@ export default function DashboardPage() {
               <PanelCard
                 panel={p}
                 refreshSeconds={dash.refreshSeconds}
-                variables={varValues}
+                variables={[...varValues, datetime]}
                 editable={editMode}
                 otherDashboards={otherDashboards}
                 onDelete={() => deletePanelWithUndo(p, i)}
@@ -934,6 +970,7 @@ export default function DashboardPage() {
                 onDuplicate={() => duplicatePanel(p)}
                 onCopyTo={(targetId, targetName) => copyPanelTo(p, targetId, targetName)}
                 onCrossFilter={crossFilter}
+                onTimeRangeSelect={handleTimeRangeSelect}
               />
             </ErrorBoundary>
           );

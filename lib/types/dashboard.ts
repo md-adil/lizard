@@ -100,19 +100,20 @@ export type SelectSource =
       labelField: string | null;
     };
 
-// Dashboard-wide filter, substituted into panel SQL via {{name}} (or
-// {{name.from}}/{{name.to}} for a date range) before the panel's query runs.
-// A small, deliberately curated set of prebuilt kinds — each fully realized —
-// rather than a wide menu of thin variable stubs. name is the token used in
-// SQL ({{name}}) — must stay identifier-shaped (\w+) since it's matched by
-// that regex in substituteVariables. label is purely the human-readable text
-// shown in the toolbar/settings list, so a variable can be named `status`
-// but labeled "Order status".
+// Dashboard-wide filter, substituted into panel SQL via ${name} (or
+// ${name.from}/${name.to} for a date range) before the panel's query runs —
+// Grafana's own templating syntax. A small, deliberately curated set of
+// prebuilt kinds — each fully realized — rather than a wide menu of thin
+// variable stubs. name is the token used in SQL (${name}) — must stay
+// identifier-shaped (\w+) since it's matched by that regex in
+// substituteVariables. label is purely the human-readable text shown in the
+// toolbar/settings list, so a variable can be named `status` but labeled
+// "Order status".
 export type DashboardVariable =
   | { name: string; label: string; type: "text"; value: string }
   | { name: string; label: string; type: "select"; source: SelectSource; value: string }
   // from/to are "yyyy-MM-dd" when includeTime is false, "yyyy-MM-dd HH:mm"
-  // when true — same fields, same {{name.from}}/{{name.to}} tokens either way.
+  // when true — same fields, same ${name.from}/${name.to} tokens either way.
   | { name: string; label: string; type: "daterange"; from: string; to: string; includeTime: boolean };
 
 export interface Dashboard {
