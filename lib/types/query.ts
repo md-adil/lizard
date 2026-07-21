@@ -6,6 +6,9 @@ export interface QueryRequest {
   connections: string[]; // connection names
   sql: string;
   dialect: SqlDialect;
+  // If set, runGuardedQuery may serve a recent result from lib/query-cache
+  // instead of re-executing (server-side TTL, seconds).
+  cacheSeconds?: number;
 }
 
 export interface QueryResultColumn {

@@ -6,7 +6,7 @@
 // always available.
 import { useState, useMemo } from "react";
 import type { VfkPair, VfkConstant, TableInfo } from "@/lib/types";
-import { SAME_SCHEMA, vfkSummary } from "@/lib/introspect/virtual-fk";
+import { SAME_SCHEMA } from "@/lib/introspect/virtual-fk";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ColumnsSelect } from "@/components/browse/columns-select";
 import { DataSelect } from "@/components/ui/data-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ForeignKeyLists } from "@/components/browse/fk-lists";
 import {
   useSchemaMeta,
   connectionSupportsSchemas,
@@ -33,18 +34,6 @@ import {
   ComboboxEmpty,
   ComboboxCollection,
 } from "@/components/ui/combobox";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-
 export function VirtualFkEditor({
   meta,
   catalog,
@@ -200,17 +189,6 @@ export function VirtualFkEditor({
   // the existing-relationships list (vfkSummary stays catalog-free/pure).
   const connectionNameById = new Map(catalog.connections.map((c) => [c.connectionId, c.connectionName]));
   const resolveConnectionName = (id: string) => connectionNameById.get(id) ?? id;
-
-  // Real FKs on *other* tables in this schema that point back at this table —
-  // read-only, same reasoning as the outgoing native FK list below (DB-enforced,
-  // not editable here).
-  const incomingFks = schemaTables
-    .filter((t) => t.name !== meta.table.name)
-    .flatMap((t) =>
-      t.foreignKeys
-        .filter((fk) => fk.referencedSchema === meta.resolvedSchema && fk.referencedTable === meta.table.name)
-        .map((fk) => ({ fromTable: t.name, fk })),
-    );
 
   return (
     <div className="grid md:grid-cols-2 gap-6 items-start">
@@ -475,106 +453,15 @@ export function VirtualFkEditor({
         {/* user-added (custom) relationships lead — the whole point of this
             tab is managing these, so they shouldn't be buried below the
             read-only native/incoming sections every table already has. */}
-        <div
-          className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-          style={{ color: "var(--muted-foreground-faint)" }}
-        >
-          Virtual relationships
-        </div>
-        {meta.virtualFks.length === 0 && !saving && (
-          <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-            No relationships yet.
-          </p>
-        )}
-        {meta.virtualFks.map((v) => (
-          <Card
-            key={v.id}
-            size="sm"
-            className={`px-3 py-2.5 mb-2 flex-row items-start justify-between gap-2 transition-opacity ${
-              deletingId === v.id ? "opacity-50 pointer-events-none" : ""
-            }`}
-          >
-            <div className="min-w-0">
-              {v.label && <div className="font-medium mb-0.5">{v.label}</div>}
-              <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
-                {v.fromSchema}.{v.fromTable} → {vfkSummary(v, resolveConnectionName)}
-              </span>
-            </div>
-            {deletingId === v.id ? (
-              <span className="text-[12px] text-muted-foreground animate-pulse shrink-0 self-center">Deleting…</span>
-            ) : (
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button variant="secondary" size="icon-sm" className="shrink-0" disabled={deletingId !== null}>
-                      ✕
-                    </Button>
-                  }
-                />
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Relationship</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete this relationship? This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction variant="destructive" onClick={() => remove(v.id)}>
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </Card>
-        ))}
-
-        {saving && (
-          <Card size="sm" className="px-3 py-2.5 mb-2 opacity-50 animate-pulse flex-row items-center gap-2">
-            <div className="flex-1 space-y-1">
-              <div className="h-4 bg-muted rounded w-1/4" />
-              <div className="h-3 bg-muted rounded w-3/4" />
-            </div>
-          </Card>
-        )}
-
-        {meta.table.foreignKeys.length > 0 && (
-          <div className="mt-4">
-            <div
-              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
-              Native foreign keys (from the database)
-            </div>
-            {meta.table.foreignKeys.map((fk) => (
-              <Card key={fk.constraintName} size="sm" className="px-3 py-2.5 mb-2">
-                <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
-                  {fk.columns.join(", ")} → {fk.referencedSchema}.{fk.referencedTable} (
-                  {fk.referencedColumns.join(", ")})
-                </span>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {incomingFks.length > 0 && (
-          <div className="mt-4">
-            <div
-              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
-              Incoming foreign keys (from other tables)
-            </div>
-            {incomingFks.map(({ fromTable, fk }) => (
-              <Card key={`${fk.constraintName}-${fromTable}`} size="sm" className="px-3 py-2.5 mb-2">
-                <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
-                  {fromTable}.{fk.columns.join(", ")} → {fk.referencedColumns.join(", ")}
-                </span>
-              </Card>
-            ))}
-          </div>
-        )}
+        <ForeignKeyLists
+          table={meta.table}
+          schemaTables={schemaTables}
+          virtualFks={meta.virtualFks}
+          resolveConnectionName={resolveConnectionName}
+          deletingId={deletingId}
+          onDeleteVirtualFk={remove}
+          saving={saving}
+        />
       </div>
     </div>
   );

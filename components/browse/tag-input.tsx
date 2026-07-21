@@ -23,6 +23,12 @@ export function TagInput({
   column,
   value,
   onChange,
+  // "tags" flattens/dedupes a JSON-array "tag" widget column's own values
+  // (the row-editor cell). "suggest" is the plain distinct-values endpoint —
+  // used when this same multi-chip combobox doubles as the filter panel's
+  // "in" value picker for an ordinary (non-tag) column.
+  path = "tags",
+  placeholder = "add tag…",
 }: {
   connection: string;
   schema: string | undefined;
@@ -30,16 +36,18 @@ export function TagInput({
   column: string;
   value: string[];
   onChange: (val: string[]) => void;
+  path?: "tags" | "suggest";
+  placeholder?: string;
 }) {
   const items = value;
 
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const { data: suggestions } = useQuery<string[]>({
-    queryKey: ["tags", connection, schema, table, column, search],
+    queryKey: [path, connection, schema, table, column, search],
     queryFn: async () => {
-      const res = await fetch(dataApiUrl({ connection, table, path: "tags", schema, params: { column, q: search } }));
-      if (!res.ok) throw new Error("tags failed");
+      const res = await fetch(dataApiUrl({ connection, table, path, schema, params: { column, q: search } }));
+      if (!res.ok) throw new Error(`${path} failed`);
       return res.json();
     },
     enabled: open,
@@ -70,15 +78,17 @@ export function TagInput({
         {items.map((it) => (
           <ComboboxChip key={it}>{it}</ComboboxChip>
         ))}
-        <ComboboxChipsInput placeholder={items.length ? "" : "add tag…"} />
+        <ComboboxChipsInput placeholder={items.length ? "" : placeholder} />
       </ComboboxChips>
       <ComboboxContent className="w-full min-w-55">
-        <ComboboxEmpty className="py-2 text-xs text-muted-foreground text-center">No matching tags</ComboboxEmpty>
+        <ComboboxEmpty className="py-2 text-xs text-muted-foreground text-center">
+          No matching {path === "tags" ? "tags" : "values"}
+        </ComboboxEmpty>
         <ComboboxList>
           {(v: string) =>
             v.startsWith(CREATE_PREFIX) ? (
               <ComboboxItem key={v} value={v} className="text-primary font-medium">
-                ＋ Create tag "{v.slice(CREATE_PREFIX.length)}"
+                ＋ Use "{v.slice(CREATE_PREFIX.length)}"
               </ComboboxItem>
             ) : (
               <ComboboxItem key={v} value={v}>

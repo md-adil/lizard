@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import NextTopLoader from "nextjs-toploader";
 
 import "./globals.css";
+import "@xyflow/react/dist/style.css";
 import { Providers } from "./providers";
 import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/sonner";

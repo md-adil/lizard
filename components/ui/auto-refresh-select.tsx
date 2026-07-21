@@ -19,7 +19,7 @@ export function AutoRefreshSelect({
   value,
   onChange,
   size = "sm",
-  className = "w-auto",
+  className = "",
 }: {
   value: number; // ms, 0 = off
   onChange: (ms: number) => void;
@@ -35,12 +35,15 @@ export function AutoRefreshSelect({
       onChange={(o) => o && onChange(o.value)}
       getLabel={(o) => (
         <span className="flex items-center gap-1.5">
-          <RefreshCw className="size-3.5" style={{ color: o.value ? "var(--primary)" : "var(--muted-foreground-faint)" }} />
-          Refresh: {o.label}
+          <RefreshCw
+            className="size-3.5"
+            style={{ color: o.value ? "var(--primary)" : "var(--muted-foreground-faint)" }}
+          />
+          {o.label}
         </span>
       )}
       size={size}
-      className={className}
+      className={`${className} bg-card`}
     />
   );
 }

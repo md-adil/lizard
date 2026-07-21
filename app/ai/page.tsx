@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SqlEditor, SqlCode } from "@/components/ui/sql-editor";
 import { useCatalog } from "@/components/browse/use-catalog";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 interface Turn {
   question: string;
@@ -154,6 +155,7 @@ export default function AiConsole() {
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col max-w-4xl mx-auto px-8 py-8 w-full">
+        <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Ask AI" }]} />
         <h1 className="text-xl font-semibold mb-1">Ask your databases</h1>
         <p className="text-[13px] mb-4" style={{ color: "var(--muted-foreground)" }}>
           Plain-language questions over one database or the whole fleet. The SQL and the databases touched are always

@@ -27,7 +27,7 @@ function KanbanColumn({ id, children }: { id: string; children: ReactNode }) {
   return (
     <div
       ref={setNodeRef}
-      className={`w-64 shrink-0 rounded-lg p-2 ring-2 transition-shadow ${isOver ? "ring-[var(--primary)]" : "ring-transparent"}`}
+      className={`w-64 shrink-0 rounded-lg p-2 ring-2 mt-1 transition-shadow ${isOver ? "ring-primary" : "ring-transparent"}`}
       style={{ background: "var(--muted)" }}
     >
       {children}

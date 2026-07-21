@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default function ProfilePage() {
   const { user, refresh } = useAuth();
@@ -62,6 +63,7 @@ export default function ProfilePage() {
 
   return (
     <div className="px-8 py-10 max-w-3xl">
+      <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Profile" }]} />
       <h1 className="text-xl font-semibold mb-1">Profile</h1>
       <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>
         Manage your account details and password.

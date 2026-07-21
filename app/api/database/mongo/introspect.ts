@@ -168,6 +168,7 @@ function inferColumns(docs: Document[]): ColumnInfo[] {
       comment: null,
       enumValues: null,
       enumSchema: null,
+      arrayElementEnumSchema: null,
       maxLength: null,
       numeric: null,
     });
@@ -194,6 +195,7 @@ function inferColumns(docs: Document[]): ColumnInfo[] {
       comment: null,
       enumValues: null,
       enumSchema: null,
+      arrayElementEnumSchema: null,
       maxLength: null,
       numeric: null,
     });

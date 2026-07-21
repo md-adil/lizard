@@ -22,7 +22,51 @@ export async function PATCH(req: Request, { params }: Params) {
     await requireEditor();
     const { id } = await params;
     const body = z
-      .object({ name: z.string().min(1).optional(), refreshSeconds: z.number().nullable().optional() })
+      .object({
+        name: z.string().min(1).optional(),
+        refreshSeconds: z.number().nullable().optional(),
+        variables: z
+          .array(
+            z.discriminatedUnion("type", [
+              z.object({
+                name: z.string().regex(/^\w+$/, "Name must be letters, numbers, or underscore"),
+                label: z.string(),
+                type: z.literal("text"),
+                value: z.string(),
+              }),
+              z.object({
+                name: z.string().regex(/^\w+$/, "Name must be letters, numbers, or underscore"),
+                label: z.string(),
+                type: z.literal("select"),
+                source: z.discriminatedUnion("kind", [
+                  z.object({
+                    kind: z.literal("static"),
+                    options: z.array(z.object({ label: z.string(), value: z.string() })),
+                  }),
+                  z.object({
+                    kind: z.literal("query"),
+                    target: z.enum(["single", "federated"]),
+                    connections: z.array(z.string()).min(1),
+                    sql: z.string().min(1),
+                    dialect: z.enum(["postgres", "mysql", "duckdb"]),
+                    valueField: z.string().nullable(),
+                    labelField: z.string().nullable(),
+                  }),
+                ]),
+                value: z.string(),
+              }),
+              z.object({
+                name: z.string().regex(/^\w+$/, "Name must be letters, numbers, or underscore"),
+                label: z.string(),
+                type: z.literal("daterange"),
+                from: z.string(),
+                to: z.string(),
+                includeTime: z.boolean(),
+              }),
+            ]),
+          )
+          .optional(),
+      })
       .parse(await req.json());
     updateDashboard(id, body);
     return ok(getDashboard(id));

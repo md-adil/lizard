@@ -19,14 +19,7 @@ import { Chip } from "@/components/ui/chip";
 import { TableOverridesEditor } from "./table-overrides-editor";
 import { VirtualFkEditor } from "./virtual-fk-editor";
 import { useSchemaParam, tableHref } from "@/components/browse/use-schema-param";
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbLink,
-  BreadcrumbItem,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default function CustomizePage() {
   const params = useParams<{
@@ -89,33 +82,18 @@ export default function CustomizePage() {
 
   return (
     <div className="px-8 py-7">
-      <Breadcrumb className="mb-4">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink
-              render={
-                <Link
-                  href={tableHref({ connection: params.connection, schema: meta.schema, table: meta.table.name })}
-                />
-              }
-            >
-              {meta.label}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Customization</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: "Home", link: "/" },
+          { label: params.connection, link: `/browse/${params.connection}` },
+          {
+            label: meta.label,
+            link: tableHref({ connection: params.connection, schema: meta.schema, table: meta.table.name }),
+          },
+          { label: "Customization" },
+        ]}
+      />
       {hasSchema && meta.schema !== "public" && (
         <div className="mb-6">
           <div className="flex items-center gap-2">
@@ -180,17 +158,6 @@ export default function CustomizePage() {
           />
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="text-[12px] font-semibold uppercase tracking-wider mb-2"
-      style={{ color: "var(--muted-foreground-faint)" }}
-    >
-      {children}
     </div>
   );
 }

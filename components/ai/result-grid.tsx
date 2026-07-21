@@ -8,6 +8,7 @@ export function ResultGrid({
   result,
   maxRows = 100,
   maxHeight = 420,
+  onRowClick,
 }: {
   result: QueryResult;
   maxRows?: number;
@@ -15,6 +16,9 @@ export function ResultGrid({
   // the scroll region can't spill past the card; unbounded ones (AI console,
   // panel-preview modal) keep the 420px default.
   maxHeight?: number;
+  // Set (by a panel with spec.linkTo) to make rows clickable — mirrors
+  // DataGrid's onRowClick/rowClickable in components/browse/data-grid.tsx.
+  onRowClick?: (row: Record<string, unknown>) => void;
 }) {
   const rows = result.rows.slice(0, maxRows);
   return (
@@ -35,7 +39,11 @@ export function ResultGrid({
           </TableHeader>
           <TableBody>
             {rows.map((row, i) => (
-              <TableRow key={i}>
+              <TableRow
+                key={i}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={onRowClick ? "cursor-pointer hover:bg-muted/50" : undefined}
+              >
                 {result.columns.map((c) => {
                   const v = row[c.name];
                   // No column metadata for an ad hoc SQL result (unlike the

@@ -921,8 +921,11 @@ export async function referenceOptions(
     const params: unknown[] = [];
     let where = "";
     if (search) {
-      const dispExpr = dialect.castToText(dialect.quoteIdent(display));
-      const refExpr = dialect.castToText(dialect.quoteIdent(refColumn));
+      // caseInsensitiveLike already casts its expression to text/CHAR itself
+      // (PG: `expr::text ILIKE`; MySQL: `LOWER(CAST(expr AS CHAR))`) — passing
+      // an already-cast expression here would double it (`expr::text::text`).
+      const dispExpr = dialect.quoteIdent(display);
+      const refExpr = dialect.quoteIdent(refColumn);
       // Bind the term once per placeholder. MySQL's `?` is positional, so
       // reusing placeholder(1) for both predicates would leave the second one
       // unbound (Postgres's `$1` can repeat, MySQL's cannot).
@@ -990,7 +993,10 @@ export async function columnSuggestions(
       where += ` AND ${colExpr} LIKE ${dialect.placeholder(params.length)}`;
     } else if (search) {
       params.push(`%${search}%`);
-      where += ` AND ${dialect.caseInsensitiveLike(colExpr, dialect.placeholder(params.length))}`;
+      // caseInsensitiveLike casts to text/CHAR itself — pass the bare column,
+      // not colExpr (already cast for the SELECT/prefix-LIKE uses below), or
+      // a non-text column would get cast twice (`col::text::text ILIKE`).
+      where += ` AND ${dialect.caseInsensitiveLike(col, dialect.placeholder(params.length))}`;
     }
     const fqtn = dialect.supportsSchemas
       ? `${dialect.quoteIdent(table.schema)}.${dialect.quoteIdent(tableName)}`

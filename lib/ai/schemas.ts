@@ -89,6 +89,11 @@ export const chartSpecSchema = z
     xField: z.string().nullable().default(null),
     yFields: z.array(z.string()).default([]),
     seriesField: z.string().nullable().default(null),
+    // User-configured in SpecControls after the fact, not asked of the model
+    // (not in chartSpecTool's input_schema below) — always defaulted null.
+    linkTo: z.null().default(null),
+    thresholds: z.null().default(null),
+    cacheSeconds: z.null().default(null),
   })
   .transform((spec) => normalizeTargetDialect(spec));
 

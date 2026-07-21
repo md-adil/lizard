@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Dashboard } from "@/lib/types";
 import { useDashboards } from "@/components/charts/use-dashboards";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const UNDO_DELAY_MS = 5000;
 // Keyed by dashboard id. Deliberately module-level, not component state: a
@@ -83,6 +84,7 @@ export default function DashboardsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-8 py-10">
+      <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Dashboards" }]} />
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold mb-1">Dashboards</h1>

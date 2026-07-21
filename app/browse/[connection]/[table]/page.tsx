@@ -6,14 +6,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { effectiveKey } from "@/lib/introspect/heuristics";
 import Link from "next/link";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { RowEditor } from "@/components/browse/row-editor";
 import { DataGrid } from "@/components/browse/data-grid";
 import { useColumnVisibility } from "@/components/browse/use-column-visibility";
@@ -21,12 +14,10 @@ import { useColumnWidths } from "@/components/browse/use-column-widths";
 import { useTablePrefs } from "@/components/browse/use-table-prefs";
 import { useGridState } from "@/components/browse/use-grid-state";
 import { RefetchBar } from "@/components/browse/refetch-bar";
-import { SavedViewsBar } from "@/components/browse/saved-views-bar";
+import { ViewTabs } from "@/components/browse/view-tabs";
 import { TableSearchBar } from "@/components/browse/table-search-bar";
 import {
   availableViews,
-  VIEW_LABELS,
-  VIEW_ICONS,
   kanbanGroupColumns,
   dateColumns,
   selfRefColumn,
@@ -40,9 +31,8 @@ import {
   type CalendarCursor,
 } from "@/components/browse/table-views";
 import { KanbanView } from "@/components/browse/kanban-view";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
-import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
+import { useSchemaParam, recordHref, customizeHref, infoHref } from "@/components/browse/use-schema-param";
 import { dataApiUrl } from "@/components/browse/data-api";
 import { useGroupedRows } from "@/components/browse/use-grouped-rows";
 import { ColumnsSelect } from "@/components/browse/columns-select";
@@ -51,7 +41,7 @@ import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { AutoRefreshSelect } from "@/components/ui/auto-refresh-select";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Info, Settings2, Download, Upload, Plus } from "lucide-react";
 import { useInterval } from "@/hooks/use-interval";
 import { Card } from "@/components/ui/card";
 
@@ -326,21 +316,14 @@ export default function TablePage() {
 
   return (
     <div className="px-8 py-8">
-      <Breadcrumb className="mb-4">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href={`/browse/${params.connection}`} />}>{params.connection}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{meta.label}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: "Home", link: "/" },
+          { label: params.connection, link: `/browse/${params.connection}` },
+          { label: meta.label },
+        ]}
+      />
       <div className="flex items-start justify-between mb-1">
         <div>
           <div className="flex items-center gap-2.5">
@@ -357,34 +340,44 @@ export default function TablePage() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <SavedViewsBar
-            connectionId={meta.connectionId}
-            schema={meta.resolvedSchema}
-            table={params.table}
-            currentConfig={viewConfig}
-            onApply={applyView}
-          />
+        <div className="flex gap-1">
+          <ButtonGroup>
+            <Button
+              variant="secondary"
+              nativeButton={false}
+              render={
+                <Link href={infoHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+              }
+            >
+              <Info className="size-3.5" /> Info
+            </Button>
+            <Button
+              variant="secondary"
+              nativeButton={false}
+              render={
+                <Link
+                  href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })}
+                />
+              }
+            >
+              <Settings2 className="size-3.5" /> Customize
+            </Button>
+          </ButtonGroup>
           <ButtonGroup>
             <Button variant="secondary" nativeButton={false} render={<a href={exportHref} download />}>
-              ⬇ Export CSV
+              <Download className="size-3.5" /> Export CSV
             </Button>
             {!meta.isView && (
               <Button variant="secondary" onClick={() => setImporting(true)}>
-                ⬆ Import CSV
+                <Upload className="size-3.5" /> Import CSV
               </Button>
             )}
           </ButtonGroup>
-          <Button
-            variant="secondary"
-            nativeButton={false}
-            render={
-              <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
-            }
-          >
-            ⚙ Customize
-          </Button>
-          {!meta.isView && <Button onClick={() => setEditing("new")}>＋ New row</Button>}
+          {!meta.isView && (
+            <Button onClick={() => setEditing("new")}>
+              <Plus className="size-3.5" /> New row
+            </Button>
+          )}
         </div>
       </div>
 
@@ -416,31 +409,26 @@ export default function TablePage() {
       )}
 
       {/* Phase 8.4 — view-type switcher (table stays the source of truth for
-        pagination; alternate views render the currently-loaded page). */}
-      <div className="flex items-center gap-3 mb-3">
-        {views.length > 1 && (
-          <Tabs
-            value={viewType}
-            onValueChange={(v) => {
-              setViewType(v as ViewType);
-              setTablePref("viewType", v);
-            }}
-          >
-            <TabsList>
-              {views.map((v) => {
-                const Icon = VIEW_ICONS[v];
-                return (
-                  <TabsTrigger key={v} value={v} className="gap-1.5">
-                    <Icon className="size-3.5" />
-                    {VIEW_LABELS[v]}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </Tabs>
-        )}
+        pagination; alternate views render the currently-loaded page). Saved
+        views (named filter/sort/column bundles) live in the same tab row —
+        see ViewTabs — rather than a separate "▤ Views" dropdown. */}
+      <div className="flex items-center gap-1 mb-3">
+        <ViewTabs
+          connectionId={meta.connectionId}
+          connectionName={params.connection}
+          schema={meta.resolvedSchema}
+          table={params.table}
+          builtInTypes={views}
+          viewType={viewType}
+          onSelectBuiltIn={(v) => {
+            setViewType(v);
+            setTablePref("viewType", v);
+          }}
+          currentConfig={viewConfig}
+          onApplySavedView={applyView}
+        />
         {viewType === "kanban" && groupCols.length > 1 && (
-          <div className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+          <div className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             Group by
             <ColumnsSelect
               items={groupColItems}
@@ -472,7 +460,6 @@ export default function TablePage() {
           </div>
         )}
         <span className="flex-1" />
-        {/* Phase 8.8 — auto-refresh, default off */}
         <AutoRefreshSelect value={refreshMs} onChange={setRefreshMs} />
         <Button
           variant="secondary"
