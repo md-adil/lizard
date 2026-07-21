@@ -121,19 +121,23 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
   // columns (with enum values, comments, generated flag)
   const columnsRes = await pool.query(
     `SELECT c.table_schema, c.table_name, c.column_name, c.ordinal_position,
-            c.is_nullable, c.column_default, c.data_type, c.udt_name,
+            c.is_nullable, c.column_default, c.data_type, c.udt_name, c.udt_schema,
             c.character_maximum_length, c.numeric_precision, c.numeric_scale,
             (c.is_generated = 'ALWAYS' OR c.identity_generation IS NOT NULL
              OR c.column_default LIKE 'nextval(%') AS is_generated,
             col_description(pc.oid, c.ordinal_position) AS comment,
             CASE WHEN t.typtype = 'e' THEN
               (SELECT array_agg(e.enumlabel::text ORDER BY e.enumsortorder) FROM pg_enum e WHERE e.enumtypid = t.oid)::text[]
-            END AS enum_values
+            END AS enum_values,
+            CASE WHEN et.typtype = 'e' THEN
+              (SELECT nspname FROM pg_namespace WHERE oid = et.typnamespace)
+            END AS array_elem_enum_schema
      FROM information_schema.columns c
      JOIN pg_class pc ON pc.relname = c.table_name
      JOIN pg_namespace pn ON pn.oid = pc.relnamespace AND pn.nspname = c.table_schema
      LEFT JOIN pg_type t ON t.typname = c.udt_name
        AND t.typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = c.udt_schema)
+     LEFT JOIN pg_type et ON et.oid = NULLIF(t.typelem, 0)
      WHERE c.table_schema = ANY($1)
      ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
     [schemaNames],
@@ -159,11 +163,6 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
     [schemaNames],
   );
 
-  // every column covered by any index (not just PK/unique — plain/secondary
-  // indexes too) — a.attnum > 0 excludes system columns; expression-index
-  // entries have no matching pg_attribute row (indkey holds 0 for those
-  // positions) and are silently dropped by the join, which is fine — an
-  // expression isn't a literal column global search could point at anyway.
   const indexRes = await pool.query(
     `SELECT n.nspname AS schema, rel.relname AS table,
             array_agg(DISTINCT a.attname::text) AS columns
@@ -207,6 +206,8 @@ async function introspect(conn: ConnectionConfig): Promise<ConnectionCatalog> {
       ordinal: c.ordinal_position,
       comment: c.comment,
       enumValues: c.enum_values ?? null,
+      enumSchema: c.enum_values ? c.udt_schema : null,
+      arrayElementEnumSchema: c.array_elem_enum_schema ?? null,
       maxLength: c.character_maximum_length,
       // Postgres has no unsigned integer types.
       numeric:

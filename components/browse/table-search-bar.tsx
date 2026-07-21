@@ -4,7 +4,7 @@
 // and the reference picker modal. The parent owns `search` (committed value)
 // and `filterSet`; this component owns the draft `searchInput` state.
 import { useState } from "react";
-import { Search, X, Loader2 } from "lucide-react";
+import { Search, X, Loader2, Filter } from "lucide-react";
 import type { ColumnMeta } from "./useTableMeta";
 import type { FilterSet } from "@/lib/data/filters";
 import { isComplete } from "@/lib/data/filters";
@@ -63,7 +63,7 @@ export function TableSearchBar({
           style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
           onClick={() => setFilterOpen((o) => !o)}
         >
-          ⛃ Filter
+          <Filter /> Filter
           {activeCount > 0 && (
             <span className="ml-1 tag" style={{ fontSize: 10, color: "var(--primary)" }}>
               {activeCount}

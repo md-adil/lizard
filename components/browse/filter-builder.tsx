@@ -5,7 +5,7 @@ import type { ColumnMeta } from "./useTableMeta";
 import type { FilterCondition, FilterOp, FilterSet, Combinator } from "@/lib/data/filters";
 import { isComplete, NO_VALUE_OPS } from "@/lib/data/filters";
 import { ReferencePickerModal } from "./reference-picker-modal";
-import { RefCombobox } from "./ref-combobox";
+import { RefCombobox, RefMultiCombobox } from "./ref-combobox";
 import { TagInput } from "./tag-input";
 import { AutocompleteInput } from "./autocomplete-input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { ToggleInput } from "@/components/ui/toggle-input";
 import { DataSelect } from "@/components/ui/data-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColumnsSelect } from "@/components/browse/columns-select";
+import { Filter } from "lucide-react";
 
 type Kind = "text" | "number" | "date" | "boolean" | "enum" | "reference" | "array" | "jsonb";
 
@@ -120,32 +121,6 @@ function numValue(v: string | boolean | number | undefined): number | "" {
   return typeof v === "number" ? v : "";
 }
 
-// ---------- chips (for "in" value lists) ----------
-
-function Chips({
-  values,
-  labels,
-  onRemove,
-}: {
-  values: string[];
-  labels?: Record<string, string>;
-  onRemove: (v: string) => void;
-}) {
-  if (values.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1 mb-1">
-      {values.map((v) => (
-        <span key={v} className="tag" style={{ color: "var(--primary)" }}>
-          {labels?.[v] ?? v}
-          <Button variant="ghost" className="ml-1.5" onClick={() => onRemove(v)}>
-            ✕
-          </Button>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 // ---------- one condition row ----------
 
 function ConditionRow({
@@ -170,9 +145,6 @@ function ConditionRow({
   const ops = OPS_BY_KIND[kind];
   const noValue = NO_VALUE_OPS.includes(cond.op);
   const dateType = cm.col.udtName.startsWith("timestamp") ? "datetime-local" : "date";
-  const [chipDraft, setChipDraft] = useState("");
-  // remembered labels for reference "in" chips
-  const [refLabels, setRefLabels] = useState<Record<string, string>>({});
   const [browsing, setBrowsing] = useState(false);
 
   const setCol = (name: string) => {
@@ -252,47 +224,32 @@ function ConditionRow({
           </div>
         );
       }
-      // reference "in": search + chips
+      // reference "in": multi-select chip combobox, same search backend as
+      // the single-value RefCombobox above, plus a "browse full table" escape
+      // hatch for finding a row that's hard to reach by typing.
       if (kind === "reference") {
         return (
-          <div className="min-w-45">
+          <div className="flex items-center gap-1 min-w-45">
             {browsing && (
               <ReferencePickerModal
                 target={cm.ref!}
                 title={`Pick ${cm.label}`}
-                onPick={(id, label) => {
-                  setRefLabels((m) => ({ ...m, [id]: label ?? id }));
+                onPick={(id) => {
                   if (!values.includes(id)) onChange({ ...cond, values: [...values, id] });
                   setBrowsing(false);
                 }}
                 onClose={() => setBrowsing(false)}
               />
             )}
-            <Chips
-              values={values}
-              labels={refLabels}
-              onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })}
+            <RefMultiCombobox
+              target={cm.ref!}
+              className="flex-1 min-w-35"
+              value={values}
+              onChange={(ids) => onChange({ ...cond, values: ids })}
             />
-            <div className="flex items-center gap-1">
-              <RefCombobox
-                target={cm.ref!}
-                className="flex-1 min-w-35"
-                onSelect={(id, label) => {
-                  setRefLabels((m) => ({ ...m, [id]: label ?? id }));
-                  if (!values.includes(id)) onChange({ ...cond, values: [...values, id] });
-                }}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                type="button"
-
-                title="Browse"
-                onClick={() => setBrowsing(true)}
-              >
-                ⤢
-              </Button>
-            </div>
+            <Button variant="secondary" size="sm" type="button" title="Browse" onClick={() => setBrowsing(true)}>
+              ⤢
+            </Button>
           </div>
         );
       }
@@ -310,26 +267,21 @@ function ConditionRow({
           />
         );
       }
-      // text/number "in": type + Enter to add chips
+      // text/number/plain-array "in": same multi-chip combobox, backed by the
+      // column's own distinct values for suggestions but free to add any typed
+      // value as its own chip (values here aren't constrained to what already
+      // exists in the table).
       return (
-        <div className="min-w-40">
-          <Chips values={values} onRemove={(v) => onChange({ ...cond, values: values.filter((x) => x !== v) })} />
-          <Input
-            placeholder="type value, Enter to add"
-            type={kind === "number" ? "number" : "text"}
-            value={chipDraft}
-            onChange={(e) => setChipDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.stopPropagation(); // adding a chip shouldn't also apply the panel
-                if (chipDraft.trim()) {
-                  if (!values.includes(chipDraft)) onChange({ ...cond, values: [...values, chipDraft] });
-                  setChipDraft("");
-                }
-              }
-            }}
-          />
-        </div>
+        <TagInput
+          connection={target.connection}
+          schema={target.schema}
+          table={target.table}
+          column={cm.col.name}
+          path="suggest"
+          placeholder="type value, Enter to add"
+          value={values}
+          onChange={(arr) => onChange({ ...cond, values: arr })}
+        />
       );
     }
 
@@ -365,35 +317,24 @@ function ConditionRow({
             <ReferencePickerModal
               target={cm.ref!}
               title={`Pick ${cm.label}`}
-              onPick={(id, label) => {
-                setRefLabels((m) => ({ ...m, [id]: label ?? id }));
+              onPick={(id) => {
                 onChange({ ...cond, value: id });
                 setBrowsing(false);
               }}
               onClose={() => setBrowsing(false)}
             />
           )}
-          {cond.value ? (
-            <span className="tag" style={{ color: "var(--primary)" }}>
-              {refLabels[strValue(cond.value)] ?? cond.value}
-              <Button
-                variant="ghost"
-                className="ml-1.5"
-
-                onClick={() => onChange({ ...cond, value: "" })}
-              >
-                ✕
-              </Button>
-            </span>
-          ) : (
-            <RefCombobox
-              target={cm.ref!}
-              className="flex-1 min-w-35"
-              onSelect={(id, label) => {
-                setRefLabels((m) => ({ ...m, [id]: label ?? id }));
-                onChange({ ...cond, value: id });
-              }}
-            />
+          <RefCombobox
+            target={cm.ref!}
+            value={strValue(cond.value)}
+            nullable={cm.col.nullable}
+            className="flex-1 min-w-35"
+            onSelect={(id) => onChange({ ...cond, value: id })}
+          />
+          {cond.value && (
+            <Button variant="ghost" title="Clear" onClick={() => onChange({ ...cond, value: "" })}>
+              ✕
+            </Button>
           )}
           <Button
             variant="secondary"
@@ -528,7 +469,10 @@ export function FilterPanel({
     if (value.conditions.length > 0) return value;
     const col = defaultColumn();
     if (!col) return value;
-    return { ...value, conditions: [{ column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }] };
+    return {
+      ...value,
+      conditions: [{ column: col.col.name, op: kindOf(col) === "text" ? "contains" : "eq", value: "" }],
+    };
   });
 
   const complete = (s: FilterSet): FilterSet => ({
@@ -660,45 +604,6 @@ export function FilterPanel({
           Apply filters
         </Button>
       </div>
-    </div>
-  );
-}
-
-// Trigger button + inline FilterPanel (standalone, self-contained).
-export function FilterBuilder({
-  columns,
-  target,
-  value,
-  onChange,
-}: {
-  columns: ColumnMeta[];
-  target: FilterTarget;
-  value: FilterSet;
-  onChange: (set: FilterSet) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const activeCount = value.conditions.filter(isComplete).length;
-
-  return (
-    <div>
-      <Button
-        variant="secondary"
-        className="shrink-0"
-
-        style={activeCount ? { color: "var(--primary)", borderColor: "var(--primary)" } : {}}
-        onClick={() => setOpen((o) => !o)}
-      >
-        ⛃ Filter
-        {activeCount > 0 && (
-          <span className="ml-1 tag" style={{ fontSize: 10, color: "var(--primary)" }}>
-            {activeCount}
-          </span>
-        )}
-        <span style={{ color: "var(--muted-foreground-faint)", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
-      </Button>
-      {open && (
-        <FilterPanel columns={columns} target={target} value={value} onChange={onChange} onClose={() => setOpen(false)} />
-      )}
     </div>
   );
 }

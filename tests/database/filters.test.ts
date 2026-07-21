@@ -60,7 +60,7 @@ describe("text filters bind bare, never through a cast", () => {
   });
 
   it("still casts a string bound against a non-text column", () => {
-    expect(clause("score", "eq", { value: "5" }).clause).toBe("(`score` = CAST(CAST(? AS CHAR) AS SIGNED))");
+    expect(clause("score", "eq", { value: "5" }).clause).toBe("(`score` = CAST(? AS SIGNED))");
   });
 
   it("still binds a number natively against a numeric column", () => {

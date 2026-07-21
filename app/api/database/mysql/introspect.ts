@@ -103,6 +103,8 @@ export async function introspectMysql(conn: ConnectionConfig): Promise<Connectio
       ordinal: Number(c.ordinal_position),
       comment: (c.column_comment as string) ?? null,
       enumValues: parseEnumValues(dataType, columnType),
+      enumSchema: null,
+      arrayElementEnumSchema: null,
       maxLength: c.character_maximum_length == null ? null : Number(c.character_maximum_length),
       numeric:
         c.numeric_precision == null

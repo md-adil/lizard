@@ -16,6 +16,7 @@ export const mysqlDialect: Dialect = {
   },
 
   cast(expr, type) {
+    // MySQL has no type namespace — a third `typeSchema` argument never applies here.
     const t = type.toLowerCase();
     let mysqlType = type;
     if (t.includes("int") || t === "bool") {

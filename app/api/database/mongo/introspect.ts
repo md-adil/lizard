@@ -167,6 +167,8 @@ function inferColumns(docs: Document[]): ColumnInfo[] {
       ordinal: acc.firstOrdinal,
       comment: null,
       enumValues: null,
+      enumSchema: null,
+      arrayElementEnumSchema: null,
       maxLength: null,
       numeric: null,
     });
@@ -192,6 +194,8 @@ function inferColumns(docs: Document[]): ColumnInfo[] {
       ordinal: 0,
       comment: null,
       enumValues: null,
+      enumSchema: null,
+      arrayElementEnumSchema: null,
       maxLength: null,
       numeric: null,
     });
