@@ -14,12 +14,10 @@ import { useColumnWidths } from "@/components/browse/use-column-widths";
 import { useTablePrefs } from "@/components/browse/use-table-prefs";
 import { useGridState } from "@/components/browse/use-grid-state";
 import { RefetchBar } from "@/components/browse/refetch-bar";
-import { SavedViewsBar } from "@/components/browse/saved-views-bar";
+import { ViewTabs } from "@/components/browse/view-tabs";
 import { TableSearchBar } from "@/components/browse/table-search-bar";
 import {
   availableViews,
-  VIEW_LABELS,
-  VIEW_ICONS,
   kanbanGroupColumns,
   dateColumns,
   selfRefColumn,
@@ -33,7 +31,6 @@ import {
   type CalendarCursor,
 } from "@/components/browse/table-views";
 import { KanbanView } from "@/components/browse/kanban-view";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
 import { useSchemaParam, recordHref, customizeHref, infoHref } from "@/components/browse/use-schema-param";
 import { dataApiUrl } from "@/components/browse/data-api";
@@ -348,7 +345,9 @@ export default function TablePage() {
             <Button
               variant="secondary"
               nativeButton={false}
-              render={<Link href={infoHref({ connection: params.connection, schema: meta.schema, table: params.table })} />}
+              render={
+                <Link href={infoHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+              }
             >
               <Info className="size-3.5" /> Info
             </Button>
@@ -356,19 +355,14 @@ export default function TablePage() {
               variant="secondary"
               nativeButton={false}
               render={
-                <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+                <Link
+                  href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })}
+                />
               }
             >
               <Settings2 className="size-3.5" /> Customize
             </Button>
           </ButtonGroup>
-          <SavedViewsBar
-            connectionId={meta.connectionId}
-            schema={meta.resolvedSchema}
-            table={params.table}
-            currentConfig={viewConfig}
-            onApply={applyView}
-          />
           <ButtonGroup>
             <Button variant="secondary" nativeButton={false} render={<a href={exportHref} download />}>
               <Download className="size-3.5" /> Export CSV
@@ -415,29 +409,24 @@ export default function TablePage() {
       )}
 
       {/* Phase 8.4 — view-type switcher (table stays the source of truth for
-        pagination; alternate views render the currently-loaded page). */}
+        pagination; alternate views render the currently-loaded page). Saved
+        views (named filter/sort/column bundles) live in the same tab row —
+        see ViewTabs — rather than a separate "▤ Views" dropdown. */}
       <div className="flex items-center gap-1 mb-3">
-        {views.length > 1 && (
-          <Tabs
-            value={viewType}
-            onValueChange={(v) => {
-              setViewType(v as ViewType);
-              setTablePref("viewType", v);
-            }}
-          >
-            <TabsList>
-              {views.map((v) => {
-                const Icon = VIEW_ICONS[v];
-                return (
-                  <TabsTrigger key={v} value={v} className="gap-1.5">
-                    <Icon className="size-3.5" />
-                    {VIEW_LABELS[v]}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </Tabs>
-        )}
+        <ViewTabs
+          connectionId={meta.connectionId}
+          connectionName={params.connection}
+          schema={meta.resolvedSchema}
+          table={params.table}
+          builtInTypes={views}
+          viewType={viewType}
+          onSelectBuiltIn={(v) => {
+            setViewType(v);
+            setTablePref("viewType", v);
+          }}
+          currentConfig={viewConfig}
+          onApplySavedView={applyView}
+        />
         {viewType === "kanban" && groupCols.length > 1 && (
           <div className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             Group by

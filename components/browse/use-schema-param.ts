@@ -51,3 +51,8 @@ export function infoHref(args: { connection: string; schema?: string; table: str
   const qs = search.toString();
   return `/browse/${args.connection}/${encodeURIComponent(args.table)}/info${qs ? `?${qs}` : ""}`;
 }
+
+export function viewsHref(args: { connection: string; schema?: string; table: string }): string {
+  const q = schemaQuery(args.schema);
+  return `/browse/${args.connection}/${encodeURIComponent(args.table)}/views${q ? `?${q}` : ""}`;
+}
