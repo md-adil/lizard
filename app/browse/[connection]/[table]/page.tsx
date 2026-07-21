@@ -35,7 +35,7 @@ import {
 import { KanbanView } from "@/components/browse/kanban-view";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportCsvDialog } from "@/components/browse/import-csv-dialog";
-import { useSchemaParam, recordHref, customizeHref } from "@/components/browse/use-schema-param";
+import { useSchemaParam, recordHref, customizeHref, infoHref } from "@/components/browse/use-schema-param";
 import { dataApiUrl } from "@/components/browse/data-api";
 import { useGroupedRows } from "@/components/browse/use-grouped-rows";
 import { ColumnsSelect } from "@/components/browse/columns-select";
@@ -44,7 +44,7 @@ import type { FilterSet } from "@/lib/data/filters";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { AutoRefreshSelect } from "@/components/ui/auto-refresh-select";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Info, Settings2, Download, Upload, Plus } from "lucide-react";
 import { useInterval } from "@/hooks/use-interval";
 import { Card } from "@/components/ui/card";
 
@@ -344,6 +344,24 @@ export default function TablePage() {
           )}
         </div>
         <div className="flex gap-1">
+          <ButtonGroup>
+            <Button
+              variant="secondary"
+              nativeButton={false}
+              render={<Link href={infoHref({ connection: params.connection, schema: meta.schema, table: params.table })} />}
+            >
+              <Info className="size-3.5" /> Info
+            </Button>
+            <Button
+              variant="secondary"
+              nativeButton={false}
+              render={
+                <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+              }
+            >
+              <Settings2 className="size-3.5" /> Customize
+            </Button>
+          </ButtonGroup>
           <SavedViewsBar
             connectionId={meta.connectionId}
             schema={meta.resolvedSchema}
@@ -353,24 +371,19 @@ export default function TablePage() {
           />
           <ButtonGroup>
             <Button variant="secondary" nativeButton={false} render={<a href={exportHref} download />}>
-              ⬇ Export CSV
+              <Download className="size-3.5" /> Export CSV
             </Button>
             {!meta.isView && (
               <Button variant="secondary" onClick={() => setImporting(true)}>
-                ⬆ Import CSV
+                <Upload className="size-3.5" /> Import CSV
               </Button>
             )}
           </ButtonGroup>
-          <Button
-            variant="secondary"
-            nativeButton={false}
-            render={
-              <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
-            }
-          >
-            ⚙ Customize
-          </Button>
-          {!meta.isView && <Button onClick={() => setEditing("new")}>＋ New row</Button>}
+          {!meta.isView && (
+            <Button onClick={() => setEditing("new")}>
+              <Plus className="size-3.5" /> New row
+            </Button>
+          )}
         </div>
       </div>
 

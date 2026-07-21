@@ -34,7 +34,9 @@ const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
 // Both palettes validated with the dataviz six-checks validator against their
 // surface (#11151f dark, #ffffff light). Fixed assignment order, never cycled.
-const CHART_THEMES: Record<
+// Exported so other ECharts-based views (e.g. the relationship graph) reuse
+// these exact tokens instead of inventing their own colors.
+export const CHART_THEMES: Record<
   ThemeName,
   {
     palette: string[];
@@ -66,7 +68,7 @@ const CHART_THEMES: Record<
   },
 };
 
-type ChartTheme = (typeof CHART_THEMES)[ThemeName];
+export type ChartTheme = (typeof CHART_THEMES)[ThemeName];
 
 export function formatNumber(v: unknown): string {
   const n = Number(v);
