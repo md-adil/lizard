@@ -106,7 +106,13 @@ export default function TableViewsPage() {
                 </div>
                 {canDelete && (
                   <AlertDialog>
-                    <AlertDialogTrigger render={<Button variant="secondary" size="sm">Delete</Button>} />
+                    <AlertDialogTrigger
+                      render={
+                        <Button variant="secondary" size="sm">
+                          Delete
+                        </Button>
+                      }
+                    />
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete "{v.name}"?</AlertDialogTitle>

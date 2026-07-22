@@ -264,9 +264,10 @@ export function listTableOverrides(): TableOverride[] {
 // multi-tenant "org_*"), so callers still resolve the winning override for a
 // concrete schema themselves (see resolveTableOverride).
 export function listTableOverridesForConnection(connectionId: string): TableOverride[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM table_overrides WHERE connection_id = ?")
-    .all(connectionId) as Record<string, unknown>[];
+  const rows = getDb().prepare("SELECT * FROM table_overrides WHERE connection_id = ?").all(connectionId) as Record<
+    string,
+    unknown
+  >[];
   return rows.map(mapTableOverrideRow);
 }
 
@@ -322,9 +323,10 @@ export function listColumnOverrides(): ColumnOverride[] {
 // so callers still resolve the winning override for a concrete schema/table
 // themselves (see resolveColumnOverrides).
 export function listColumnOverridesForConnection(connectionId: string): ColumnOverride[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM column_overrides WHERE connection_id = ?")
-    .all(connectionId) as Record<string, unknown>[];
+  const rows = getDb().prepare("SELECT * FROM column_overrides WHERE connection_id = ?").all(connectionId) as Record<
+    string,
+    unknown
+  >[];
   return rows.map(mapColumnOverrideRow);
 }
 
@@ -750,9 +752,10 @@ export function logAudit(entry: {
 }
 
 export function listAudit(limit = 200, offset = 0): Record<string, unknown>[] {
-  return getDb()
-    .prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?")
-    .all(limit, offset) as Record<string, unknown>[];
+  return getDb().prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset) as Record<
+    string,
+    unknown
+  >[];
 }
 
 export function countAudit(): number {

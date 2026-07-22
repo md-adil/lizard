@@ -57,9 +57,7 @@ async function introspectCollection(
     docs =
       kind === "view"
         ? await coll.find({}, { limit: SAMPLE_SIZE, maxTimeMS: READ_MAX_TIME_MS }).toArray()
-        : await coll
-            .aggregate([{ $sample: { size: SAMPLE_SIZE } }], { maxTimeMS: READ_MAX_TIME_MS })
-            .toArray();
+        : await coll.aggregate([{ $sample: { size: SAMPLE_SIZE } }], { maxTimeMS: READ_MAX_TIME_MS }).toArray();
   } catch {
     docs = await coll.find({}, { limit: SAMPLE_SIZE, maxTimeMS: READ_MAX_TIME_MS }).toArray();
   }

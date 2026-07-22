@@ -1,5 +1,6 @@
 import * as React from "react";
 import { getTimezoneOffset } from "@/lib/data/timezones";
+import { NullValue } from "@/components/browse/null-value";
 
 export interface TimezoneCellProps {
   value: unknown;
@@ -8,7 +9,7 @@ export interface TimezoneCellProps {
 
 export function TimezoneCell({ value, className }: TimezoneCellProps) {
   const tz = String(value || "").trim();
-  if (!tz) return <span className="text-muted-foreground">∅</span>;
+  if (!tz) return <NullValue />;
 
   const offset = getTimezoneOffset(tz);
   const offsetStr = offset ? ` (${offset})` : "";

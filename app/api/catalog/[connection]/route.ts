@@ -41,7 +41,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ connecti
     // or Postgres's conventional "public" default when there are several.
     const schemaObj = schema
       ? conn.schemas.find((s) => s.name === schema)
-      : (conn.schemas.length === 1 ? conn.schemas[0] : undefined) ?? conn.schemas.find((s) => s.name === "public");
+      : ((conn.schemas.length === 1 ? conn.schemas[0] : undefined) ?? conn.schemas.find((s) => s.name === "public"));
     if (!schemaObj) {
       return NextResponse.json({ error: "Schema not found" }, { status: 404 });
     }

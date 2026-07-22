@@ -11,6 +11,7 @@ import { Search, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { recordHref } from "@/components/browse/use-schema-param";
+import { NullValue } from "@/components/browse/null-value";
 import type { GlobalSearchHit, GlobalSearchResult } from "@/lib/data/global-search";
 
 function useDebounced(value: string, delayMs: number): string {
@@ -143,7 +144,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
                     onClick={() => onOpenChange(false)}
                     className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hoverable"
                   >
-                    <span className="truncate text-[13px]">{h.value || "∅"}</span>
+                    {h.value ? <span className="truncate text-[13px]">{h.value}</span> : <NullValue />}
                     <span
                       className="code shrink-0 truncate max-w-48"
                       style={{ fontSize: 10.5, color: "var(--muted-foreground-faint)" }}
@@ -160,8 +161,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
 
         {data && data.partial && (
           <p className="shrink-0 text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>
-            Search timed out before scanning all <strong>{data.scannedTables}</strong> eligible tables — results may
-            be incomplete.
+            Search timed out before scanning all <strong>{data.scannedTables}</strong> eligible tables — results may be
+            incomplete.
           </p>
         )}
       </DialogContent>

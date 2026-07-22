@@ -22,7 +22,14 @@ import {
 import type { ChartType } from "@/lib/types";
 import { CHART_TYPES } from "@/lib/types";
 import { useTheme } from "@/components/useTheme";
-import { Combobox, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem, ComboboxEmpty } from "@/components/ui/combobox";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
 
 const CHART_TYPE_ICONS: Record<ChartType, LucideIcon> = {
   line: LineChart,

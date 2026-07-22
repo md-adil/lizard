@@ -1,4 +1,5 @@
 import { getLocalCurrency } from "@/lib/data/widgets";
+import { NullValue } from "@/components/browse/null-value";
 
 export interface CurrencyCellProps {
   value: unknown;
@@ -8,7 +9,7 @@ export interface CurrencyCellProps {
 export function CurrencyCell({ value, className }: CurrencyCellProps) {
   const amount = Number(value);
   if (value === null || value === undefined || isNaN(amount)) {
-    return <span className="text-muted-foreground">{String(value ?? "∅")}</span>;
+    return value === null || value === undefined ? <NullValue /> : <span className="text-muted-foreground">{String(value)}</span>;
   }
 
   let formatted = String(value);

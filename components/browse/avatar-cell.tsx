@@ -32,13 +32,14 @@ export function AvatarCell({ value, className, size = "sm" }: AvatarCellProps) {
     );
   }
 
-  const initials = text
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase() || "👤";
+  const initials =
+    text
+      .split(/\s+/)
+      .map((p) => p[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "👤";
 
   return (
     <Avatar size={mappedSize} className={className}>

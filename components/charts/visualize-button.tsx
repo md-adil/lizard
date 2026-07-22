@@ -27,7 +27,10 @@ export function VisualizeButton({ result, source }: { result: QueryResult; sourc
 
   const { data: dashboards } = useDashboards({ enabled: open });
   const dashboardOptions = useMemo(
-    () => [{ value: "new", label: "＋ New dashboard…" }, ...(dashboards?.map((d) => ({ value: d.id, label: d.name })) ?? [])],
+    () => [
+      { value: "new", label: "＋ New dashboard…" },
+      ...(dashboards?.map((d) => ({ value: d.id, label: d.name })) ?? []),
+    ],
     [dashboards],
   );
 

@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import { NullValue } from "@/components/browse/null-value";
 
 export interface MarkdownCellProps {
   value: unknown;
@@ -7,7 +8,7 @@ export interface MarkdownCellProps {
 
 export function MarkdownCell({ value, className }: MarkdownCellProps) {
   const text = String(value || "");
-  if (!text) return <span className="text-muted-foreground">∅</span>;
+  if (!text) return <NullValue />;
 
   let rendered = "";
   try {

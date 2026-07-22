@@ -34,7 +34,11 @@ export function displayValue(meta: TableMeta, row: Row): string {
   const dc = meta.displayColumn;
   const v = dc ? row[dc] : undefined;
   if (v != null && String(v).trim()) return String(v);
-  return effectiveKey(meta.table).map((k) => String(row[k])).join(" · ") || "—";
+  return (
+    effectiveKey(meta.table)
+      .map((k) => String(row[k]))
+      .join(" · ") || "—"
+  );
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|avif)(\?|$)/i;

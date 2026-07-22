@@ -72,7 +72,10 @@ export const postgresDialect: Dialect = {
       case "42501":
         return { status: 403, message: "The write role lacks permission for this operation" };
       case "42704":
-        return { status: 400, message: `Referenced type or object does not exist${err.message ? `: ${err.message}` : ""}` };
+        return {
+          status: 400,
+          message: `Referenced type or object does not exist${err.message ? `: ${err.message}` : ""}`,
+        };
       default:
         return null;
     }

@@ -139,11 +139,7 @@ export default function ConnectionPage() {
   // Schema names for this one connection load lazily here (this page only
   // ever needs its own connection's schemas, not the whole fleet's) — see
   // /api/catalog/[connection]/schemas.
-  const {
-    schemas,
-    isLoading: schemasLoading,
-    error: schemasError,
-  } = useConnectionSchemas(conn?.connectionName);
+  const { schemas, isLoading: schemasLoading, error: schemasError } = useConnectionSchemas(conn?.connectionName);
 
   const sortedSchemas = useMemo(() => schemas.slice().sort((a, b) => a.name.localeCompare(b.name)), [schemas]);
 

@@ -98,7 +98,9 @@ export default function TableInfoPage() {
         <Button
           variant="secondary"
           nativeButton={false}
-          render={<Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />}
+          render={
+            <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} />
+          }
         >
           <Settings2 className="size-3.5" /> Customize
         </Button>
@@ -196,7 +198,10 @@ export default function TableInfoPage() {
             {!meta.tableOverride ? (
               <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
                 No table-level customization —{" "}
-                <Link href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })} className="underline">
+                <Link
+                  href={customizeHref({ connection: params.connection, schema: meta.schema, table: params.table })}
+                  className="underline"
+                >
                   configure in Customize
                 </Link>
                 .
@@ -206,7 +211,9 @@ export default function TableInfoPage() {
                 {meta.tableOverride.label && <span className="tag">label: {meta.tableOverride.label}</span>}
                 {meta.tableOverride.hidden && <span className="tag">hidden</span>}
                 {meta.tableOverride.searchable === false && <span className="tag">not searchable</span>}
-                {meta.tableOverride.displayColumn && <span className="tag">display column: {meta.tableOverride.displayColumn}</span>}
+                {meta.tableOverride.displayColumn && (
+                  <span className="tag">display column: {meta.tableOverride.displayColumn}</span>
+                )}
                 {meta.tableOverride.defaultSort && (
                   <span className="tag">
                     default sort: {meta.tableOverride.defaultSort} {meta.tableOverride.defaultSortDir ?? "asc"}
@@ -222,90 +229,90 @@ export default function TableInfoPage() {
 
         <TabsContent value="constraints">
           <Card className="p-4 grid sm:grid-cols-2 gap-4">
-          <div>
-            <div
-              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
-              Primary key
-            </div>
-            {meta.table.primaryKey.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                None{meta.tableOverride?.primaryKey?.length ? " (using a configured key, see Customize)" : "."}
-              </p>
-            ) : (
-              <span className="tag">{meta.table.primaryKey.join(", ")}</span>
-            )}
-          </div>
-
-          <div>
-            <div
-              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
-              Unique constraints
-            </div>
-            {meta.table.uniqueConstraints.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                None.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {meta.table.uniqueConstraints.map((cols, i) => (
-                  <span key={i} className="tag">
-                    {cols.join(", ")}
-                  </span>
-                ))}
+            <div>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+                style={{ color: "var(--muted-foreground-faint)" }}
+              >
+                Primary key
               </div>
-            )}
-          </div>
-
-          <div>
-            <div
-              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
-              Check constraints
+              {meta.table.primaryKey.length === 0 ? (
+                <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                  None{meta.tableOverride?.primaryKey?.length ? " (using a configured key, see Customize)" : "."}
+                </p>
+              ) : (
+                <span className="tag">{meta.table.primaryKey.join(", ")}</span>
+              )}
             </div>
-            {meta.table.checkConstraints.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                None.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {meta.table.checkConstraints.map((c) => (
-                  <div key={c.name} className="text-[11.5px] code wrap-break-word">
-                    {c.name}: {c.expression}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
-          <div>
-            <div
-              className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
-              style={{ color: "var(--muted-foreground-faint)" }}
-            >
-              Indexed columns
-            </div>
-            {meta.table.indexedColumns.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                None known.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {meta.table.indexedColumns.map((c) => (
-                  <span key={c} className="tag">
-                    {c}
-                  </span>
-                ))}
+            <div>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+                style={{ color: "var(--muted-foreground-faint)" }}
+              >
+                Unique constraints
               </div>
-            )}
-            <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
-              Columns covered by some index — not a full index list (name/uniqueness/order aren't tracked yet).
-            </p>
-          </div>
+              {meta.table.uniqueConstraints.length === 0 ? (
+                <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                  None.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {meta.table.uniqueConstraints.map((cols, i) => (
+                    <span key={i} className="tag">
+                      {cols.join(", ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+                style={{ color: "var(--muted-foreground-faint)" }}
+              >
+                Check constraints
+              </div>
+              {meta.table.checkConstraints.length === 0 ? (
+                <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                  None.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {meta.table.checkConstraints.map((c) => (
+                    <div key={c.name} className="text-[11.5px] code wrap-break-word">
+                      {c.name}: {c.expression}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+                style={{ color: "var(--muted-foreground-faint)" }}
+              >
+                Indexed columns
+              </div>
+              {meta.table.indexedColumns.length === 0 ? (
+                <p className="text-[12.5px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                  None known.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {meta.table.indexedColumns.map((c) => (
+                    <span key={c} className="tag">
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground-faint)" }}>
+                Columns covered by some index — not a full index list (name/uniqueness/order aren't tracked yet).
+              </p>
+            </div>
           </Card>
         </TabsContent>
 

@@ -291,7 +291,11 @@ export function SpecControls({
               onCheckedChange={(checked) =>
                 onChange({
                   ...spec,
-                  thresholds: { warn: spec.thresholds?.warn ?? null, crit: spec.thresholds?.crit ?? null, highIsBad: checked },
+                  thresholds: {
+                    warn: spec.thresholds?.warn ?? null,
+                    crit: spec.thresholds?.crit ?? null,
+                    highIsBad: checked,
+                  },
                 })
               }
             />

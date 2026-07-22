@@ -21,6 +21,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-soft: var(--destructive-soft);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-info: var(--info);
   --color-primary-soft: var(--primary-soft);
@@ -73,6 +74,7 @@
   --destructive: #dc2626;
   --destructive-soft: color-mix(in oklch, var(--destructive) 12%, transparent);
   --success: #16a34a;
+  --success-soft: color-mix(in oklch, var(--success) 12%, transparent);
   --warning: #d97706;
   --info: #2563eb;
   --border: #e2e8f0;
@@ -117,6 +119,7 @@
   --destructive: #f87171;
   --destructive-soft: color-mix(in oklch, var(--destructive) 16%, transparent);
   --success: #4ade80;
+  --success-soft: color-mix(in oklch, var(--success) 16%, transparent);
   --warning: #fbbf24;
   --info: #60a5fa;
   --border: #1e293b;
@@ -169,7 +172,6 @@
 .rgl-view .react-resizable-handle {
   display: none;
 }
-
 
 /* Every form field across the app does <label className="label">X</label>
    followed by its control, expecting the label to sit on its own line above

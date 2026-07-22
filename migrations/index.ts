@@ -16,16 +16,4 @@ export { runMigrations } from "./runner";
 
 // Applied in order; add new migrations by appending, never reordering or
 // editing an already-shipped one.
-export const MIGRATIONS: Migration[] = [
-  m0001,
-  m0002,
-  m0003,
-  m0004,
-  m0005,
-  m0006,
-  m0007,
-  m0008,
-  m0009,
-  m0010,
-  m0011,
-];
+export const MIGRATIONS: Migration[] = [m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011];

@@ -5,8 +5,7 @@
 // editor on the dashboard settings page (app/dashboards/[id]/settings).
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, subDays, subMinutes } from "date-fns";
-import type { DateRange } from "react-day-picker";
+import { format, subDays, subMinutes, subMonths, subYears, startOfYear, endOfYear } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import type { DashboardVariable, QueryResult, VariableOption } from "@/lib/types";
 import {
@@ -20,7 +19,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
 // Drop-in replacement for DataSelect (same getValue/getLabel/placeholder
@@ -110,19 +108,42 @@ function splitDateTime(s: string): [string, string] {
 // date-only, minute/hour-granularity "last N" ranges when it includes time
 // (Grafana's quick-range convention). Each is a single deliberate choice, so
 // unlike manual calendar clicks it commits immediately instead of staging.
-const DATE_PRESETS = [
-  { label: "Today", from: (now: Date) => now },
-  { label: "Last 7 days", from: (now: Date) => subDays(now, 6) },
-  { label: "Last 30 days", from: (now: Date) => subDays(now, 29) },
+// Most presets are "from X to now" (just a `from` fn); "Last year" is a fixed
+// prior calendar year, so it needs its own `to` as well rather than `now`.
+interface DatePreset {
+  label: string;
+  from: (now: Date) => Date;
+  to?: (now: Date) => Date;
+}
+
+// Shared month/year tier appended to both DATE_PRESETS and TIME_PRESETS, so
+// "including year" ranges are available regardless of whether the variable
+// includes time-of-day.
+const YEAR_TIER: DatePreset[] = [
+  { label: "Last 90 days", from: (now) => subDays(now, 89) },
+  { label: "Last 6 months", from: (now) => subMonths(now, 6) },
+  { label: "Last 12 months", from: (now) => subMonths(now, 12) },
+  { label: "This year", from: (now) => startOfYear(now) },
+  { label: "Last year", from: (now) => startOfYear(subYears(now, 1)), to: (now) => endOfYear(subYears(now, 1)) },
 ];
-const TIME_PRESETS = [
-  { label: "Last 15 minutes", from: (now: Date) => subMinutes(now, 15) },
-  { label: "Last 30 minutes", from: (now: Date) => subMinutes(now, 30) },
-  { label: "Last 1 hour", from: (now: Date) => subMinutes(now, 60) },
-  { label: "Last 3 hours", from: (now: Date) => subMinutes(now, 180) },
-  { label: "Last 6 hours", from: (now: Date) => subMinutes(now, 360) },
-  { label: "Last 12 hours", from: (now: Date) => subMinutes(now, 720) },
-  { label: "Last 24 hours", from: (now: Date) => subMinutes(now, 1440) },
+
+const DATE_PRESETS: DatePreset[] = [
+  { label: "Today", from: (now) => now },
+  { label: "Last 7 days", from: (now) => subDays(now, 6) },
+  { label: "Last 30 days", from: (now) => subDays(now, 29) },
+  ...YEAR_TIER,
+];
+const TIME_PRESETS: DatePreset[] = [
+  { label: "Last 15 minutes", from: (now) => subMinutes(now, 15) },
+  { label: "Last 30 minutes", from: (now) => subMinutes(now, 30) },
+  { label: "Last 1 hour", from: (now) => subMinutes(now, 60) },
+  { label: "Last 3 hours", from: (now) => subMinutes(now, 180) },
+  { label: "Last 6 hours", from: (now) => subMinutes(now, 360) },
+  { label: "Last 12 hours", from: (now) => subMinutes(now, 720) },
+  { label: "Last 24 hours", from: (now) => subMinutes(now, 1440) },
+  { label: "Last 7 days", from: (now) => subDays(now, 6) },
+  { label: "Last 30 days", from: (now) => subDays(now, 29) },
+  ...YEAR_TIER,
 ];
 
 function PresetButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -136,17 +157,16 @@ function PresetButton({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-// Shared date-range picker (shadcn Calendar in range mode, behind a
-// Popover) — used both by the live toolbar (daterange variable) and the
-// variable creation/edit card. includeTime adds a from/to time-of-day
-// alongside the calendar, same from/to fields either way (just
-// "yyyy-MM-dd" vs. "yyyy-MM-dd HH:mm").
+// Shared date-range picker — Grafana's own shape: a preset column on the
+// left, two plain From/To fields (not a calendar grid — a full month grid
+// is a lot of chrome for "type/pick a date") behind an Apply button on the
+// right. includeTime adds a time-of-day input alongside each date field,
+// same from/to fields either way (just "yyyy-MM-dd" vs "yyyy-MM-dd HH:mm").
 //
-// Picking a range is several clicks (start day, end day, from time, to
-// time) — calling onChange after every one of them would re-run every panel
-// on the dashboard mid-pick. Instead this holds its own draft state and only
-// calls onChange once, when "Apply" is pressed; closing without applying
-// just discards the draft (re-opening reseeds it from the last-applied from/to).
+// Editing the fields doesn't call onChange until "Apply" is pressed —
+// otherwise every keystroke would re-run every panel on the dashboard mid-edit.
+// Closing without applying discards the draft (re-opening reseeds it from
+// the last-applied from/to).
 export function DateRangeField({
   from,
   to,
@@ -164,87 +184,107 @@ export function DateRangeField({
   triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined);
+  const [draftFromDate, setDraftFromDate] = useState("");
   const [draftFromTime, setDraftFromTime] = useState("");
+  const [draftToDate, setDraftToDate] = useState("");
   const [draftToTime, setDraftToTime] = useState("");
 
   const openChange = (next: boolean) => {
     if (next) {
       const [fromDate, fromTime] = splitDateTime(from);
       const [toDate, toTime] = splitDateTime(to);
-      setDraftRange({ from: fromDate ? new Date(fromDate) : undefined, to: toDate ? new Date(toDate) : undefined });
+      setDraftFromDate(fromDate);
       setDraftFromTime(fromTime);
+      setDraftToDate(toDate);
       setDraftToTime(toTime);
     }
     setOpen(next);
   };
 
   const apply = () => {
-    const fromStr = draftRange?.from
-      ? includeTime
-        ? `${format(draftRange.from, "yyyy-MM-dd")} ${draftFromTime || "00:00"}`
-        : format(draftRange.from, "yyyy-MM-dd")
-      : "";
-    const toStr = draftRange?.to
-      ? includeTime
-        ? `${format(draftRange.to, "yyyy-MM-dd")} ${draftToTime || "23:59"}`
-        : format(draftRange.to, "yyyy-MM-dd")
-      : "";
+    const fromStr = draftFromDate ? (includeTime ? `${draftFromDate} ${draftFromTime || "00:00"}` : draftFromDate) : "";
+    const toStr = draftToDate ? (includeTime ? `${draftToDate} ${draftToTime || "23:59"}` : draftToDate) : "";
     onChange({ from: fromStr, to: toStr });
     setOpen(false);
   };
 
   // A preset names a single deliberate range — unlike manual calendar
   // clicks, it commits immediately and closes rather than waiting for Apply.
-  const applyPreset = (presetFrom: Date) => {
+  // Most presets run to "now"; a fixed-range preset (e.g. "Last year") pins
+  // its own `to` instead.
+  const applyPreset = (preset: DatePreset) => {
     const now = new Date();
+    const presetFrom = preset.from(now);
+    const presetTo = preset.to ? preset.to(now) : now;
     const fromStr = includeTime ? format(presetFrom, "yyyy-MM-dd HH:mm") : format(presetFrom, "yyyy-MM-dd");
-    const toStr = includeTime ? format(now, "yyyy-MM-dd HH:mm") : format(now, "yyyy-MM-dd");
+    const toStr = includeTime ? format(presetTo, "yyyy-MM-dd HH:mm") : format(presetTo, "yyyy-MM-dd");
     onChange({ from: fromStr, to: toStr });
     setOpen(false);
   };
 
   return (
     <Popover open={open} onOpenChange={openChange}>
-      <PopoverTrigger render={<Button variant="secondary" size="sm" className={cn("justify-start gap-1.5", triggerClassName)} />}>
-        <CalendarDays className="size-3.5" />
-        {from && to ? `${from} – ${to}` : "Pick a range"}
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <Button variant="secondary" size="sm" className={cn("justify-start gap-1.5", triggerClassName)}>
+            <CalendarDays className="size-3.5" />
+            {from && to ? `${from} – ${to}` : "Pick a range"}
+          </Button>
+        }
+      />
       <PopoverContent className="w-auto p-0" align="start">
         <div className="flex">
           <div
-            className="flex flex-col gap-0.5 p-2 w-40 shrink-0"
+            className="flex flex-col gap-0.5 p-2 w-40 shrink-0 max-h-80 overflow-y-auto scrollbar-thin"
             style={{ borderRight: "1px solid var(--border)" }}
           >
             {(includeTime ? TIME_PRESETS : DATE_PRESETS).map((p) => (
-              <PresetButton key={p.label} label={p.label} onClick={() => applyPreset(p.from(new Date()))} />
+              <PresetButton key={p.label} label={p.label} onClick={() => applyPreset(p)} />
             ))}
           </div>
-          <div className="flex flex-col">
-            <Calendar mode="range" selected={draftRange} onSelect={setDraftRange} numberOfMonths={2} />
-            <div className="flex items-center justify-between gap-3 p-3 border-t" style={{ borderColor: "var(--border)" }}>
-              {includeTime ? (
-                <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3 p-3 w-80">
+            <div>
+              <label className="label">From</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  className="flex-1 min-w-0"
+                  value={draftFromDate}
+                  onChange={(e) => setDraftFromDate(e.target.value)}
+                />
+                {includeTime && (
                   <Input
                     type="time"
-                    className="w-34"
+                    className="w-32 shrink-0"
                     value={draftFromTime}
-                    disabled={!draftRange?.from}
+                    disabled={!draftFromDate}
                     onChange={(e) => setDraftFromTime(e.target.value)}
                   />
-                  <span style={{ color: "var(--muted-foreground-faint)" }}>–</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="label">To</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  className="flex-1 min-w-0"
+                  value={draftToDate}
+                  onChange={(e) => setDraftToDate(e.target.value)}
+                />
+                {includeTime && (
                   <Input
                     type="time"
-                    className="w-34"
+                    className="w-32 shrink-0"
                     value={draftToTime}
-                    disabled={!draftRange?.to}
+                    disabled={!draftToDate}
                     onChange={(e) => setDraftToTime(e.target.value)}
                   />
-                </div>
-              ) : (
-                <span />
-              )}
-              <Button size="sm" disabled={!draftRange?.from || !draftRange?.to} onClick={apply}>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" disabled={!draftFromDate || !draftToDate} onClick={apply}>
                 Apply
               </Button>
             </div>

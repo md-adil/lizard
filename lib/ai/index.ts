@@ -54,7 +54,8 @@ export function serializeCatalog(catalog: Catalog, scope?: string[]): string {
     (v) =>
       !scope ||
       scope.length === 0 ||
-      (scope.includes(resolveConnectionName(v.fromConnection)) && scope.includes(resolveConnectionName(v.toConnection))),
+      (scope.includes(resolveConnectionName(v.fromConnection)) &&
+        scope.includes(resolveConnectionName(v.toConnection))),
   );
   for (const v of vfks) {
     parts.push(

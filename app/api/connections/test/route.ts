@@ -72,7 +72,16 @@ export async function POST(req: Request) {
       return fail(new Error("host, database and read user are required to test"));
     }
 
-    const read = await probeCredentials({ engine, host, port, database, user: readUser, password: readPassword, ssl, options });
+    const read = await probeCredentials({
+      engine,
+      host,
+      port,
+      database,
+      user: readUser,
+      password: readPassword,
+      ssl,
+      options,
+    });
     let write: string | null = null;
     if (writeUser) {
       write = await probeCredentials({

@@ -82,18 +82,18 @@ export function ConnectionForm({
   const [form, setForm] = useState<FormState>(
     initial
       ? {
-        engine: initial.engine,
-        name: initial.name,
-        host: initial.host,
-        port: String(initial.port),
-        database: initial.database,
-        readUser: initial.readUser,
-        readPassword: "",
-        writeUser: initial.writeUser ?? "",
-        writePassword: "",
-        ssl: initial.ssl,
-        options: initial.options ?? "",
-      }
+          engine: initial.engine,
+          name: initial.name,
+          host: initial.host,
+          port: String(initial.port),
+          database: initial.database,
+          readUser: initial.readUser,
+          readPassword: "",
+          writeUser: initial.writeUser ?? "",
+          writePassword: "",
+          ssl: initial.ssl,
+          options: initial.options ?? "",
+        }
       : BLANK,
   );
   const [uri, setUri] = useState("");
@@ -109,28 +109,33 @@ export function ConnectionForm({
   // also becomes the write role or the connection is saved read-only.
   const [uriAccess, setUriAccess] = useState<"readwrite" | "readonly">("readwrite");
   const [useSeparateReadWrite, setUseSeparateReadWrite] = useState<boolean>(
-    initial
-      ? !!initial.writeUser && initial.writeUser !== initial.readUser
-      : false
+    initial ? !!initial.writeUser && initial.writeUser !== initial.readUser : false,
   );
   const isDuplicate = mode === "create" && !!initial;
-  const passwordPlaceholder = mode === "edit"
-    ? "•••• unchanged"
-    : isDuplicate
-      ? "•••• cloned (credentials loaded)"
-      : "";
+  const passwordPlaceholder =
+    mode === "edit" ? "•••• unchanged" : isDuplicate ? "•••• cloned (credentials loaded)" : "";
 
   // Write credentials to actually send: on the URI tab it's the readwrite/
   // readonly switch (a pasted URI is a single set of creds); on Manual
   // Fields it's the existing separate-user checkbox.
   const isUriTab = activeTab === "uri";
   const wUser = isUriTab
-    ? uriAccess === "readonly" ? null : (form.writeUser || null)
-    : useSeparateReadWrite ? (form.writeUser || null) : form.readUser;
+    ? uriAccess === "readonly"
+      ? null
+      : form.writeUser || null
+    : useSeparateReadWrite
+      ? form.writeUser || null
+      : form.readUser;
   const wPass = isUriTab
-    ? uriAccess === "readonly" ? null : (form.writePassword || null)
-    : useSeparateReadWrite ? (form.writePassword || null) : form.readPassword;
-  const willTestWrite = isUriTab ? uriAccess === "readwrite" : !!(useSeparateReadWrite ? form.writeUser : form.readUser);
+    ? uriAccess === "readonly"
+      ? null
+      : form.writePassword || null
+    : useSeparateReadWrite
+      ? form.writePassword || null
+      : form.readPassword;
+  const willTestWrite = isUriTab
+    ? uriAccess === "readwrite"
+    : !!(useSeparateReadWrite ? form.writeUser : form.readUser);
 
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({
@@ -161,9 +166,7 @@ export function ConnectionForm({
       setUriMsg("Not a valid postgres://, mysql:// or mongodb:// URI");
       return;
     }
-    setUriMsg(
-      `Parsed ✓ ${ENGINE_LABELS[p.engine]} — credentials filled`,
-    );
+    setUriMsg(`Parsed ✓ ${ENGINE_LABELS[p.engine]} — credentials filled`);
     setForm((f) => ({
       ...f,
       engine: p.engine,
@@ -293,14 +296,14 @@ export function ConnectionForm({
 
         {/* Tab Switcher */}
         {mode === "create" && (
-          <Tabs
-            value={activeTab}
-            onValueChange={(v) => setActiveTab(v as "uri" | "manual")}
-            className="mb-4"
-          >
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "uri" | "manual")} className="mb-4">
             <TabsList className="w-full border-b border-border flex justify-start">
-              <TabsTrigger value="uri" className="px-4 py-2">Connection URI</TabsTrigger>
-              <TabsTrigger value="manual" className="px-4 py-2">Manual Fields</TabsTrigger>
+              <TabsTrigger value="uri" className="px-4 py-2">
+                Connection URI
+              </TabsTrigger>
+              <TabsTrigger value="manual" className="px-4 py-2">
+                Manual Fields
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         )}
@@ -430,7 +433,10 @@ export function ConnectionForm({
             )}
 
             <div className="mt-4 flex flex-col gap-2">
-              <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer" style={{ color: "var(--muted-foreground)" }}>
+              <label
+                className="flex items-center gap-2 text-[13px] select-none cursor-pointer"
+                style={{ color: "var(--muted-foreground)" }}
+              >
                 <input
                   type="checkbox"
                   checked={useSeparateReadWrite}
@@ -439,7 +445,10 @@ export function ConnectionForm({
                 Use separate read-only user (recommended for production)
               </label>
 
-              <label className="flex items-center gap-2 text-[13px] select-none cursor-pointer" style={{ color: "var(--muted-foreground)" }}>
+              <label
+                className="flex items-center gap-2 text-[13px] select-none cursor-pointer"
+                style={{ color: "var(--muted-foreground)" }}
+              >
                 <input type="checkbox" checked={form.ssl} onChange={set("ssl")} /> Use SSL
               </label>
             </div>
@@ -469,10 +478,9 @@ export function ConnectionForm({
                   onChange={set("options")}
                 />
                 <p className="text-[12px] mt-1" style={{ color: "var(--muted-foreground)" }}>
-                  Extra MongoDB driver options as URL query params, appended to the connection
-                  string (e.g. <code>authSource</code>, <code>replicaSet</code>,{" "}
-                  <code>readPreference</code>). Lizard defaults to <code>directConnection=true</code>{" "}
-                  for a single host.
+                  Extra MongoDB driver options as URL query params, appended to the connection string (e.g.{" "}
+                  <code>authSource</code>, <code>replicaSet</code>, <code>readPreference</code>). Lizard defaults to{" "}
+                  <code>directConnection=true</code> for a single host.
                 </p>
               </div>
             )}

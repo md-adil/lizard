@@ -8,12 +8,13 @@
 // own re-render/remount).
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { NullValue } from "@/components/browse/null-value";
 
 export function RedactedValue({ value }: { value: unknown }) {
   const [revealed, setRevealed] = useState(false);
 
   if (value == null) {
-    return <span className="text-muted-foreground">∅</span>;
+    return <NullValue />;
   }
 
   return (
