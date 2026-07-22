@@ -21,7 +21,14 @@ export const mysqlDialect: Dialect = {
     let mysqlType = type;
     if (t.includes("int") || t === "bool") {
       mysqlType = "SIGNED";
-    } else if (t === "numeric" || t === "decimal" || t === "float4" || t === "float8" || t === "real" || t === "double") {
+    } else if (
+      t === "numeric" ||
+      t === "decimal" ||
+      t === "float4" ||
+      t === "float8" ||
+      t === "real" ||
+      t === "double"
+    ) {
       mysqlType = "DECIMAL";
     } else if (t === "timestamp" || t === "timestamptz" || t === "datetime") {
       mysqlType = "DATETIME";
@@ -104,9 +111,12 @@ export const mysqlDialect: Dialect = {
     }
     // Incorrect value format / data truncation
     if (
-      code === "ER_TRUNCATED_WRONG_VALUE" || errno === 1292 ||
-      code === "ER_WARN_DATA_OUT_OF_RANGE" || errno === 1264 ||
-      code === "ER_DATA_TOO_LONG" || errno === 1406
+      code === "ER_TRUNCATED_WRONG_VALUE" ||
+      errno === 1292 ||
+      code === "ER_WARN_DATA_OUT_OF_RANGE" ||
+      errno === 1264 ||
+      code === "ER_DATA_TOO_LONG" ||
+      errno === 1406
     ) {
       return {
         status: 400,
@@ -115,8 +125,10 @@ export const mysqlDialect: Dialect = {
     }
     // Access denied / permission error
     if (
-      code === "ER_DBACCESS_DENIED_ERROR" || errno === 1044 ||
-      code === "ER_TABLEACCESS_DENIED_ERROR" || errno === 1142
+      code === "ER_DBACCESS_DENIED_ERROR" ||
+      errno === 1044 ||
+      code === "ER_TABLEACCESS_DENIED_ERROR" ||
+      errno === 1142
     ) {
       return {
         status: 403,

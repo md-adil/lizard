@@ -446,11 +446,7 @@ export function Sidebar() {
               it surfaces here, lazily, once this one is actually selected
               and its schema fetch fails. */}
           {schemasError && (
-            <p
-              className="text-[11.5px] mt-1 px-2"
-              style={{ color: "var(--destructive)" }}
-              title={schemasError.message}
-            >
+            <p className="text-[11.5px] mt-1 px-2" style={{ color: "var(--destructive)" }} title={schemasError.message}>
               connection error
             </p>
           )}

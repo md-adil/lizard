@@ -29,11 +29,7 @@ export class ErrorBoundary extends Component<
         <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
           Something went wrong rendering this.
         </p>
-        <button
-          className="tag"
-          style={{ color: "var(--primary)", borderColor: "var(--primary)" }}
-          onClick={this.reset}
-        >
+        <button className="tag" style={{ color: "var(--primary)", borderColor: "var(--primary)" }} onClick={this.reset}>
           Retry
         </button>
       </div>

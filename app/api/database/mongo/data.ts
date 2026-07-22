@@ -40,7 +40,11 @@ export function mongoDisplayColumn(conn: ConnectionConfig, table: TableInfo): st
 
 // Columns hidden in the grid, to drop from a list projection (matches
 // selectColumnsFor's intent in crud.ts). Keys always kept so editing works.
-function gridProjection(conn: ConnectionConfig, table: TableInfo, keep: (string | null)[]): Record<string, 0 | 1> | undefined {
+function gridProjection(
+  conn: ConnectionConfig,
+  table: TableInfo,
+  keep: (string | null)[],
+): Record<string, 0 | 1> | undefined {
   const overrides = getColumnOverrides(conn.id, table.schema, table.name);
   const prunable = overrides.filter((o) => o.hidden || o.hiddenInGrid).map((o) => o.column);
   if (prunable.length === 0) return undefined;
@@ -187,7 +191,11 @@ export async function mongoListGroupedRows(conn: ConnectionConfig, table: TableI
 
 const EXPORT_ROW_LIMIT = 100_000;
 
-export async function mongoExportRows(conn: ConnectionConfig, table: TableInfo, params: Omit<ListParams, "page" | "pageSize">) {
+export async function mongoExportRows(
+  conn: ConnectionConfig,
+  table: TableInfo,
+  params: Omit<ListParams, "page" | "pageSize">,
+) {
   const db = await getMongoDb(conn, "read");
   const coll = db.collection(table.name);
   const where = whereFor(conn, table, params.filters, params.combinator, params.search);
@@ -298,7 +306,12 @@ export async function mongoCreateRow(conn: ConnectionConfig, table: TableInfo, d
   const coll = db.collection(table.name);
   try {
     const res = await coll.insertOne(doc, { maxTimeMS: WRITE_MAX_TIME_MS });
-    logAudit({ action: "create", sql: `insertOne ${table.schema}.${table.name}`, connections: [conn.name], rowCount: 1 });
+    logAudit({
+      action: "create",
+      sql: `insertOne ${table.schema}.${table.name}`,
+      connections: [conn.name],
+      rowCount: 1,
+    });
     const inserted = await coll.findOne({ _id: res.insertedId }, { maxTimeMS: READ_MAX_TIME_MS });
     return inserted ? serializeDoc(inserted) : serializeDoc({ ...doc, _id: res.insertedId });
   } catch (e) {
@@ -336,7 +349,12 @@ export async function mongoBulkInsert(
     for (const we of err.writeErrors ?? []) errors.push({ row: we.index, message: we.errmsg ?? "insert failed" });
     if (!err.writeErrors) throw friendlyError(e);
   }
-  logAudit({ action: "import", sql: `insertMany ${table.schema}.${table.name} (${inserted} rows)`, connections: [conn.name], rowCount: inserted });
+  logAudit({
+    action: "import",
+    sql: `insertMany ${table.schema}.${table.name} (${inserted} rows)`,
+    connections: [conn.name],
+    rowCount: inserted,
+  });
   return { inserted, errors };
 }
 
@@ -356,7 +374,12 @@ export async function mongoUpdateRow(
   try {
     const res = await coll.updateOne(filter, { $set: payload }, { maxTimeMS: WRITE_MAX_TIME_MS });
     if (res.matchedCount === 0) throw new CrudError("Row not found", 404);
-    logAudit({ action: "update", sql: `updateOne ${table.schema}.${table.name}`, connections: [conn.name], rowCount: 1 });
+    logAudit({
+      action: "update",
+      sql: `updateOne ${table.schema}.${table.name}`,
+      connections: [conn.name],
+      rowCount: 1,
+    });
     const updated = await coll.findOne(filter, { maxTimeMS: READ_MAX_TIME_MS });
     if (!updated) throw new CrudError("Row not found", 404);
     return serializeDoc(updated);
@@ -374,7 +397,12 @@ export async function mongoDeleteRow(conn: ConnectionConfig, table: TableInfo, p
   try {
     const res = await coll.deleteOne(filter, { maxTimeMS: WRITE_MAX_TIME_MS });
     if (res.deletedCount === 0) throw new CrudError("Row not found", 404);
-    logAudit({ action: "delete", sql: `deleteOne ${table.schema}.${table.name}`, connections: [conn.name], rowCount: res.deletedCount });
+    logAudit({
+      action: "delete",
+      sql: `deleteOne ${table.schema}.${table.name}`,
+      connections: [conn.name],
+      rowCount: res.deletedCount,
+    });
     return { deleted: res.deletedCount };
   } catch (e) {
     if (e instanceof CrudError) throw e;

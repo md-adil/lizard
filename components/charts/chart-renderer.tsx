@@ -459,7 +459,12 @@ export function ChartRenderer({
           {y}
         </div>
         {sparklineOption && (
-          <ReactECharts option={sparklineOption} style={{ height: 32, width: "100%" }} notMerge opts={{ renderer: "svg" }} />
+          <ReactECharts
+            option={sparklineOption}
+            style={{ height: 32, width: "100%" }}
+            notMerge
+            opts={{ renderer: "svg" }}
+          />
         )}
       </div>
     );
@@ -518,7 +523,11 @@ export function ChartRenderer({
   const handleChartReady = (inst: EchartsExportHandle) => {
     onReady?.(inst);
     if (enableTimeBrush) {
-      inst.dispatchAction?.({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
+      inst.dispatchAction?.({
+        type: "takeGlobalCursor",
+        key: "brush",
+        brushOption: { brushType: "lineX", brushMode: "single" },
+      });
     }
   };
 

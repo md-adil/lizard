@@ -58,8 +58,7 @@ function isEmptyValue(v: string | boolean | number | undefined): boolean {
 export function isComplete(c: FilterCondition): boolean {
   if (NO_VALUE_OPS.includes(c.op)) return true;
   if (c.op === "between") return !isEmptyValue(c.value) && !isEmptyValue(c.value2);
-  if (c.op === "in" || c.op === "arraycontains" || c.op === "arrayoverlap")
-    return !!c.values && c.values.length > 0;
+  if (c.op === "in" || c.op === "arraycontains" || c.op === "arrayoverlap") return !!c.values && c.values.length > 0;
   return !isEmptyValue(c.value);
 }
 
@@ -117,7 +116,7 @@ export function buildFilterClause(
   // plain text/varchar column per widgetOverrideColumns in app/api/data/crud.ts)
   // rather than a native SQL array — arraycontains/arrayoverlap need each
   // engine's JSON functions/operators for these instead of @>/&&.
-  tagColumns: Set<string> = new Set()
+  tagColumns: Set<string> = new Set(),
 ): { clause: string; values: unknown[] } {
   const parts: string[] = [];
   const values: unknown[] = [];
@@ -152,10 +151,14 @@ export function buildFilterClause(
         parts.push(`(${col} IS NOT NULL AND ${dialect.castToText(col)} <> '')`);
         break;
       case "contains":
-        parts.push(dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}%`)));
+        parts.push(
+          dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}%`)),
+        );
         break;
       case "ncontains":
-        parts.push(`(${col} IS NULL OR NOT ${dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}%`))})`);
+        parts.push(
+          `(${col} IS NULL OR NOT ${dialect.caseInsensitiveLike(col, push(`%${escapeLike(f.value as string, dialect.likeEscapeChar)}%`))})`,
+        );
         break;
       case "startswith":
         parts.push(dialect.caseInsensitiveLike(col, push(`${escapeLike(f.value as string, dialect.likeEscapeChar)}%`)));

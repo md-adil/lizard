@@ -13,10 +13,7 @@ function csvField(v: unknown): string {
   if (v === null || v === undefined) s = "";
   else if (typeof v === "object") {
     const o = v as { type?: string; data?: unknown[] };
-    s =
-      o.type === "Buffer" && Array.isArray(o.data)
-        ? `\\x[${o.data.length} bytes]`
-        : JSON.stringify(v);
+    s = o.type === "Buffer" && Array.isArray(o.data) ? `\\x[${o.data.length} bytes]` : JSON.stringify(v);
   } else s = String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
@@ -41,10 +38,7 @@ export async function GET(req: Request, { params }: Params) {
       search: url.searchParams.get("search") ?? undefined,
     });
 
-    const lines = [
-      columns.map(csvField).join(","),
-      ...rows.map((r) => columns.map((c) => csvField(r[c])).join(",")),
-    ];
+    const lines = [columns.map(csvField).join(","), ...rows.map((r) => columns.map((c) => csvField(r[c])).join(","))];
     const csv = lines.join("\r\n");
 
     return new Response(csv, {
@@ -56,9 +50,9 @@ export async function GET(req: Request, { params }: Params) {
       },
     });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Export failed" }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Export failed" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }

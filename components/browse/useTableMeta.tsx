@@ -316,9 +316,7 @@ export function formatCell(
           {Array.from({ length: 5 }).map((_, idx) => (
             <Star
               key={idx}
-              className={`size-3 shrink-0 ${
-                idx < cleanRate ? "fill-amber-400 text-amber-400" : "text-muted/40"
-              }`}
+              className={`size-3 shrink-0 ${idx < cleanRate ? "fill-amber-400 text-amber-400" : "text-muted/40"}`}
             />
           ))}
         </span>
@@ -402,7 +400,11 @@ export function formatCell(
     return {
       text: String(value),
       muted: !value,
-      icon: value ? <Check className="size-3.5 text-green-600 dark:text-green-500" /> : <X className="size-3.5 text-muted-foreground" />,
+      icon: value ? (
+        <Check className="size-3.5 text-green-600 dark:text-green-500" />
+      ) : (
+        <X className="size-3.5 text-muted-foreground" />
+      ),
     };
   }
   // MySQL's tinyint(1) (normalized to the "bool" udtName/"toggle" widget)
@@ -413,7 +415,11 @@ export function formatCell(
     return {
       text: String(truthy),
       muted: !truthy,
-      icon: truthy ? <Check className="size-3.5 text-green-600 dark:text-green-500" /> : <X className="size-3.5 text-muted-foreground" />,
+      icon: truthy ? (
+        <Check className="size-3.5 text-green-600 dark:text-green-500" />
+      ) : (
+        <X className="size-3.5 text-muted-foreground" />
+      ),
     };
   }
   if (Array.isArray(value)) {

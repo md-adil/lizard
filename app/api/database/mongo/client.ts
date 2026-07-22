@@ -130,10 +130,7 @@ export async function discoverMongoDatabases(cfg: {
   ssl: boolean;
   options?: string | null;
 }): Promise<string[]> {
-  const client = new MongoClient(
-    buildMongoUri({ ...cfg, password: cfg.password ?? "" }),
-    { maxPoolSize: 1 },
-  );
+  const client = new MongoClient(buildMongoUri({ ...cfg, password: cfg.password ?? "" }), { maxPoolSize: 1 });
   try {
     await client.connect();
     const res = await client.db().admin().listDatabases({ nameOnly: true });

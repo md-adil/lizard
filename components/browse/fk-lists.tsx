@@ -131,8 +131,7 @@ export function ForeignKeyLists({
           {table.foreignKeys.map((fk) => (
             <Card key={fk.constraintName} size="sm" className="px-3 py-2.5 mb-2">
               <span className="code wrap-break-word" style={{ fontSize: 11.5 }}>
-                {fk.columns.join(", ")} → {fk.referencedSchema}.{fk.referencedTable} (
-                {fk.referencedColumns.join(", ")})
+                {fk.columns.join(", ")} → {fk.referencedSchema}.{fk.referencedTable} ({fk.referencedColumns.join(", ")})
               </span>
             </Card>
           ))}

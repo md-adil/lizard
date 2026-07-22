@@ -19,14 +19,7 @@ const sizeClasses = {
   lg: "size-6",
 };
 
-export function Rating({
-  value = 0,
-  max = 5,
-  onChange,
-  disabled = false,
-  className,
-  size = "md",
-}: RatingProps) {
+export function Rating({ value = 0, max = 5, onChange, disabled = false, className, size = "md" }: RatingProps) {
   const [hoverValue, setHoverValue] = React.useState<number | null>(null);
 
   const starSize = sizeClasses[size];
@@ -34,11 +27,7 @@ export function Rating({
   return (
     <div
       data-slot="rating"
-      className={cn(
-        "flex items-center gap-1",
-        disabled && "opacity-50 pointer-events-none",
-        className
-      )}
+      className={cn("flex items-center gap-1", disabled && "opacity-50 pointer-events-none", className)}
     >
       {Array.from({ length: max }).map((_, idx) => {
         const starValue = idx + 1;
@@ -51,18 +40,13 @@ export function Rating({
             disabled={disabled}
             className={cn(
               "text-muted-foreground outline-none transition-transform active:scale-95 duration-75",
-              !disabled && "hover:scale-110 cursor-pointer"
+              !disabled && "hover:scale-110 cursor-pointer",
             )}
             onClick={() => onChange?.(starValue)}
             onMouseEnter={() => !disabled && setHoverValue(starValue)}
             onMouseLeave={() => !disabled && setHoverValue(null)}
           >
-            <Star
-              className={cn(
-                starSize,
-                active ? "fill-amber-400 text-amber-400" : "text-muted/40"
-              )}
-            />
+            <Star className={cn(starSize, active ? "fill-amber-400 text-amber-400" : "text-muted/40")} />
           </button>
         );
       })}

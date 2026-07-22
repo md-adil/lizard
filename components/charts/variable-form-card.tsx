@@ -53,7 +53,13 @@ function defaultQuerySource(): SelectSource {
 
 // Label/value pair editor for a static "select" source — unlike a query
 // source there's no live data to derive label vs. value from.
-function OptionsEditor({ options, onChange }: { options: VariableOption[]; onChange: (options: VariableOption[]) => void }) {
+function OptionsEditor({
+  options,
+  onChange,
+}: {
+  options: VariableOption[];
+  onChange: (options: VariableOption[]) => void;
+}) {
   const setOption = (i: number, patch: Partial<VariableOption>) =>
     onChange(options.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
   const removeOption = (i: number) => onChange(options.filter((_, idx) => idx !== i));
@@ -111,7 +117,9 @@ export function VariableFormCard({
   const setSourceKind = (kind: SelectSource["kind"]) => {
     if (draft.type !== "select") return;
     setDraft((d) =>
-      d.type === "select" ? { ...d, source: kind === "static" ? defaultStaticSource() : defaultQuerySource(), value: "" } : d,
+      d.type === "select"
+        ? { ...d, source: kind === "static" ? defaultStaticSource() : defaultQuerySource(), value: "" }
+        : d,
     );
     setPreview(null);
   };
@@ -147,7 +155,9 @@ export function VariableFormCard({
 
   const querySource = draft.type === "select" && draft.source.kind === "query" ? draft.source : null;
   const previewOptions =
-    querySource && preview?.result ? optionsFromResult(preview.result, querySource.valueField, querySource.labelField) : [];
+    querySource && preview?.result
+      ? optionsFromResult(preview.result, querySource.valueField, querySource.labelField)
+      : [];
 
   const canSave =
     draft.label.trim().length > 0 &&
@@ -183,7 +193,12 @@ export function VariableFormCard({
         <div className="grid sm:grid-cols-2 gap-4">
           <Field>
             <FieldLabel>Label</FieldLabel>
-            <Input value={draft.label} placeholder="Order status" autoFocus onChange={(e) => setLabel(e.target.value)} />
+            <Input
+              value={draft.label}
+              placeholder="Order status"
+              autoFocus
+              onChange={(e) => setLabel(e.target.value)}
+            />
           </Field>
           <Field>
             <FieldLabel>Name</FieldLabel>
@@ -207,133 +222,139 @@ export function VariableFormCard({
 
         {draft.type === "select" && (
           <div>
-            <Tabs value={draft.source.kind} onValueChange={(v) => setSourceKind(v as SelectSource["kind"])} className="mb-3">
+            <Tabs
+              value={draft.source.kind}
+              onValueChange={(v) => setSourceKind(v as SelectSource["kind"])}
+              className="mb-3"
+            >
               <TabsList>
                 <TabsTrigger value="static">Static list</TabsTrigger>
                 <TabsTrigger value="query">From query</TabsTrigger>
               </TabsList>
             </Tabs>
 
-          {draft.source.kind === "static" && (
-            <FieldGroup>
-              <Field>
-                <FieldLabel>Options</FieldLabel>
-                <OptionsEditor
-                  options={draft.source.options}
-                  onChange={(options) =>
-                    setDraft((d) => (d.type === "select" ? { ...d, source: { kind: "static", options } } : d))
-                  }
-                />
-              </Field>
-              <Field>
-                <FieldLabel>Default value</FieldLabel>
-                <SearchableSelect
-                  items={draft.source.options}
-                  value={draft.source.options.find((o) => o.value === draft.value) ?? null}
-                  onChange={(o) => setDraft((d) => ({ ...d, value: o?.value ?? "" }) as DashboardVariable)}
-                  className="w-full"
-                />
-              </Field>
-            </FieldGroup>
-          )}
+            {draft.source.kind === "static" && (
+              <FieldGroup>
+                <Field>
+                  <FieldLabel>Options</FieldLabel>
+                  <OptionsEditor
+                    options={draft.source.options}
+                    onChange={(options) =>
+                      setDraft((d) => (d.type === "select" ? { ...d, source: { kind: "static", options } } : d))
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Default value</FieldLabel>
+                  <SearchableSelect
+                    items={draft.source.options}
+                    value={draft.source.options.find((o) => o.value === draft.value) ?? null}
+                    onChange={(o) => setDraft((d) => ({ ...d, value: o?.value ?? "" }) as DashboardVariable)}
+                    className="w-full"
+                  />
+                </Field>
+              </FieldGroup>
+            )}
 
-          {querySource && (
-            <FieldGroup>
-              <Field>
-                <FieldLabel>Connection</FieldLabel>
-                <SearchableSelect
-                  items={queryConnections}
-                  value={queryConnections.find((c) => c.connectionName === querySource.connections[0]) ?? null}
-                  onChange={(c) =>
-                    patchQuerySource({
-                      connections: c ? [c.connectionName] : [],
-                      dialect: c?.engine === "mysql" ? "mysql" : "postgres",
-                    })
-                  }
-                  getValue={(c) => c.connectionName}
-                  getLabel={(c) => c.connectionName}
-                  placeholder="— connection —"
-                  className="w-full"
-                />
-              </Field>
-              <Field>
-                <FieldLabel>SQL</FieldLabel>
-                <SqlEditor
-                  placeholder="SELECT id, name FROM statuses"
-                  value={querySource.sql}
-                  onChange={(sql) => patchQuerySource({ sql })}
-                />
-              </Field>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={previewBusy || !querySource.connections.length || !querySource.sql.trim()}
-                  onClick={runPreview}
-                >
-                  {previewBusy ? "Running…" : "Run preview"}
-                </Button>
-                {preview?.result && (
-                  <span className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-                    {previewOptions.length} distinct value{previewOptions.length === 1 ? "" : "s"}
-                  </span>
-                )}
-              </div>
-              {preview?.error && (
-                <div
-                  className="rounded-md border px-3 py-2 text-[13px]"
-                  style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
-                >
-                  {preview.error}
-                </div>
-              )}
-              {preview?.result && (
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <Field>
-                    <FieldLabel>Value column</FieldLabel>
-                    <ColumnsSelect
-                      items={preview.result.columns}
-                      value={preview.result.columns.find((c) => c.name === querySource.valueField) ?? null}
-                      onChange={(c) => patchQuerySource({ valueField: c?.name ?? null })}
-                      placeholder={preview.result.columns[0]?.name ?? "— column —"}
-                      className="w-full"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel>Label column (optional)</FieldLabel>
-                    <ColumnsSelect
-                      items={preview.result.columns}
-                      value={preview.result.columns.find((c) => c.name === querySource.labelField) ?? null}
-                      onChange={(c) => patchQuerySource({ labelField: c?.name ?? null })}
-                      placeholder="same as value column"
-                      className="w-full"
-                    />
-                  </Field>
-                </div>
-              )}
-              {preview?.result && (
-                <div className="flex gap-1.5 flex-wrap max-h-32 overflow-y-auto scrollbar-thin p-0.5">
-                  {previewOptions.length === 0 && (
-                    <span className="text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                      No rows returned.
+            {querySource && (
+              <FieldGroup>
+                <Field>
+                  <FieldLabel>Connection</FieldLabel>
+                  <SearchableSelect
+                    items={queryConnections}
+                    value={queryConnections.find((c) => c.connectionName === querySource.connections[0]) ?? null}
+                    onChange={(c) =>
+                      patchQuerySource({
+                        connections: c ? [c.connectionName] : [],
+                        dialect: c?.engine === "mysql" ? "mysql" : "postgres",
+                      })
+                    }
+                    getValue={(c) => c.connectionName}
+                    getLabel={(c) => c.connectionName}
+                    placeholder="— connection —"
+                    className="w-full"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>SQL</FieldLabel>
+                  <SqlEditor
+                    placeholder="SELECT id, name FROM statuses"
+                    value={querySource.sql}
+                    onChange={(sql) => patchQuerySource({ sql })}
+                  />
+                </Field>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={previewBusy || !querySource.connections.length || !querySource.sql.trim()}
+                    onClick={runPreview}
+                  >
+                    {previewBusy ? "Running…" : "Run preview"}
+                  </Button>
+                  {preview?.result && (
+                    <span className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+                      {previewOptions.length} distinct value{previewOptions.length === 1 ? "" : "s"}
                     </span>
                   )}
-                  {previewOptions.map((o) => (
-                    <Badge
-                      key={o.value}
-                      variant={draft.value === o.value ? "default" : "outline"}
-                      className={draft.value === o.value ? undefined : "bg-muted"}
-                      render={<button onClick={() => setDraft((d) => ({ ...d, value: o.value }) as DashboardVariable)} />}
-                    >
-                      {o.label}
-                    </Badge>
-                  ))}
                 </div>
-              )}
-            </FieldGroup>
-          )}
-        </div>
-      )}
+                {preview?.error && (
+                  <div
+                    className="rounded-md border px-3 py-2 text-[13px]"
+                    style={{ color: "var(--destructive)", borderColor: "rgba(229,83,75,.4)" }}
+                  >
+                    {preview.error}
+                  </div>
+                )}
+                {preview?.result && (
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Field>
+                      <FieldLabel>Value column</FieldLabel>
+                      <ColumnsSelect
+                        items={preview.result.columns}
+                        value={preview.result.columns.find((c) => c.name === querySource.valueField) ?? null}
+                        onChange={(c) => patchQuerySource({ valueField: c?.name ?? null })}
+                        placeholder={preview.result.columns[0]?.name ?? "— column —"}
+                        className="w-full"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>Label column (optional)</FieldLabel>
+                      <ColumnsSelect
+                        items={preview.result.columns}
+                        value={preview.result.columns.find((c) => c.name === querySource.labelField) ?? null}
+                        onChange={(c) => patchQuerySource({ labelField: c?.name ?? null })}
+                        placeholder="same as value column"
+                        className="w-full"
+                      />
+                    </Field>
+                  </div>
+                )}
+                {preview?.result && (
+                  <div className="flex gap-1.5 flex-wrap max-h-32 overflow-y-auto scrollbar-thin p-0.5">
+                    {previewOptions.length === 0 && (
+                      <span className="text-[12px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                        No rows returned.
+                      </span>
+                    )}
+                    {previewOptions.map((o) => (
+                      <Badge
+                        key={o.value}
+                        variant={draft.value === o.value ? "default" : "outline"}
+                        className={draft.value === o.value ? undefined : "bg-muted"}
+                        render={
+                          <button onClick={() => setDraft((d) => ({ ...d, value: o.value }) as DashboardVariable)} />
+                        }
+                      >
+                        {o.label}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </FieldGroup>
+            )}
+          </div>
+        )}
       </FieldGroup>
 
       <p className="text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>

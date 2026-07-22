@@ -124,11 +124,7 @@ const DUCKDB_DENYLIST = [
   "enable_external_access",
 ];
 
-const MYSQL_DENYLIST = [
-  "sleep",
-  "benchmark",
-  "load_file",
-];
+const MYSQL_DENYLIST = ["sleep", "benchmark", "load_file"];
 
 // Strip string literals (single-quoted, dollar-quoted) so keyword scans can't
 // be fooled by words inside strings, then reject any comment syntax outright.

@@ -78,7 +78,13 @@ export default function DashboardSettingsPage() {
   const exportJson = () => {
     if (!dash) return;
     const json = JSON.stringify(toDashboardExport(dash), null, 2);
-    const filename = `${dash.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "dashboard"}.json`;
+    const filename = `${
+      dash.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "dashboard"
+    }.json`;
     downloadBlob(json, "application/json", filename);
   };
 
@@ -100,7 +106,11 @@ export default function DashboardSettingsPage() {
     if (!dash || !pendingImport) return;
     setImporting(true);
     try {
-      await patch({ name: pendingImport.name, refreshSeconds: pendingImport.refreshSeconds, variables: pendingImport.variables });
+      await patch({
+        name: pendingImport.name,
+        refreshSeconds: pendingImport.refreshSeconds,
+        variables: pendingImport.variables,
+      });
       await Promise.all(dash.panels.map((p) => fetch(`/api/panels/${p.id}`, { method: "DELETE" })));
       const results = await Promise.allSettled(
         pendingImport.panels.map((p) =>
@@ -197,8 +207,8 @@ export default function DashboardSettingsPage() {
           <Card className="p-4">
             <div className="text-[13px] font-semibold">Import / export</div>
             <p className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-              Export this dashboard (name, refresh, variables, panels) as portable JSON, or import a previously
-              exported file to replace this dashboard's panels and settings.
+              Export this dashboard (name, refresh, variables, panels) as portable JSON, or import a previously exported
+              file to replace this dashboard's panels and settings.
             </p>
             <div className="flex gap-2">
               <Button variant="secondary" onClick={exportJson}>
@@ -207,7 +217,13 @@ export default function DashboardSettingsPage() {
               <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
                 <Upload className="size-3.5" /> Import JSON
               </Button>
-              <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={onFileSelected} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={onFileSelected}
+              />
             </div>
           </Card>
         </TabsContent>
@@ -221,7 +237,12 @@ export default function DashboardSettingsPage() {
           )}
           {variables.map((v, i) =>
             editing !== "new" && editing?.index === i ? (
-              <VariableFormCard key={i} initial={editing.variable} onCancel={() => setEditing(null)} onSave={upsertVariable} />
+              <VariableFormCard
+                key={i}
+                initial={editing.variable}
+                onCancel={() => setEditing(null)}
+                onSave={upsertVariable}
+              />
             ) : (
               <Card key={i} className="p-3 flex-row items-center gap-2">
                 <span className="text-[13px] font-medium">{v.label || v.name}</span>

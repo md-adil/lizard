@@ -65,7 +65,10 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
 }
 
 export interface DbClient {
-  query(sql: string, params?: unknown[]): Promise<{
+  query(
+    sql: string,
+    params?: unknown[],
+  ): Promise<{
     rows: Record<string, any>[];
     rowCount: number;
     fields: { name: string; dataTypeID?: number; columnType?: number }[];
@@ -293,7 +296,7 @@ export async function discoverDatabases(cfg: {
         connectTimeout: 7_000,
       });
       const [rows] = await conn.query(
-        "SELECT schema_name AS name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY 1"
+        "SELECT schema_name AS name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY 1",
       );
       return (rows as { name: string }[]).map((r) => r.name);
     } catch {
@@ -330,7 +333,7 @@ export async function discoverDatabases(cfg: {
     });
     try {
       const res = await pool.query(
-        "SELECT datname AS name FROM pg_database WHERE datallowconn = true AND NOT datistemplate ORDER BY 1"
+        "SELECT datname AS name FROM pg_database WHERE datallowconn = true AND NOT datistemplate ORDER BY 1",
       );
       return res.rows.map((r: any) => String(r.name));
     } catch {

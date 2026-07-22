@@ -101,14 +101,8 @@ function conditionToMongo(table: TableInfo, f: FilterCondition): MongoFilter | n
   }
 }
 
-export function buildMongoFilter(
-  table: TableInfo,
-  conditions: FilterCondition[],
-  combinator: Combinator,
-): MongoFilter {
-  const parts = conditions
-    .map((c) => conditionToMongo(table, c))
-    .filter((p): p is MongoFilter => p !== null);
+export function buildMongoFilter(table: TableInfo, conditions: FilterCondition[], combinator: Combinator): MongoFilter {
+  const parts = conditions.map((c) => conditionToMongo(table, c)).filter((p): p is MongoFilter => p !== null);
   if (parts.length === 0) return {};
   if (parts.length === 1) return parts[0];
   return combinator === "or" ? { $or: parts } : { $and: parts };

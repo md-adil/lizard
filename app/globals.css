@@ -170,7 +170,6 @@
   display: none;
 }
 
-
 /* Every form field across the app does <label className="label">X</label>
    followed by its control, expecting the label to sit on its own line above
    it — but with no rule defined, <label> fell back to the browser default

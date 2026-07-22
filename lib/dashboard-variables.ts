@@ -1,3 +1,4 @@
+import { format, subDays } from "date-fns";
 import type { DashboardVariable } from "@/lib/types";
 
 // A date range is a single dashboard-wide concept (Grafana's built-in time
@@ -8,19 +9,35 @@ import type { DashboardVariable } from "@/lib/types";
 export const DATETIME_VARIABLE_NAME = "datetime";
 export const DATETIME_VARIABLE_LABEL = "Date range";
 
+// Never actually "unset" — a panel referencing ${datetime.from}/${datetime.to}
+// would otherwise substitute empty strings into its SQL and fail immediately
+// on first load, before anyone has touched the picker. Defaulting to a real
+// range (last 7 days, matching the picker's own "yyyy-MM-dd HH:mm" format —
+// see variable-controls.tsx's preset buttons) mirrors Grafana, which always
+// has some time range selected and never lets you clear it to nothing.
 export function defaultDatetimeVariable(): Extract<DashboardVariable, { type: "daterange" }> {
-  return { name: DATETIME_VARIABLE_NAME, label: DATETIME_VARIABLE_LABEL, type: "daterange", from: "", to: "", includeTime: true };
+  const now = new Date();
+  return {
+    name: DATETIME_VARIABLE_NAME,
+    label: DATETIME_VARIABLE_LABEL,
+    type: "daterange",
+    from: format(subDays(now, 7), "yyyy-MM-dd HH:mm"),
+    to: format(now, "yyyy-MM-dd HH:mm"),
+    includeTime: true,
+  };
 }
 
 // The datetime range gets its own plain ?from=&to= params — no ~ prefix and
 // no ties to the ~<name> variable scheme below, since it isn't a variable.
+// An empty (but present) `from`/`to` param — e.g. a manually-edited
+// `?from=&to=` URL — is treated the same as an absent one (falls back to
+// `dt`'s default range) rather than accepted as a literal empty value, so
+// the broken "unset" state can't be forced back in via the URL either.
 export function applySearchParamsToDatetime(
   dt: Extract<DashboardVariable, { type: "daterange" }>,
   params: URLSearchParams,
 ): Extract<DashboardVariable, { type: "daterange" }> {
-  const from = params.get("from");
-  const to = params.get("to");
-  return from === null && to === null ? dt : { ...dt, from: from ?? dt.from, to: to ?? dt.to };
+  return { ...dt, from: params.get("from") || dt.from, to: params.get("to") || dt.to };
 }
 
 export function withDatetimeInSearchParams(

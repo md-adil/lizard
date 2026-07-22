@@ -234,7 +234,15 @@ function PanelCard({
 // so it can't rot in the meantime.
 const AI_PANEL_ENABLED = false;
 
-function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose: () => void }) {
+function AddPanelModal({
+  dashboardId,
+  variables,
+  onClose,
+}: {
+  dashboardId: string;
+  variables: DashboardVariable[];
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"ai" | "sql">(AI_PANEL_ENABLED ? "ai" : "sql");
   const [prompt, setPrompt] = useState("");
@@ -324,7 +332,7 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
         body: JSON.stringify({
           target: spec.target,
           connections: spec.connections,
-          sql: spec.sql,
+          sql: substituteVariables(spec.sql, variables),
           dialect: spec.dialect,
         }),
       });
@@ -521,7 +529,17 @@ function AddPanelModal({ dashboardId, onClose }: { dashboardId: string; onClose:
   );
 }
 
-function EditPanelModal({ panel, onClose, onSaved }: { panel: Panel; onClose: () => void; onSaved: () => void }) {
+function EditPanelModal({
+  panel,
+  variables,
+  onClose,
+  onSaved,
+}: {
+  panel: Panel;
+  variables: DashboardVariable[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [spec, setSpec] = useState<ChartSpec>(panel.spec);
   const [sql, setSql] = useState(panel.spec.sql);
   const [result, setResult] = useState<QueryResult | null>(null);
@@ -536,7 +554,12 @@ function EditPanelModal({ panel, onClose, onSaved }: { panel: Panel; onClose: ()
       const res = await fetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: s.target, connections: s.connections, sql: s.sql, dialect: s.dialect }),
+        body: JSON.stringify({
+          target: s.target,
+          connections: s.connections,
+          sql: substituteVariables(s.sql, variables),
+          dialect: s.dialect,
+        }),
       });
       const body = await res.json();
       if (!res.ok) setQueryError(body.error ?? "query failed");
@@ -1009,10 +1032,13 @@ export default function DashboardPage() {
         })()
       )}
 
-      {adding && <AddPanelModal dashboardId={id} onClose={() => setAdding(false)} />}
+      {adding && (
+        <AddPanelModal dashboardId={id} variables={[...varValues, datetime]} onClose={() => setAdding(false)} />
+      )}
       {editing && (
         <EditPanelModal
           panel={editing}
+          variables={[...varValues, datetime]}
           onClose={() => setEditing(null)}
           onSaved={() => qc.invalidateQueries({ queryKey: ["dashboard", id] })}
         />

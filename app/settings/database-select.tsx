@@ -124,11 +124,7 @@ export function DatabaseSelect({
           </ComboboxContent>
         </Combobox>
       ) : (
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Select or type database name"
-        />
+        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Select or type database name" />
       )}
     </div>
   );

@@ -66,9 +66,7 @@ describe("mysql dialect", () => {
     expect(mysql.supportsReturning).toBe(false);
     expect(mysql.supportsArrays).toBe(false);
     expect(mysql.supportsSchemas).toBe(false);
-    expect(mysql.beginReadOnly()).toEqual([
-      "START TRANSACTION READ ONLY",
-    ]);
+    expect(mysql.beginReadOnly()).toEqual(["START TRANSACTION READ ONLY"]);
   });
 
   it("maps known MySQL error codes to friendly errors, null otherwise", () => {

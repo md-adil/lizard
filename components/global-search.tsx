@@ -160,8 +160,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
 
         {data && data.partial && (
           <p className="shrink-0 text-[11px]" style={{ color: "var(--muted-foreground-faint)" }}>
-            Search timed out before scanning all <strong>{data.scannedTables}</strong> eligible tables — results may
-            be incomplete.
+            Search timed out before scanning all <strong>{data.scannedTables}</strong> eligible tables — results may be
+            incomplete.
           </p>
         )}
       </DialogContent>
