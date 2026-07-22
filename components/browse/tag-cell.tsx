@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { NullValue } from "@/components/browse/null-value";
 
 export interface TagCellProps {
   // the server normalizes a "tag" widget column to string[] on every read
@@ -30,7 +31,7 @@ function getTagStyles(str: string) {
 }
 
 export function TagCell({ value, className }: TagCellProps) {
-  if (value.length === 0) return <span className="text-muted-foreground">∅</span>;
+  if (value.length === 0) return <NullValue />;
 
   return (
     <div className="flex flex-wrap gap-1">

@@ -4,7 +4,7 @@
 // overrides + virtual FKs. Heuristics are pure functions shared with the server.
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, X, ExternalLink, Mail, Star } from "lucide-react";
+import { ExternalLink, Mail, Star } from "lucide-react";
 import type { TableInfo, VirtualFk, TableOverride, ColumnInfo, CatalogResponse, SchemaDetail } from "@/lib/types";
 import {
   findUpdatedAtColumn,
@@ -26,6 +26,8 @@ import { MarkdownCell } from "./markdown-cell";
 import { AvatarCell } from "./avatar-cell";
 import { TimezoneCell } from "./timezone-cell";
 import { TagCell } from "./tag-cell";
+import { BooleanValue, isBooleanField } from "./boolean-value";
+import { NullValue } from "./null-value";
 import { useCatalog } from "./use-catalog";
 
 export type { CatalogResponse, SchemaDetail } from "@/lib/types";
@@ -263,7 +265,7 @@ export function formatCell(
   widget?: Widget,
   optionLabels?: Record<string, string> | null,
 ): { text: string; muted: boolean; icon?: ReactNode } {
-  if (value === null || value === undefined) return { text: "∅", muted: true };
+  if (value === null || value === undefined) return { text: "∅", muted: true, icon: <NullValue /> };
 
   if (widget === "markdown") {
     return {
@@ -396,31 +398,13 @@ export function formatCell(
   if (widget === "select" && optionLabels?.[String(value)]) {
     return { text: optionLabels[String(value)], muted: false };
   }
-  if (typeof value === "boolean") {
-    return {
-      text: String(value),
-      muted: !value,
-      icon: value ? (
-        <Check className="size-3.5 text-green-600 dark:text-green-500" />
-      ) : (
-        <X className="size-3.5 text-muted-foreground" />
-      ),
-    };
-  }
-  // MySQL's tinyint(1) (normalized to the "bool" udtName/"toggle" widget)
-  // comes back as a raw 0/1 number, not a real JS boolean — trust the widget
-  // rather than the runtime type so it still renders as a check/x icon.
-  if (widget === "toggle") {
-    const truthy = toBoolean(value);
-    return {
-      text: String(truthy),
-      muted: !truthy,
-      icon: truthy ? (
-        <Check className="size-3.5 text-green-600 dark:text-green-500" />
-      ) : (
-        <X className="size-3.5 text-muted-foreground" />
-      ),
-    };
+  // Covers both a real JS boolean and MySQL's tinyint(1) (normalized to the
+  // "toggle" widget), which comes back as a raw 0/1 number, not a real
+  // boolean — isBooleanField/BooleanValue are the one shared place that
+  // knows how to detect and render either case.
+  if (isBooleanField(widget, value)) {
+    const truthy = typeof value === "boolean" ? value : toBoolean(value);
+    return { text: String(truthy), muted: !truthy, icon: <BooleanValue value={truthy} /> };
   }
   if (Array.isArray(value)) {
     if (value.length === 0) return { text: "[]", muted: true };

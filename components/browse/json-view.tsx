@@ -5,6 +5,8 @@
 // arrays as chips, object arrays as compact stacked rows. Theme-aware.
 import type { ReactNode } from "react";
 import { humanize } from "@/lib/introspect/heuristics";
+import { BooleanValue } from "@/components/browse/boolean-value";
+import { NullValue } from "@/components/browse/null-value";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -16,14 +18,10 @@ function looksLikeUrl(s: string): boolean {
 
 function Primitive({ value }: { value: unknown }) {
   if (value === null || value === undefined) {
-    return <span style={{ color: "var(--muted-foreground-faint)" }}>∅</span>;
+    return <NullValue />;
   }
   if (typeof value === "boolean") {
-    return (
-      <span className="tag" style={{ color: value ? "var(--success)" : "var(--muted-foreground)", fontSize: 11 }}>
-        {value ? "✓ true" : "✗ false"}
-      </span>
-    );
+    return <BooleanValue value={value} variant="tag" />;
   }
   if (typeof value === "number") {
     return <span style={{ color: "var(--info)" }}>{Intl.NumberFormat("en").format(value)}</span>;

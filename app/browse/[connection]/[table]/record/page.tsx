@@ -10,6 +10,7 @@ import type { FkLabels } from "@/lib/types";
 import { fkLabelFor } from "@/lib/data/fk-labels";
 import { RowEditor } from "@/components/browse/row-editor";
 import { RedactedValue } from "@/components/browse/redacted-value";
+import { NullValue } from "@/components/browse/null-value";
 import { RecordComments } from "@/components/browse/record-comments";
 import { LinkedRecordsCard } from "@/components/browse/linked-records-card";
 import { ReferenceHoverPreview } from "@/components/browse/reference-hover-preview";
@@ -25,7 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { widgetIcons, type Widget } from "@/lib/data/widgets";
-import { Check, X, CalendarDays, Link2, Copy, Maximize2 } from "lucide-react";
+import { BooleanValue, isBooleanField } from "@/components/browse/boolean-value";
+import { Check, CalendarDays, Link2, Copy, Maximize2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -295,11 +297,7 @@ function FieldValue({
   }
 
   if (value == null) {
-    return (
-      <div className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
-        {f.text}
-      </div>
-    );
+    return <NullValue className="text-[13px]" />;
   }
 
   // json/jsonb → the structured tree by default, same as the dialog's
@@ -315,14 +313,8 @@ function FieldValue({
   }
 
   // boolean / toggle → a compact yes/no pill instead of a bare icon.
-  if (cm.widget === "toggle" || typeof value === "boolean") {
-    const on = !f.muted;
-    return (
-      <Badge variant={on ? "outline" : "ghost"} className="mt-0.5 gap-1">
-        {on ? <Check className="text-green-600 dark:text-green-500" /> : <X className="text-muted-foreground" />}
-        {on ? "Yes" : "No"}
-      </Badge>
-    );
+  if (isBooleanField(cm.widget, value)) {
+    return <BooleanValue value={!f.muted} variant="pill" className="mt-0.5" />;
   }
 
   // single-select / enum → a badge so the chosen option reads as a token.
@@ -529,9 +521,7 @@ function HtmlCard({
           </Button>
         </>
       ) : !value ? (
-        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
-          ∅ null
-        </p>
+        <NullValue className="text-[13px]" />
       ) : raw ? (
         <pre
           className="code text-[12px] whitespace-pre-wrap max-h-96 overflow-auto scrollbar-thin"
@@ -608,9 +598,7 @@ function BelongsToCard({
       ]}
     >
       {value == null ? (
-        <p className="text-[13px]" style={{ color: "var(--muted-foreground-faint)" }}>
-          ∅ not linked
-        </p>
+        <NullValue className="text-[13px]">∅ not linked</NullValue>
       ) : error ? (
         <p className="text-[13px]" style={{ color: "var(--destructive)" }}>
           {(error as Error).message}
