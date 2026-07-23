@@ -11,13 +11,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading } = useAuth();
   const isAuthPage = pathname === "/login";
+  // The service worker's offline fallback (see app/sw.ts) — it has to
+  // render with zero network, so it can't wait on (or redirect from) an
+  // auth check that itself needs a round trip.
+  const isOfflinePage = pathname === "/~offline";
 
   useEffect(() => {
-    if (!loading && !user && !isAuthPage) router.replace("/login");
-  }, [loading, user, isAuthPage, router]);
+    if (!loading && !user && !isAuthPage && !isOfflinePage) router.replace("/login");
+  }, [loading, user, isAuthPage, isOfflinePage, router]);
 
-  // login page renders standalone (no chrome)
-  if (isAuthPage) return <>{children}</>;
+  // login and offline pages render standalone (no chrome, no auth gate)
+  if (isAuthPage || isOfflinePage) return <>{children}</>;
 
   if (loading || !user) {
     return (

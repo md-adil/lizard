@@ -24,6 +24,9 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // run on pages only; exclude api, static assets, and the auth endpoints
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // run on pages only; exclude api, static assets, the auth endpoints, and
+  // the PWA files (service worker, manifest, icons, offline fallback) — a
+  // logged-out visitor (or the browser itself, pre-login) still needs these
+  // to load un-redirected for install/offline support to work at all.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icon.png|apple-icon.png|~offline).*)"],
 };

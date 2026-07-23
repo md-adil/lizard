@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSerwist } from "@serwist/turbopack";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -26,4 +27,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// The actual Serwist build options (swSrc, precache entries, etc.) live in
+// app/[path]/route.ts via createSerwistRoute — @serwist/turbopack bundles
+// the service worker with esbuild and serves it through that Route Handler
+// instead of emitting a static public/sw.js via a webpack plugin, so this
+// wrapper itself takes no build options.
+export default withSerwist(nextConfig);

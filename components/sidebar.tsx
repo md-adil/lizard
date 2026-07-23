@@ -5,7 +5,7 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { ChevronRight, Compass, MoreHorizontal, Search, X } from "lucide-react";
+import { ChevronRight, Compass, MoreHorizontal, Search, Settings as SettingsIcon, X } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { useAuth } from "@/components/auth-context";
 import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
@@ -47,7 +47,7 @@ const NAV = [
   { href: "/dashboards", label: "Dashboards", icon: "▦" },
   // Audit log lives in Settings (admin-only tab) — it's requireAdmin
   // server-side, so a global nav item was a dead link for non-admins.
-  { href: "/settings", label: "Settings", icon: "⚙" },
+  { href: "/settings", label: "Settings", icon: <SettingsIcon className="size-3.5" /> },
 ];
 
 // Pinned dashboards shown under the Dashboards nav item — capped so pins
@@ -236,9 +236,13 @@ export function Sidebar() {
   // comment below), so this listener only needs registering once.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() === "k") {
         e.preventDefault();
         router.push("/explore");
+      } else if (e.key === ",") {
+        e.preventDefault();
+        router.push("/settings");
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -338,7 +342,8 @@ export function Sidebar() {
       <SidebarHeader className="border-b">
         <div className="flex items-center gap-2 px-2 py-2">
           <Link href="/" className="flex items-center gap-2 min-w-0">
-            <span className="text-xl">🦎</span>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static asset, no next/image benefit */}
+            <img src="/icon-64.png" alt="" width={20} height={20} />
             <span className="font-semibold tracking-tight">Lizard</span>
           </Link>
           <span className="flex-1" />
@@ -347,7 +352,7 @@ export function Sidebar() {
       </SidebarHeader>
 
       <SidebarContent className="overflow-hidden">
-        {/* explore */}
+        {/* nav */}
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
@@ -361,12 +366,6 @@ export function Sidebar() {
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
-
-        {/* nav */}
-        <SidebarGroup>
-          <SidebarMenu>
             {NAV.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               return (
@@ -374,6 +373,11 @@ export function Sidebar() {
                   <SidebarMenuButton isActive={active} render={<Link href={item.href} />}>
                     <span className="w-4 text-center">{item.icon}</span>
                     {item.label}
+                    {item.href === "/settings" && (
+                      <span className="ml-auto text-[10px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                        ⌘,
+                      </span>
+                    )}
                   </SidebarMenuButton>
                   {item.href === "/dashboards" && pinnedDashboards.length > 0 && (
                     <SidebarMenuAction

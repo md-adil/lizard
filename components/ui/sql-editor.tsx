@@ -37,11 +37,17 @@ function CodeEditor({
   className?: string;
 }) {
   return (
+    // resize-y + overflow-auto turn this into a textarea-like drag handle in
+    // the bottom-right corner — height only (the editor is always w-full).
+    // The Editor's own minHeight:100% makes it fill whatever height the box
+    // currently has, whether that's the initial minRows-based one or
+    // whatever the user dragged it to.
     <div
       className={cn(
-        "code-highlight code w-full rounded-lg border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
+        "code-highlight code w-full resize-y overflow-auto rounded-lg border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
         className,
       )}
+      style={{ minHeight: minRows * 20 + 20 }}
     >
       <Editor
         value={value}
@@ -50,7 +56,7 @@ function CodeEditor({
         placeholder={placeholder}
         padding={10}
         textareaClassName="outline-none placeholder:text-muted-foreground"
-        style={{ fontFamily: "var(--mono)", fontSize: 12.5, minHeight: minRows * 20 + 20 }}
+        style={{ fontFamily: "var(--mono)", fontSize: 12.5, minHeight: "100%" }}
       />
     </div>
   );
