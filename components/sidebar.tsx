@@ -5,7 +5,7 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { ChevronRight, MoreHorizontal, Search, X } from "lucide-react";
+import { ChevronRight, Compass, MoreHorizontal, Search, X } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { useAuth } from "@/components/auth-context";
 import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
@@ -40,7 +40,6 @@ import { useCatalog } from "@/components/browse/use-catalog";
 import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
-import { GlobalSearch } from "@/components/global-search";
 import { useDashboards } from "@/components/charts/use-dashboards";
 
 const NAV = [
@@ -233,19 +232,18 @@ export function Sidebar() {
   const params = useParams<{ connection?: string; schema?: string }>();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [searchOpen, setSearchOpen] = useState(false);
   // sidebar never unmounts across navigation (see the activeSchemaByConn
   // comment below), so this listener only needs registering once.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setSearchOpen(true);
+        router.push("/explore");
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [router]);
   const { data, isFetching: catalogLoading } = useCatalog();
   // Shares the ["dashboards"] cache with the list page — renames/deletes/pin
   // toggles invalidate it there, so the pinned list here stays fresh.
@@ -349,15 +347,15 @@ export function Sidebar() {
       </SidebarHeader>
 
       <SidebarContent className="overflow-hidden">
-        {/* global search */}
+        {/* explore */}
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => setSearchOpen(true)}>
+              <SidebarMenuButton isActive={pathname.startsWith("/explore")} render={<Link href="/explore" />}>
                 <span className="w-4 text-center">
-                  <Search className="size-3.5 inline" />
+                  <Compass className="size-3.5 inline" />
                 </span>
-                Search
+                Explore
                 <span className="ml-auto text-[10px]" style={{ color: "var(--muted-foreground-faint)" }}>
                   ⌘K
                 </span>
@@ -675,7 +673,6 @@ export function Sidebar() {
           </Button>
         </div>
       </SidebarFooter>
-      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </SidebarShell>
   );
 }
