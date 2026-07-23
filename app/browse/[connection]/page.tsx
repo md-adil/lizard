@@ -157,7 +157,7 @@ export default function ConnectionPage() {
   const multiSchema = sortedSchemas.length > 1;
 
   return (
-    <div className="px-8 py-8 max-w-5xl">
+    <div className="container">
       <Breadcrumbs className="mb-5" items={[{ label: "Home", link: "/" }, { label: conn.connectionName }]} />
 
       <h1 className="text-xl font-semibold mb-1">{conn.connectionName}</h1>
@@ -231,7 +231,7 @@ export default function ConnectionPage() {
 
 function PagePad({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
+    <div className="text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
       {children}
     </div>
   );

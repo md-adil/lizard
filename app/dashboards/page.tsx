@@ -83,7 +83,7 @@ export default function DashboardsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-10">
+    <div className="max-w-4xl mx-auto">
       <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Dashboards" }]} />
       <div className="flex items-start justify-between mb-6">
         <div>

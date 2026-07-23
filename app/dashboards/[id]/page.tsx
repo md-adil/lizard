@@ -885,13 +885,13 @@ export default function DashboardPage() {
 
   if (error)
     return (
-      <div className="px-8 py-10" style={{ color: "var(--destructive)" }}>
+      <div style={{ color: "var(--destructive)" }}>
         {(error as Error).message}
       </div>
     );
   if (!dash)
     return (
-      <div className="px-6 py-6 space-y-3">
+      <div className="space-y-3">
         <Skeleton className="h-7 w-48" />
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(12, 1fr)" }}>
           {[6, 6, 12].map((w, i) => (
@@ -902,7 +902,7 @@ export default function DashboardPage() {
     );
 
   return (
-    <div className="px-6 py-6">
+    <div>
       <Breadcrumbs
         className="mb-4"
         items={[{ label: "Home", link: "/" }, { label: "Dashboards", link: "/dashboards" }, { label: dash.name }]}

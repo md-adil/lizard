@@ -912,13 +912,13 @@ function RecordView() {
 
   if (!catalog || !meta || !schemaMeta)
     return (
-      <div className="px-8 py-10 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+      <div className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
         Loading…
       </div>
     );
   if (error)
     return (
-      <div className="px-8 py-10 text-[13px]" style={{ color: "var(--destructive)" }}>
+      <div className="text-[13px]" style={{ color: "var(--destructive)" }}>
         {(error as Error).message}
       </div>
     );
@@ -933,7 +933,7 @@ function RecordView() {
   const pkValue = recordKey.length === 1 ? pk[recordKey[0]] : null;
 
   return (
-    <div className="px-8 py-7 max-w-6xl">
+    <div className="max-w-6xl">
       <Breadcrumbs
         className="mb-4"
         items={[
@@ -1103,7 +1103,7 @@ export default function RecordPage() {
   return (
     <Suspense
       fallback={
-        <div className="px-8 py-10 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+        <div className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           Loading…
         </div>
       }

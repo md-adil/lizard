@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider className="h-svh overflow-hidden" style={{ "--sidebar-width": "17rem" } as React.CSSProperties}>
       <Sidebar />
-      <SidebarInset className="h-screen overflow-auto scrollbar-thin" style={{ scrollbarGutter: "stable" }}>
+      <SidebarInset className="h-screen overflow-auto scrollbar-thin p-4" style={{ scrollbarGutter: "stable" }}>
         {children}
       </SidebarInset>
     </SidebarProvider>

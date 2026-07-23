@@ -14,7 +14,7 @@ export default function SettingsPage() {
   const initialTab = useSearchParams().get("tab") ?? "connections";
 
   return (
-    <div className="max-w-5xl px-8 py-10">
+    <div className="container">
       <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Settings" }]} />
       <h1 className="text-xl font-semibold mb-6">Settings</h1>
 

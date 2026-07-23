@@ -7,6 +7,7 @@
 // state) keeps header/body aligned and drives live column-resize. Sorting
 // stays server-side: header clicks call back to the parent to refetch.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { FkLabels } from "@/lib/types";
 import { RefetchBar } from "./refetch-bar";
@@ -78,6 +79,10 @@ interface Props {
   // e.g. after "Clear" or a bulk delete completes, independent of `rows`
   // changing (rowSelection already resets whenever `rows` itself changes).
   clearSelectionSignal?: number;
+  // Portal target for the "Columns" toggle button — lets the caller place it
+  // in its own toolbar row (e.g. alongside Refresh) instead of DataGrid's
+  // default right-aligned row above the table. Omit to render it inline.
+  columnsButtonContainer?: HTMLElement | null;
 }
 
 const helper = createColumnHelper<Row>();
@@ -114,6 +119,7 @@ export function DataGrid({
   onColumnSizingChange,
   onSelectionChange,
   clearSelectionSignal,
+  columnsButtonContainer,
 }: Props) {
   // holding sizing in React state guarantees a re-render on every resize tick
   const [localSizing, setLocalSizing] = useState<ColumnSizingState>({});
@@ -266,73 +272,79 @@ export function DataGrid({
   );
   const searchedColumns = useColumnSearch(toggleableColumns, columns, columnSearch);
 
+  const columnsMenu = (
+    <DropdownMenu
+      open={columnsMenuOpen}
+      onOpenChange={(open) => {
+        setColumnsMenuOpen(open);
+        if (!open) setColumnSearch("");
+      }}
+    >
+      <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="gap-1.5 bg-card" />}>
+        <Columns3 className="size-3.5" />
+        Columns
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-52">
+        <DropdownMenuGroup>
+          <div className="flex items-center justify-between gap-2 px-2 py-1">
+            <DropdownMenuLabel className="p-0 whitespace-nowrap">Toggle columns</DropdownMenuLabel>
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 px-1.5 text-[11px]"
+                onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(true))}
+              >
+                All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 px-1.5 text-[11px]"
+                onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(false))}
+              >
+                None
+              </Button>
+            </div>
+          </div>
+          {toggleableColumns.length > COLUMN_SEARCH_THRESHOLD && (
+            <div className="px-1.5 pb-1">
+              <Input
+                type="search"
+                value={columnSearch}
+                onChange={(e) => setColumnSearch(e.target.value)}
+                // stop the keystroke from reaching the menu's roving-focus /
+                // typeahead handling — otherwise letters jump-select items
+                // instead of typing into the box.
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="Search columns…"
+                className="h-7 text-[12px]"
+              />
+            </div>
+          )}
+          <DropdownMenuSeparator />
+          {searchedColumns.map(({ column, cm }) => (
+            <DropdownMenuCheckboxItem
+              key={column.id}
+              checked={column.getIsVisible()}
+              onCheckedChange={(checked) => column.toggleVisibility(checked)}
+              closeOnClick={false}
+            >
+              {cm?.label ?? column.id}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div>
-      <div className="flex justify-end mb-2">
-        <DropdownMenu
-          open={columnsMenuOpen}
-          onOpenChange={(open) => {
-            setColumnsMenuOpen(open);
-            if (!open) setColumnSearch("");
-          }}
-        >
-          <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="gap-1.5 bg-card" />}>
-            <Columns3 className="size-3.5" />
-            Columns
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-52">
-            <DropdownMenuGroup>
-              <div className="flex items-center justify-between gap-2 px-2 py-1">
-                <DropdownMenuLabel className="p-0 whitespace-nowrap">Toggle columns</DropdownMenuLabel>
-                <div className="flex items-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 px-1.5 text-[11px]"
-                    onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(true))}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 px-1.5 text-[11px]"
-                    onClick={() => toggleableColumns.forEach((c) => c.toggleVisibility(false))}
-                  >
-                    None
-                  </Button>
-                </div>
-              </div>
-              {toggleableColumns.length > COLUMN_SEARCH_THRESHOLD && (
-                <div className="px-1.5 pb-1">
-                  <Input
-                    type="search"
-                    value={columnSearch}
-                    onChange={(e) => setColumnSearch(e.target.value)}
-                    // stop the keystroke from reaching the menu's roving-focus /
-                    // typeahead handling — otherwise letters jump-select items
-                    // instead of typing into the box.
-                    onKeyDown={(e) => e.stopPropagation()}
-                    placeholder="Search columns…"
-                    className="h-7 text-[12px]"
-                  />
-                </div>
-              )}
-              <DropdownMenuSeparator />
-              {searchedColumns.map(({ column, cm }) => (
-                <DropdownMenuCheckboxItem
-                  key={column.id}
-                  checked={column.getIsVisible()}
-                  onCheckedChange={(checked) => column.toggleVisibility(checked)}
-                  closeOnClick={false}
-                >
-                  {cm?.label ?? column.id}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {columnsButtonContainer ? (
+        createPortal(columnsMenu, columnsButtonContainer)
+      ) : (
+        <div className="flex justify-end mb-2">{columnsMenu}</div>
+      )}
 
       <div className="relative">
         <RefetchBar isFetching={!!isFetching} isLoading={!!isLoading} />

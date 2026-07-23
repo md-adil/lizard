@@ -81,7 +81,7 @@ export default function CustomizePage() {
   }
 
   return (
-    <div className="px-8 py-7">
+    <div>
       <Breadcrumbs
         className="mb-4"
         items={[
@@ -164,7 +164,7 @@ export default function CustomizePage() {
 
 function Pad({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)" }}>
+    <div className="text-[14px]" style={{ color: "var(--muted-foreground)" }}>
       {children}
     </div>
   );
