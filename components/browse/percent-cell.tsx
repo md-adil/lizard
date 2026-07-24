@@ -9,7 +9,11 @@ export interface PercentCellProps {
 export function PercentCell({ value, className }: PercentCellProps) {
   const num = Number(value);
   if (value === null || value === undefined || isNaN(num)) {
-    return value === null || value === undefined ? <NullValue /> : <span className="text-muted-foreground">{String(value)}</span>;
+    return value === null || value === undefined ? (
+      <NullValue />
+    ) : (
+      <span className="text-muted-foreground">{String(value)}</span>
+    );
   }
 
   const pct = Math.min(100, Math.max(0, num));

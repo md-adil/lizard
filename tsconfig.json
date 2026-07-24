@@ -23,5 +23,9 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // app/sw.ts runs in the ServiceWorkerGlobalScope, not the DOM — it needs
+  // the "webworker" lib, which conflicts with this config's "dom" lib
+  // (both declare an incompatible `self`). It has its own project — see
+  // tsconfig.worker.json.
+  "exclude": ["node_modules", "app/sw.ts"]
 }

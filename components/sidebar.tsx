@@ -5,10 +5,23 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { ChevronRight, MoreHorizontal, Search, X } from "lucide-react";
+import {
+  ChevronRight,
+  Compass,
+  Copy,
+  Download,
+  Info,
+  MoreHorizontal,
+  Search,
+  Settings as SettingsIcon,
+  Settings2,
+  Table2,
+  X,
+} from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { useAuth } from "@/components/auth-context";
-import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
+import { tableHref, customizeHref, infoHref, viewsHref } from "@/components/browse/use-schema-param";
+import { dataApiUrl } from "@/components/browse/data-api";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { DataSelect } from "@/components/ui/data-select";
@@ -16,7 +29,13 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Sidebar as SidebarShell,
@@ -40,7 +59,6 @@ import { useCatalog } from "@/components/browse/use-catalog";
 import { useConnectionSchemas } from "@/components/browse/use-connection-schemas";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { supportsSchemas } from "@/lib/types";
-import { GlobalSearch } from "@/components/global-search";
 import { useDashboards } from "@/components/charts/use-dashboards";
 
 const NAV = [
@@ -48,7 +66,7 @@ const NAV = [
   { href: "/dashboards", label: "Dashboards", icon: "▦" },
   // Audit log lives in Settings (admin-only tab) — it's requireAdmin
   // server-side, so a global nav item was a dead link for non-admins.
-  { href: "/settings", label: "Settings", icon: "⚙" },
+  { href: "/settings", label: "Settings", icon: <SettingsIcon className="size-3.5" /> },
 ];
 
 // Pinned dashboards shown under the Dashboards nav item — capped so pins
@@ -72,6 +90,103 @@ function ThemeToggle() {
     >
       {theme === "light" ? "🌙" : "☀️"}
     </Button>
+  );
+}
+
+// Both destinations keep their active tab in the URL (`?tab=`), so the menu can
+// link straight at one section instead of always landing on the first tab.
+const INFO_TABS = [
+  ["columns", "Columns"],
+  ["constraints", "Constraints"],
+  ["relationships", "Relationships"],
+  ["graph", "Graph"],
+] as const;
+const CUSTOMIZE_TABS = [
+  ["settings", "Settings"],
+  ["grid", "Grid"],
+  ["columns", "Columns"],
+  ["relationships", "Relationships"],
+] as const;
+
+// Everything reachable for one table. Navigation + export only: the row-level
+// mutations (import, new row) live on the table page because they're driven by
+// dialog state there, not by a link.
+function TableMenu({
+  connection,
+  schema,
+  table,
+  isView,
+}: {
+  connection: string;
+  // already resolved for URLs by the caller — undefined when the engine has none
+  schema: string | undefined;
+  table: string;
+  isView: boolean;
+}) {
+  const target = { connection, schema, table };
+  // No filter/sort context out here, unlike the table page's own Export button
+  // (which serializes the active view) — so this is deliberately the whole table.
+  const exportHref = dataApiUrl({ connection, table, path: "export", schema });
+  const qualified = schema ? `${schema}.${table}` : table;
+
+  return (
+    <DropdownMenuContent align="start" side="right" className="w-56">
+      {/* Base UI requires GroupLabel to sit inside a Group — and the label
+          names these navigation entries, so they share one. */}
+      <DropdownMenuGroup>
+        <DropdownMenuLabel className="truncate">
+          {qualified}
+          {isView && <span style={{ color: "var(--muted-foreground-faint)" }}> · view</span>}
+        </DropdownMenuLabel>
+
+        {/* Icons mirror the buttons these same destinations have elsewhere —
+            Info/Customize on the table page, the gear on the saved-views tab. */}
+        <DropdownMenuItem render={<Link href={tableHref(target)} />}>
+          <Table2 className="size-3.5" /> Open
+        </DropdownMenuItem>
+
+        {/* Pure submenu triggers, deliberately not links: tapping is the only
+            way to open a submenu on touch, and each submenu's first entry
+            (Columns / Settings) is already the page's default tab anyway. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Info className="size-3.5" /> Info
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-44">
+            {INFO_TABS.map(([tab, label]) => (
+              <DropdownMenuItem key={tab} render={<Link href={infoHref({ ...target, tab })} />}>
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Settings2 className="size-3.5" /> Customize
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-44">
+            {CUSTOMIZE_TABS.map(([tab, label]) => (
+              <DropdownMenuItem key={tab} render={<Link href={customizeHref({ ...target, tab })} />}>
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuItem render={<Link href={viewsHref(target)} />}>
+          <SettingsIcon className="size-3.5" /> Saved views
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+
+      <DropdownMenuSeparator />
+      <DropdownMenuItem render={<a href={exportHref} download />}>
+        <Download className="size-3.5" /> Export all (CSV)
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => navigator.clipboard?.writeText(qualified)}>
+        <Copy className="size-3.5" /> Copy qualified name
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }
 
@@ -130,7 +245,9 @@ function SchemaSection({
 
   const allTables = schemaData.tables.map((t) => {
     const o = resolveTableOverride(schemaData.tableOverrides, connectionId, schemaName, t.name);
-    return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false };
+    // `isView` is carried through so the table menu can label read-only
+    // sources honestly (views have no import/insert path).
+    return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false, isView: t.kind === "view" };
   });
   if (allTables.length === 0) {
     return (
@@ -174,15 +291,7 @@ function SchemaSection({
                   <MoreHorizontal />
                   <span className="sr-only">{t.label} actions</span>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="right">
-                  <DropdownMenuItem
-                    render={
-                      <Link href={customizeHref({ connection: connectionName, schema: urlSchema, table: t.name })} />
-                    }
-                  >
-                    ⚙ Customize
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
+                <TableMenu connection={connectionName} schema={urlSchema} table={t.name} isView={t.isView} />
               </DropdownMenu>
             </SidebarMenuItem>
           );
@@ -233,19 +342,25 @@ export function Sidebar() {
   const params = useParams<{ connection?: string; schema?: string }>();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [searchOpen, setSearchOpen] = useState(false);
+  // ⌘K (the "Go to" palette) is owned by CommandPaletteProvider in the app
+  // shell; here we only wire the router-navigation shortcuts. Explore
+  // (row-content search + SQL) is ⌘E.
   // sidebar never unmounts across navigation (see the activeSchemaByConn
   // comment below), so this listener only needs registering once.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() === "e") {
         e.preventDefault();
-        setSearchOpen(true);
+        router.push("/explore");
+      } else if (e.key === ",") {
+        e.preventDefault();
+        router.push("/settings");
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [router]);
   const { data, isFetching: catalogLoading } = useCatalog();
   // Shares the ["dashboards"] cache with the list page — renames/deletes/pin
   // toggles invalidate it there, so the pinned list here stays fresh.
@@ -340,7 +455,8 @@ export function Sidebar() {
       <SidebarHeader className="border-b">
         <div className="flex items-center gap-2 px-2 py-2">
           <Link href="/" className="flex items-center gap-2 min-w-0">
-            <span className="text-xl">🦎</span>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static asset, no next/image benefit */}
+            <img src="/icon-64.png" alt="" width={20} height={20} />
             <span className="font-semibold tracking-tight">Lizard</span>
           </Link>
           <span className="flex-1" />
@@ -349,26 +465,20 @@ export function Sidebar() {
       </SidebarHeader>
 
       <SidebarContent className="overflow-hidden">
-        {/* global search */}
-        <SidebarGroup>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => setSearchOpen(true)}>
-                <span className="w-4 text-center">
-                  <Search className="size-3.5 inline" />
-                </span>
-                Search
-                <span className="ml-auto text-[10px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                  ⌘K
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
-
         {/* nav */}
         <SidebarGroup>
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={pathname.startsWith("/explore")} render={<Link href="/explore" />}>
+                <span className="w-4 text-center">
+                  <Compass className="size-3.5 inline" />
+                </span>
+                Explore
+                <span className="ml-auto text-[10px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                  ⌘E
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             {NAV.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               return (
@@ -376,6 +486,11 @@ export function Sidebar() {
                   <SidebarMenuButton isActive={active} render={<Link href={item.href} />}>
                     <span className="w-4 text-center">{item.icon}</span>
                     {item.label}
+                    {item.href === "/settings" && (
+                      <span className="ml-auto text-[10px]" style={{ color: "var(--muted-foreground-faint)" }}>
+                        ⌘,
+                      </span>
+                    )}
                   </SidebarMenuButton>
                   {item.href === "/dashboards" && pinnedDashboards.length > 0 && (
                     <SidebarMenuAction
@@ -675,7 +790,6 @@ export function Sidebar() {
           </Button>
         </div>
       </SidebarFooter>
-      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </SidebarShell>
   );
 }

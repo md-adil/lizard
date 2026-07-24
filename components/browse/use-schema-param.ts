@@ -36,9 +36,14 @@ export function recordHref(args: {
   return `/browse/${args.connection}/${encodeURIComponent(args.table)}/record${qs ? `?${qs}` : ""}`;
 }
 
-export function customizeHref(args: { connection: string; schema?: string; table: string }): string {
-  const q = schemaQuery(args.schema);
-  return `/browse/${args.connection}/${encodeURIComponent(args.table)}/customize${q ? `?${q}` : ""}`;
+// `tab` opens directly to a specific tab (e.g. "columns") — same deal as
+// infoHref below, so a menu can link straight at one section.
+export function customizeHref(args: { connection: string; schema?: string; table: string; tab?: string }): string {
+  const search = new URLSearchParams();
+  if (args.schema) search.set("schema", args.schema);
+  if (args.tab) search.set("tab", args.tab);
+  const qs = search.toString();
+  return `/browse/${args.connection}/${encodeURIComponent(args.table)}/customize${qs ? `?${qs}` : ""}`;
 }
 
 // `tab` opens directly to a specific tab (e.g. "graph") — used when linking

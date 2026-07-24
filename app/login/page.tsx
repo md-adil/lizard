@@ -46,7 +46,8 @@ export default function LoginPage() {
     <div className="h-screen flex items-center justify-center px-4" style={{ background: "var(--background)" }}>
       <div className="panel p-7 w-[380px] max-w-full">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-2xl">🦎</span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static asset, no next/image benefit */}
+          <img src="/icon-64.png" alt="" width={24} height={24} />
           <span className="text-lg font-semibold tracking-tight">Lizard</span>
         </div>
         <p className="text-[13px] mb-6" style={{ color: "var(--muted-foreground)" }}>

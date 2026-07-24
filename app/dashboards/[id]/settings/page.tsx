@@ -153,7 +153,7 @@ export default function DashboardSettingsPage() {
 
   if (!dash) {
     return (
-      <div className="px-6 py-6 space-y-3">
+      <div className="space-y-3">
         <Skeleton className="h-7 w-64" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -161,7 +161,7 @@ export default function DashboardSettingsPage() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-3xl">
+    <div className="max-w-3xl">
       <Breadcrumbs
         className="mb-4"
         items={[

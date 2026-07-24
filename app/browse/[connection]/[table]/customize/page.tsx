@@ -6,7 +6,7 @@
 // since it governs both halves of the page.
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
 import { useCatalog } from "@/components/browse/use-catalog";
@@ -21,12 +21,16 @@ import { VirtualFkEditor } from "./virtual-fk-editor";
 import { useSchemaParam, tableHref } from "@/components/browse/use-schema-param";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
+type CustomizeTab = "settings" | "grid" | "columns" | "relationships";
+
 export default function CustomizePage() {
   const params = useParams<{
     connection: string;
     table: string;
   }>();
   const qc = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const schema = useSchemaParam();
   const { meta, catalog, schemaMeta, isLoading } = useTableMeta(params.connection, schema, params.table);
   // Called unconditionally (rules of hooks) even though it's only used in
@@ -36,7 +40,15 @@ export default function CustomizePage() {
 
   const [explicitScope, setExplicitScope] = useState<"schema" | "pattern" | null>(null);
   const [explicitPattern, setExplicitPattern] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"settings" | "grid" | "columns" | "relationships">("settings");
+
+  // Tab lives in the URL (same as the info page) so a link can open straight
+  // at one section — e.g. the sidebar's table menu.
+  const activeTab = (searchParams.get("tab") as CustomizeTab | null) ?? "settings";
+  function setActiveTab(next: CustomizeTab) {
+    const q = new URLSearchParams(searchParams);
+    q.set("tab", next);
+    router.replace(`?${q.toString()}`, { scroll: false });
+  }
 
   const backHref = tableHref({ connection: params.connection, schema: meta?.schema ?? schema, table: params.table });
 
@@ -81,7 +93,7 @@ export default function CustomizePage() {
   }
 
   return (
-    <div className="px-8 py-7">
+    <div>
       <Breadcrumbs
         className="mb-4"
         items={[
@@ -125,7 +137,7 @@ export default function CustomizePage() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as CustomizeTab)}>
         <TabsList className="mb-4">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="grid">Grid</TabsTrigger>
@@ -164,7 +176,7 @@ export default function CustomizePage() {
 
 function Pad({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)" }}>
+    <div className="text-[14px]" style={{ color: "var(--muted-foreground)" }}>
       {children}
     </div>
   );

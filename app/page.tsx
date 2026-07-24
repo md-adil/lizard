@@ -46,9 +46,10 @@ export default function HomePage() {
   const connections = catalog?.connections ?? [];
 
   return (
-    <div className="max-w-5xl mx-auto px-8 py-10">
+    <div className="container mx-auto">
       <div className="flex items-center gap-3 mb-1">
-        <span className="text-3xl select-none">🦎</span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- static asset, no next/image benefit */}
+        <img src="/icon-64.png" alt="" width={30} height={30} />
         <h1 className="text-2xl font-semibold tracking-tight">
           {greeting()}
           {user?.name ? `, ${user.name.split(" ")[0]}` : ""}

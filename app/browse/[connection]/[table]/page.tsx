@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useTableMeta } from "@/components/browse/useTableMeta";
@@ -121,6 +121,10 @@ export default function TablePage() {
   };
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
+  // Portal target so DataGrid's "Columns" button can render in the toolbar
+  // row (next to Refresh) instead of its own row above the grid — a callback
+  // ref (not useRef) since we need the DOM node to trigger a render once set.
+  const [columnsButtonSlot, setColumnsButtonSlot] = useState<HTMLDivElement | null>(null);
 
   // Needed above the early returns below since hooks can't be conditional —
   // computed defensively (meta may still be undefined on first render).
@@ -315,7 +319,7 @@ export default function TablePage() {
   };
 
   return (
-    <div className="px-8 py-8">
+    <div>
       <Breadcrumbs
         className="mb-4"
         items={[
@@ -460,6 +464,7 @@ export default function TablePage() {
           </div>
         )}
         <span className="flex-1" />
+        {viewType === "table" && <div ref={setColumnsButtonSlot} />}
         <AutoRefreshSelect value={refreshMs} onChange={setRefreshMs} />
         <Button
           variant="secondary"
@@ -510,6 +515,7 @@ export default function TablePage() {
           onEdit={rowKey.length > 0 && !meta.isView ? (row) => setEditing(row) : undefined}
           onSelectionChange={canBulkDelete ? setSelectedRows : undefined}
           clearSelectionSignal={clearSelectionSignal}
+          columnsButtonContainer={columnsButtonSlot}
         />
       )}
       {viewType === "gallery" && (
@@ -604,7 +610,7 @@ export default function TablePage() {
 
 function PagePad({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div className="px-8 py-10 text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
+    <div className="text-[14px]" style={{ color: "var(--muted-foreground)", ...style }}>
       {children}
     </div>
   );

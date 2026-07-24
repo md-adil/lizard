@@ -12,10 +12,12 @@ export function ResultGrid({
 }: {
   result: QueryResult;
   maxRows?: number;
-  // Bounded contexts (a dashboard panel) pass their real available height so
-  // the scroll region can't spill past the card; unbounded ones (AI console,
-  // panel-preview modal) keep the 420px default.
-  maxHeight?: number;
+  // Bounded contexts (a dashboard panel) pass their real available pixel
+  // height so the scroll region can't spill past the card; unbounded ones
+  // (AI console, panel-preview modal) keep the 420px default. A CSS length
+  // string (e.g. a vh-based value) works too — Explore's SQL tab uses one so
+  // the grid claims most of the viewport instead of a fixed guess.
+  maxHeight?: number | string;
   // Set (by a panel with spec.linkTo) to make rows clickable — mirrors
   // DataGrid's onRowClick/rowClickable in components/browse/data-grid.tsx.
   onRowClick?: (row: Record<string, unknown>) => void;

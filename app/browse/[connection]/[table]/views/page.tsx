@@ -61,7 +61,7 @@ export default function TableViewsPage() {
 
   if (metaLoading || !meta) {
     return (
-      <div className="px-8 py-7 space-y-3">
+      <div className="space-y-3">
         <Skeleton className="h-7 w-64" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -69,7 +69,7 @@ export default function TableViewsPage() {
   }
 
   return (
-    <div className="px-8 py-7 max-w-2xl">
+    <div className="max-w-2xl">
       <Breadcrumbs
         className="mb-4"
         items={[
