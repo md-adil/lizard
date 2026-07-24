@@ -1,11 +1,15 @@
-// Federation engine: an embedded DuckDB that ATTACHes multiple Postgres
-// databases READ_ONLY (with each connection's *read* credentials) and runs one
-// cross-database SELECT. No DDL ever touches the user's databases. Lizard
-// issues the attachments itself — model SQL that tries to ATTACH/INSTALL/etc.
-// is rejected by the guard before it gets here.
+// Federation engine: an embedded DuckDB that ATTACHes multiple Postgres/MySQL
+// databases READ_ONLY (with each connection's *read* credentials), plus any
+// MongoDB connections via the community `mongo` extension (inherently
+// read-only — it has no write path to guard, unlike the SQL engines which
+// need the explicit READ_ONLY attach flag), and runs one cross-database
+// SELECT. No DDL ever touches the user's databases. Lizard issues the
+// attachments itself — model SQL that tries to ATTACH/INSTALL/etc. is
+// rejected by the guard before it gets here.
 import { DuckDBInstance } from "@duckdb/node-api";
 import type { ConnectionConfig, QueryResult } from "@/lib/types";
 import { connectionUri } from "@/app/api/database/postgres/pool";
+import { mongoConnectionUri } from "@/app/api/database/mongo/client";
 import { MAX_ROWS } from "@/lib/guard/guard";
 
 import { quoteIdentifier, quoteLiteral } from "@/lib/utils";
@@ -23,7 +27,16 @@ export async function runFederated(
   try {
     await db.run("INSTALL postgres; LOAD postgres;");
     await db.run("INSTALL mysql; LOAD mysql;");
+    if (connections.some((c) => c.engine === "mongo")) {
+      await db.run("INSTALL mongo FROM community; LOAD mongo;");
+    }
     for (const conn of connections) {
+      if (conn.engine === "mongo") {
+        await db.run(
+          `ATTACH ${quoteLiteral(mongoConnectionUri(conn, "read"))} AS ${quoteIdentifier(conn.name)} (TYPE MONGO)`,
+        );
+        continue;
+      }
       const type = conn.engine === "mysql" ? "mysql" : "postgres";
       await db.run(
         `ATTACH ${quoteLiteral(connectionUri(conn, "read"))} AS ${quoteIdentifier(conn.name)} (TYPE ${type}, READ_ONLY)`,

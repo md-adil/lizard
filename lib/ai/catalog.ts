@@ -92,7 +92,7 @@ export function serializeCatalog(catalog: Catalog, options: SerializeOptions = {
       elided.add(table);
       body = scope
         .map((conn) => {
-          const lines: string[] = [`connection ${conn.connectionName} (postgres database "${conn.database}")`];
+          const lines: string[] = [`connection ${conn.connectionName} (${conn.engine} database "${conn.database}")`];
           if (conn.error) {
             lines.push(`  (introspection failed: ${conn.error})`);
             return lines.join("\n");

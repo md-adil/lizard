@@ -273,9 +273,11 @@ function SearchTab({
 // /api/query runs raw SQL either against one relational connection in its
 // own dialect ("single") or across several via an embedded DuckDB that
 // ATTACHes each one read-only ("federated" — see lib/federation/duckdb.ts).
-// Mongo and connections that failed to load aren't offered either way: only
-// postgres/mysql can be ATTACHed by the federation engine, and "single"
-// mirrors that same list for consistency.
+// Federated mode can ATTACH postgres/mysql read-only or mongo (via DuckDB's
+// mongo community extension); single mode talks to one connection directly
+// in its own SQL dialect, which mongo doesn't have (registry.ts: dialect:
+// null), so it stays postgres/mysql only. Connections that failed to load
+// aren't offered either way.
 function SqlTab({
   onRun,
   restore,
@@ -284,11 +286,15 @@ function SqlTab({
   restore: (SqlHistoryEntry & { nonce: number }) | null;
 }) {
   const { data: catalog } = useCatalog();
+  const [mode, setMode] = useState<SqlMode>("single");
   const connections = (catalog?.connections ?? []).filter(
-    (c) => !c.error && (c.engine === "postgres" || c.engine === "mysql"),
+    (c) =>
+      !c.error &&
+      (mode === "single"
+        ? c.engine === "postgres" || c.engine === "mysql"
+        : ["postgres", "mysql", "mongo"].includes(c.engine)),
   );
 
-  const [mode, setMode] = useState<SqlMode>("single");
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [sql, setSql] = useState("");
 

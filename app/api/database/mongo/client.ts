@@ -83,6 +83,14 @@ function credsFor(conn: ConnectionConfig, role: Role): MongoCredentials {
   };
 }
 
+// The `mongodb://` URI for a connection/role, for callers that need a
+// connection string rather than a live client — e.g. the DuckDB federation
+// engine's `ATTACH ... (TYPE MONGO)`, which mirrors connectionUri() in
+// postgres/pool.ts for the same purpose.
+export function mongoConnectionUri(conn: ConnectionConfig, role: Role): string {
+  return buildMongoUri(credsFor(conn, role));
+}
+
 // A cached, connected MongoClient for this connection/role. The MongoClient
 // maintains its own internal connection pool, so one client per key is the
 // documented reuse model (unlike pg/mysql where we cache a pool).
