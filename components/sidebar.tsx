@@ -5,10 +5,23 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { ChevronRight, Compass, MoreHorizontal, Search, Settings as SettingsIcon, X } from "lucide-react";
+import {
+  ChevronRight,
+  Compass,
+  Copy,
+  Download,
+  Info,
+  MoreHorizontal,
+  Search,
+  Settings as SettingsIcon,
+  Settings2,
+  Table2,
+  X,
+} from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { useAuth } from "@/components/auth-context";
-import { tableHref, customizeHref } from "@/components/browse/use-schema-param";
+import { tableHref, customizeHref, infoHref, viewsHref } from "@/components/browse/use-schema-param";
+import { dataApiUrl } from "@/components/browse/data-api";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { DataSelect } from "@/components/ui/data-select";
@@ -16,7 +29,13 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Sidebar as SidebarShell,
@@ -71,6 +90,103 @@ function ThemeToggle() {
     >
       {theme === "light" ? "🌙" : "☀️"}
     </Button>
+  );
+}
+
+// Both destinations keep their active tab in the URL (`?tab=`), so the menu can
+// link straight at one section instead of always landing on the first tab.
+const INFO_TABS = [
+  ["columns", "Columns"],
+  ["constraints", "Constraints"],
+  ["relationships", "Relationships"],
+  ["graph", "Graph"],
+] as const;
+const CUSTOMIZE_TABS = [
+  ["settings", "Settings"],
+  ["grid", "Grid"],
+  ["columns", "Columns"],
+  ["relationships", "Relationships"],
+] as const;
+
+// Everything reachable for one table. Navigation + export only: the row-level
+// mutations (import, new row) live on the table page because they're driven by
+// dialog state there, not by a link.
+function TableMenu({
+  connection,
+  schema,
+  table,
+  isView,
+}: {
+  connection: string;
+  // already resolved for URLs by the caller — undefined when the engine has none
+  schema: string | undefined;
+  table: string;
+  isView: boolean;
+}) {
+  const target = { connection, schema, table };
+  // No filter/sort context out here, unlike the table page's own Export button
+  // (which serializes the active view) — so this is deliberately the whole table.
+  const exportHref = dataApiUrl({ connection, table, path: "export", schema });
+  const qualified = schema ? `${schema}.${table}` : table;
+
+  return (
+    <DropdownMenuContent align="start" side="right" className="w-56">
+      {/* Base UI requires GroupLabel to sit inside a Group — and the label
+          names these navigation entries, so they share one. */}
+      <DropdownMenuGroup>
+        <DropdownMenuLabel className="truncate">
+          {qualified}
+          {isView && <span style={{ color: "var(--muted-foreground-faint)" }}> · view</span>}
+        </DropdownMenuLabel>
+
+        {/* Icons mirror the buttons these same destinations have elsewhere —
+            Info/Customize on the table page, the gear on the saved-views tab. */}
+        <DropdownMenuItem render={<Link href={tableHref(target)} />}>
+          <Table2 className="size-3.5" /> Open
+        </DropdownMenuItem>
+
+        {/* Pure submenu triggers, deliberately not links: tapping is the only
+            way to open a submenu on touch, and each submenu's first entry
+            (Columns / Settings) is already the page's default tab anyway. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Info className="size-3.5" /> Info
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-44">
+            {INFO_TABS.map(([tab, label]) => (
+              <DropdownMenuItem key={tab} render={<Link href={infoHref({ ...target, tab })} />}>
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Settings2 className="size-3.5" /> Customize
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-44">
+            {CUSTOMIZE_TABS.map(([tab, label]) => (
+              <DropdownMenuItem key={tab} render={<Link href={customizeHref({ ...target, tab })} />}>
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuItem render={<Link href={viewsHref(target)} />}>
+          <SettingsIcon className="size-3.5" /> Saved views
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+
+      <DropdownMenuSeparator />
+      <DropdownMenuItem render={<a href={exportHref} download />}>
+        <Download className="size-3.5" /> Export all (CSV)
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => navigator.clipboard?.writeText(qualified)}>
+        <Copy className="size-3.5" /> Copy qualified name
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }
 
@@ -129,7 +245,9 @@ function SchemaSection({
 
   const allTables = schemaData.tables.map((t) => {
     const o = resolveTableOverride(schemaData.tableOverrides, connectionId, schemaName, t.name);
-    return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false };
+    // `isView` is carried through so the table menu can label read-only
+    // sources honestly (views have no import/insert path).
+    return { name: t.name, label: o?.label || t.name, hidden: o?.hidden ?? false, isView: t.kind === "view" };
   });
   if (allTables.length === 0) {
     return (
@@ -173,15 +291,7 @@ function SchemaSection({
                   <MoreHorizontal />
                   <span className="sr-only">{t.label} actions</span>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="right">
-                  <DropdownMenuItem
-                    render={
-                      <Link href={customizeHref({ connection: connectionName, schema: urlSchema, table: t.name })} />
-                    }
-                  >
-                    ⚙ Customize
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
+                <TableMenu connection={connectionName} schema={urlSchema} table={t.name} isView={t.isView} />
               </DropdownMenu>
             </SidebarMenuItem>
           );

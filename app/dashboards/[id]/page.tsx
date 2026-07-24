@@ -883,12 +883,7 @@ export default function DashboardPage() {
     });
   };
 
-  if (error)
-    return (
-      <div style={{ color: "var(--destructive)" }}>
-        {(error as Error).message}
-      </div>
-    );
+  if (error) return <div style={{ color: "var(--destructive)" }}>{(error as Error).message}</div>;
   if (!dash)
     return (
       <div className="space-y-3">
