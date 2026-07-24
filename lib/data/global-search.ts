@@ -12,7 +12,7 @@ import { effectiveKey } from "@/lib/introspect/heuristics";
 import { resolveTableOverride } from "@/lib/introspect/overrides";
 import { getConnection, listTableOverridesForConnection } from "@/lib/metadata/store";
 import { getDialect } from "@/app/api/database/registry";
-import { getClient } from "@/lib/db/pools";
+import { getClient } from "@/app/api/database/postgres/pool";
 import { matchTargetFor, buildMatchClause, matchesTerm, buildEnumSets, type EnumSets } from "@/lib/data/search-match";
 import { primaryKeyColumnsFor } from "@/app/api/data/crud";
 

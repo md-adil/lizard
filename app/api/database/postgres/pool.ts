@@ -4,7 +4,8 @@
 import { Pool, types } from "pg";
 import type { ConnectionConfig, DbEngine } from "@/lib/types";
 import { getConnection } from "@/lib/metadata/store";
-import { logQuery, type QueryLogContext } from "@/lib/logger";
+import { logQuery, logAcquire, logPoolError, type QueryLogContext } from "@/lib/logger";
+import { poolKey, type Role } from "../pools-helper";
 
 // Return timestamps as raw strings instead of JS Date objects so the
 // machine's local timezone never shifts the value during parsing.
@@ -15,20 +16,13 @@ types.setTypeParser(1082, (v) => v); // date
 const READ_STATEMENT_TIMEOUT_MS = 10_000;
 const WRITE_STATEMENT_TIMEOUT_MS = 15_000;
 
-type Role = "read" | "write";
-
 const pools = new Map<string, Pool>();
-
-function poolKey(conn: ConnectionConfig, role: Role): string {
-  // include credentials fingerprint so edits to a connection create a new pool
-  return `${conn.id}:${role}:${conn.host}:${conn.port}:${conn.database}:${role === "read" ? conn.readUser : conn.writeUser}`;
-}
 
 export function getPool(conn: ConnectionConfig, role: Role): Pool {
   if (role === "write" && (!conn.writeUser || !conn.writePassword)) {
     throw new Error(`Connection "${conn.name}" is read-only (no write credentials registered)`);
   }
-  const key = poolKey(conn, role);
+  const key = poolKey(conn.id, role);
   let pool = pools.get(key);
   if (!pool) {
     pool = new Pool({
@@ -38,22 +32,12 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
       user: role === "read" ? conn.readUser : conn.writeUser!,
       password: role === "read" ? conn.readPassword : conn.writePassword!,
       ssl: conn.ssl ? { rejectUnauthorized: false } : undefined,
-      // Read pools got a higher ceiling once global search started fanning
-      // out to every table of a connection (see CONCURRENCY in
-      // lib/data/global-search.ts) — 5 was fine when a connection saw at
-      // most a couple of concurrent reads (one table's browse/export/AI
-      // query at a time), but a multi-thousand-table schema needs more
-      // simultaneous read slots or search just serializes behind the old
-      // cap. Write pools are untouched — CRUD's write concurrency profile
-      // (locks, transactions) wasn't part of this change.
       max: role === "read" ? 12 : 5,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 8_000,
       options: `-c statement_timeout=${role === "read" ? READ_STATEMENT_TIMEOUT_MS : WRITE_STATEMENT_TIMEOUT_MS} -c idle_in_transaction_session_timeout=15000`,
     });
-    pool.on("error", () => {
-      /* keep a broken backend connection from crashing the process */
-    });
+    pool.on("error", (err) => logPoolError({ connection: conn.name, engine: conn.engine, role }, err));
     // Use UTC for every session so timestamp↔timestamptz comparisons are
     // deterministic regardless of the server's local timezone setting.
     pool.on("connect", (client) => {
@@ -62,6 +46,23 @@ export function getPool(conn: ConnectionConfig, role: Role): Pool {
     pools.set(key, pool);
   }
   return pool;
+}
+
+// poolKey is just id:role, so a pool survives an edit to its connection's
+// host/port/database/credentials — without closing it here the cached pool
+// would keep serving the pre-edit config forever. Deleting a connection has
+// the same problem: its pool(s) would otherwise stay open with no way to
+// reach them again. Called (alongside mysql's closePools) from the
+// connections API on update/delete — see close-pools.ts.
+export function closePools(connectionId: string): void {
+  for (const role of ["read", "write"] as const) {
+    const key = poolKey(connectionId, role);
+    const pool = pools.get(key);
+    if (pool) {
+      pools.delete(key);
+      pool.end().catch(() => {});
+    }
+  }
 }
 
 export interface DbClient {
@@ -100,12 +101,61 @@ function instrument(client: DbClient, ctx: QueryLogContext): DbClient {
   };
 }
 
+const ACQUIRE_TIMEOUT_MS = 8_000;
+
+// pool.connect()/pool.getConnection() had no bound at all: a connection that
+// looks idle to the pool but is actually dead on the wire (dropped by a
+// firewall/LB, killed server-side) would hang here forever with nothing
+// logged, since instrument() only starts timing once a connection is already
+// in hand. If the acquire eventually does resolve after we've timed out,
+// release it immediately instead of leaking it out of the pool's limited
+// connection count.
+function acquireWithTimeout<T extends { release: () => void }>(
+  acquire: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      reject(new Error(message));
+    }, ms);
+    acquire.then(
+      (conn) => {
+        clearTimeout(timer);
+        if (timedOut) {
+          conn.release();
+        } else {
+          resolve(conn);
+        }
+      },
+      (err) => {
+        clearTimeout(timer);
+        if (!timedOut) reject(err);
+      },
+    );
+  });
+}
+
 export async function getClient(conn: ConnectionConfig, role: Role): Promise<DbClient> {
   const ctx: QueryLogContext = { connection: conn.name, engine: conn.engine, role };
 
   if (conn.engine === "postgres") {
     const pool = getPool(conn, role);
-    const client = await pool.connect();
+    const acquireStartedAt = performance.now();
+    let client;
+    try {
+      client = await acquireWithTimeout(
+        pool.connect(),
+        ACQUIRE_TIMEOUT_MS,
+        `Timed out acquiring a connection from "${conn.name}" (${role}) after ${ACQUIRE_TIMEOUT_MS}ms`,
+      );
+    } catch (e) {
+      logAcquire(ctx, performance.now() - acquireStartedAt, e);
+      throw e;
+    }
+    logAcquire(ctx, performance.now() - acquireStartedAt);
     return instrument(
       {
         async query(sql, params) {
@@ -134,7 +184,19 @@ export async function getClient(conn: ConnectionConfig, role: Role): Promise<DbC
   } else if (conn.engine === "mysql") {
     const { getMysqlPool } = await import("@/app/api/database/mysql/pool");
     const pool = getMysqlPool(conn, role);
-    const connection = await pool.getConnection();
+    const acquireStartedAt = performance.now();
+    let connection;
+    try {
+      connection = await acquireWithTimeout(
+        pool.getConnection(),
+        ACQUIRE_TIMEOUT_MS,
+        `Timed out acquiring a connection from "${conn.name}" (${role}) after ${ACQUIRE_TIMEOUT_MS}ms`,
+      );
+    } catch (e) {
+      logAcquire(ctx, performance.now() - acquireStartedAt, e);
+      throw e;
+    }
+    logAcquire(ctx, performance.now() - acquireStartedAt);
     return instrument(
       {
         async query(sql, params) {

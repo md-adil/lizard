@@ -5,7 +5,7 @@
 // into memory. Cached per connection with a short TTL; a broken connection
 // simply contributes nothing rather than failing the whole search.
 import type { ConnectionConfig } from "@/lib/types";
-import { getPool } from "@/lib/db/pools";
+import { getPool } from "@/app/api/database/postgres/pool";
 import { listSchemaNames } from "@/lib/introspect/catalog";
 
 export interface TableNameEntry {

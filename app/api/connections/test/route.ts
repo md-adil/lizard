@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import { probeCredentials } from "@/lib/db/pools";
+import { probeCredentials } from "@/app/api/database/postgres/pool";
 import { parseConnectionUri } from "@/lib/parse-uri";
 import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { requireAdmin } from "@/lib/auth/session";

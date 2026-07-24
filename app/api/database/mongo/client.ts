@@ -7,8 +7,8 @@
 // credentials just like the relational engines.
 import { MongoClient, type Db } from "mongodb";
 import type { ConnectionConfig, DbEngine } from "@/lib/types";
-
-type Role = "read" | "write";
+import { poolKey, type Role } from "../pools-helper";
+import { logPoolError } from "@/lib/logger";
 
 // Per-operation time budget for reads. There is no connection-level equivalent
 // in MongoDB, so it is threaded through as `maxTimeMS` on each read op.
@@ -17,9 +17,20 @@ export const WRITE_MAX_TIME_MS = 15_000;
 
 const clients = new Map<string, MongoClient>();
 
-function clientKey(conn: ConnectionConfig, role: Role): string {
-  const user = role === "read" ? conn.readUser : conn.writeUser;
-  return `${conn.id}:${role}:${conn.host}:${conn.port}:${conn.database}:${user}`;
+// Same leak as the relational pools (app/api/database/pools.ts): without this,
+// editing a connection's host/port/database/credentials would keep serving
+// the pre-edit MongoClient forever (poolKey is just id:role, not a config
+// fingerprint), and deleting a connection would leak its client(s) with no
+// way to reach them again. Called from the connections API via closePools.
+export function closePools(connectionId: string): void {
+  for (const role of ["read", "write"] as const) {
+    const key = poolKey(connectionId, role);
+    const client = clients.get(key);
+    if (client) {
+      clients.delete(key);
+      client.close().catch(() => {});
+    }
+  }
 }
 
 interface MongoCredentials {
@@ -76,12 +87,11 @@ function credsFor(conn: ConnectionConfig, role: Role): MongoCredentials {
 // maintains its own internal connection pool, so one client per key is the
 // documented reuse model (unlike pg/mysql where we cache a pool).
 export async function getMongoClient(conn: ConnectionConfig, role: Role): Promise<MongoClient> {
-  const key = clientKey(conn, role);
+  const key = poolKey(conn.id, role);
   let client = clients.get(key);
   if (!client) {
     client = new MongoClient(buildMongoUri(credsFor(conn, role)), { maxPoolSize: 5 });
-    // Keep a dropped backend from crashing the process, matching the pg pool.
-    client.on("error", () => {});
+    client.on("error", (err) => logPoolError({ connection: conn.name, engine: conn.engine, role }, err));
     await client.connect();
     clients.set(key, client);
   }

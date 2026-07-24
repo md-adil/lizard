@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { addConnection, listConnections } from "@/lib/metadata/store";
-import { testConnection } from "@/lib/db/pools";
+import { testConnection } from "../database/postgres/pool";
 import { invalidateCatalog } from "@/lib/introspect/catalog";
 import { connectionSchema, redact } from "@/lib/connections-shared";
 import { requireUser, requireAdmin } from "@/lib/auth/session";

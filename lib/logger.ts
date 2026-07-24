@@ -86,3 +86,25 @@ export function logQuery(
     dbLog.debug(fields, "query");
   }
 }
+
+/**
+ * Record one pool.getConnection()/pool.connect() call — the step before a
+ * query even starts. Always emits on failure/timeout or when slow; otherwise
+ * only under LIZARD_LOG_QUERIES. This is the thing that was previously
+ * invisible: a stuck connection hangs here, before logQuery's timer starts.
+ */
+export function logAcquire(ctx: QueryLogContext, durationMs: number, error?: unknown): void {
+  const fields = { ...ctx, durationMs: Math.round(durationMs) };
+  if (error) {
+    dbLog.error({ ...fields, err: error instanceof Error ? error.message : String(error) }, "connection acquire failed");
+  } else if (durationMs >= slowQueryMs) {
+    dbLog.warn(fields, "slow connection acquire");
+  } else if (logQueries) {
+    dbLog.debug(fields, "connection acquired");
+  }
+}
+
+/** Record an out-of-band error emitted by a pool itself (e.g. a dead backend connection getting evicted). */
+export function logPoolError(ctx: QueryLogContext, err: unknown): void {
+  dbLog.error({ ...ctx, err: err instanceof Error ? err.message : String(err) }, "pool error");
+}

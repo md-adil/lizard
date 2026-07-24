@@ -11,7 +11,7 @@ import type {
   ForeignKeyInfo,
   CheckConstraintInfo,
 } from "@/lib/types";
-import { getPool } from "@/lib/db/pools";
+import { getPool } from "@/app/api/database/postgres/pool";
 import { listConnections, listVirtualFks } from "@/lib/metadata/store";
 
 const SYSTEM_SCHEMAS = ["pg_catalog", "information_schema", "pg_toast"];

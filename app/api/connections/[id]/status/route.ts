@@ -1,6 +1,6 @@
 import { ok, fail } from "@/lib/api";
 import { getConnection } from "@/lib/metadata/store";
-import { testConnection } from "@/lib/db/pools";
+import { testConnection } from "@/app/api/database/postgres/pool";
 import { requireConnectionAccess } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };

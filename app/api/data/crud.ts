@@ -6,7 +6,7 @@ import { supportsSchemas, type ConnectionConfig, type FkLabels, type TableInfo }
 import { vfkMatchesSource, resolveToSchema } from "@/lib/introspect/virtual-fk";
 import { fkLabelKey, FK_KEY_SEP } from "@/lib/data/fk-labels";
 import { findUpdatedAtColumn, effectiveKey } from "@/lib/introspect/heuristics";
-import { getClient, type DbClient } from "@/lib/db/pools";
+import { getClient, type DbClient } from "@/app/api/database/postgres/pool";
 import { getDialect } from "@/app/api/database/registry";
 import type { Dialect } from "@/app/api/database/driver";
 import { getConnection, getColumnOverrides, listTableOverrides, listVirtualFks, logAudit } from "@/lib/metadata/store";

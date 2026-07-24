@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
-import { discoverDatabases } from "@/lib/db/pools";
+import { discoverDatabases } from "@/app/api/database/postgres/pool";
 import { getConnection } from "@/lib/metadata/store";
 import { DB_ENGINES, DEFAULT_PORTS, type DbEngine } from "@/lib/types";
 import { requireAdmin } from "@/lib/auth/session";

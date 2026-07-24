@@ -4,7 +4,7 @@
 import type { QueryRequest, QueryResult } from "@/lib/types";
 import { guardSql, GuardError, MAX_ROWS } from "@/lib/guard/guard";
 import { getConnection, logAudit } from "@/lib/metadata/store";
-import { getClient } from "@/lib/db/pools";
+import { getClient } from "@/app/api/database/postgres/pool";
 import { runFederated } from "@/lib/federation/duckdb";
 import { getDialect } from "@/app/api/database/registry";
 import { cacheKeyFor, getCached, setCached } from "@/lib/query-cache";

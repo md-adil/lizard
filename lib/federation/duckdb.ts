@@ -5,7 +5,7 @@
 // is rejected by the guard before it gets here.
 import { DuckDBInstance } from "@duckdb/node-api";
 import type { ConnectionConfig, QueryResult } from "@/lib/types";
-import { connectionUri } from "@/lib/db/pools";
+import { connectionUri } from "@/app/api/database/postgres/pool";
 import { MAX_ROWS } from "@/lib/guard/guard";
 
 import { quoteIdentifier, quoteLiteral } from "@/lib/utils";
