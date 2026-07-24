@@ -1,32 +1,36 @@
 import { ok, fail } from "@/lib/api";
-import { getCatalog } from "@/lib/introspect/catalog";
 import { requireUser } from "@/lib/auth/session";
 import { readableConnectionIds } from "@/lib/auth/store";
-import { runGlobalSearch } from "@/lib/data/global-search";
+import { listConnections } from "@/lib/metadata/store";
+import { runTableSearch } from "@/lib/data/table-search";
 
-// GET ?q=<term>&sessionId=<id> — cross-table search, scoped to tables opted
-// into table_overrides.searchable and connections the current user can read
-// (see lib/data/global-search.ts for the column-narrowing/bounded-fan-out
-// design). `sessionId` comes from POST /api/search/session, called once when
-// the search dialog opens — resolving the searchable-table list doesn't
-// depend on the query text, so it's wasteful to redo on every keystroke.
+// GET ?q=&connection=&schema= — table NAME search for the ⌘K navigation
+// palette. Nothing to do with row content (that's /api/explore now): it only
+// reads cached table names (lib/introspect/table-names.ts) and merges override
+// labels, so it stays cheap enough to fan out across every readable connection
+// without the full catalog. `connection` is a startsWith prefix (the `conn/`
+// scope); `schema` narrows further (`conn/schema/`). Scoped to the connections
+// the current user can read — but NOT gated by table_overrides.searchable,
+// which only concerns row-content search.
 export async function GET(req: Request) {
   try {
     const user = await requireUser();
     const url = new URL(req.url);
     const q = url.searchParams.get("q")?.trim() ?? "";
-    if (q.length < 2) return ok({ hits: [], scannedTables: 0, skippedTables: 0, partial: false });
+    const connectionPrefix = url.searchParams.get("connection")?.trim().toLowerCase() ?? "";
+    const schema = url.searchParams.get("schema")?.trim() ?? "";
 
-    const catalog = await getCatalog();
+    // With neither a real query nor a connection scope there's nothing bounded
+    // to return — the palette searches the cheap client-side sets (connection
+    // and dashboard names) itself in that case, so don't fan out here.
+    if (q.length < 2 && !connectionPrefix) return ok({ hits: [], scannedConnections: 0 });
+
     const readable = readableConnectionIds(user);
-    const connections =
-      readable === "all" ? catalog.connections : catalog.connections.filter((c) => readable.has(c.connectionId));
+    let conns = listConnections().filter((c) => !c.disabled);
+    if (readable !== "all") conns = conns.filter((c) => readable.has(c.id));
+    if (connectionPrefix) conns = conns.filter((c) => c.name.toLowerCase().startsWith(connectionPrefix));
 
-    const sessionId = url.searchParams.get("sessionId") ?? undefined;
-    // Propagates cancellation: the client aborts the previous fetch as soon
-    // as a new keystroke (or dialog close) supersedes it — see
-    // components/global-search.tsx — which surfaces here as req.signal.
-    const result = await runGlobalSearch(connections, q, sessionId, undefined, req.signal);
+    const result = await runTableSearch(conns, { q, schema: schema || undefined });
     return ok(result);
   } catch (e) {
     return fail(e);

@@ -4,11 +4,11 @@ import { requireUser } from "@/lib/auth/session";
 import { readableConnectionIds } from "@/lib/auth/store";
 import { createSearchSession } from "@/lib/data/global-search";
 
-// POST — called once when the global search dialog opens. Resolves which
-// tables (across connections the current user can read) aren't explicitly
-// excluded via table_overrides.searchable=false and caches that list
-// server-side under a fresh session id, so GET /api/search?q=&sessionId=
-// doesn't re-resolve it on every keystroke of the same search session.
+// POST — called once when the Explore search tab mounts. Resolves which tables
+// (across connections the current user can read) aren't explicitly excluded
+// via table_overrides.searchable=false and caches that list server-side under
+// a fresh session id, so GET /api/explore?q=&sessionId= doesn't re-resolve it
+// on every keystroke of the same search session.
 export async function POST() {
   try {
     const user = await requireUser();

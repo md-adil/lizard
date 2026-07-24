@@ -122,12 +122,12 @@ function SearchTab({
 
   // Which tables are searchable doesn't depend on the query text, so it's
   // resolved once (not on every keystroke) and cached server-side under this
-  // id — see app/api/search/session/route.ts.
+  // id — see app/api/explore/session/route.ts.
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [sessionLoading, setSessionLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/search/session", { method: "POST" })
+    fetch("/api/explore/session", { method: "POST" })
       .then((res) => res.json())
       .then((data: { sessionId: string }) => {
         if (!cancelled) setSessionId(data.sessionId);
@@ -144,7 +144,7 @@ function SearchTab({
     queryKey: ["global-search", submitted, sessionId],
     queryFn: async ({ signal }) => {
       const res = await fetch(
-        `/api/search?q=${encodeURIComponent(submitted)}&sessionId=${encodeURIComponent(sessionId!)}`,
+        `/api/explore?q=${encodeURIComponent(submitted)}&sessionId=${encodeURIComponent(sessionId!)}`,
         { signal },
       );
       if (!res.ok) throw new Error("Search failed");
@@ -156,7 +156,11 @@ function SearchTab({
   // The session always scans every readable connection — the chip filter
   // narrows the already-fetched hits client-side rather than re-scoping the
   // (expensive) server-side table resolution per connection.
-  const hits = data ? (connFilter === ALL_CONNECTIONS ? data.hits : data.hits.filter((h) => h.connection === connFilter)) : [];
+  const hits = data
+    ? connFilter === ALL_CONNECTIONS
+      ? data.hits
+      : data.hits.filter((h) => h.connection === connFilter)
+    : [];
 
   return (
     <div>
@@ -167,7 +171,11 @@ function SearchTab({
               All
             </Chip>
             {connections.map((c) => (
-              <Chip key={c.connectionId} active={connFilter === c.connectionName} onClick={() => setConnFilter(c.connectionName)}>
+              <Chip
+                key={c.connectionId}
+                active={connFilter === c.connectionName}
+                onClick={() => setConnFilter(c.connectionName)}
+              >
                 {c.connectionName}
               </Chip>
             ))}
@@ -175,7 +183,11 @@ function SearchTab({
 
           <InputGroup className="w-full">
             <InputGroupAddon align="inline-start">
-              {isFetching || sessionLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+              {isFetching || sessionLoading ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Search className="size-3.5" />
+              )}
             </InputGroupAddon>
             <InputGroupInput
               autoFocus
@@ -360,7 +372,10 @@ function SqlTab({
       <Card>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
-            <Chip active={mode === "federated"} onClick={() => switchMode(mode === "federated" ? "single" : "federated")}>
+            <Chip
+              active={mode === "federated"}
+              onClick={() => switchMode(mode === "federated" ? "single" : "federated")}
+            >
               federate
             </Chip>
             {connections.map((c) => (
@@ -382,7 +397,11 @@ function SqlTab({
           <SqlEditor
             value={sql}
             onChange={setSql}
-            placeholder={mode === "federated" ? "select * from conn1.public.users u join conn2.public.orders o on …" : "select * from …"}
+            placeholder={
+              mode === "federated"
+                ? "select * from conn1.public.users u join conn2.public.orders o on …"
+                : "select * from …"
+            }
             minRows={3}
           />
           <Button size="sm" onClick={run} disabled={!canRun || !sql.trim() || running}>
@@ -461,8 +480,7 @@ export default function ExplorePage() {
   }, []);
 
   const [restore, setRestore] = useState<{ entry: HistoryEntry; nonce: number } | null>(null);
-  const restoreSearch =
-    restore && restore.entry.type === "search" ? { ...restore.entry, nonce: restore.nonce } : null;
+  const restoreSearch = restore && restore.entry.type === "search" ? { ...restore.entry, nonce: restore.nonce } : null;
   const restoreSql = restore && restore.entry.type === "sql" ? { ...restore.entry, nonce: restore.nonce } : null;
 
   // Recorded on every submitted search / every executed SQL run — deduped by
@@ -486,11 +504,11 @@ export default function ExplorePage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Explore" }]} />
-          <h1 className="text-xl font-semibold">Explore</h1>
-        </div>
+      <Breadcrumbs className="mb-4" items={[{ label: "Home", link: "/" }, { label: "Explore" }]} />
+      {/* History sits on the title's row, not the top corner — that corner is
+          the app shell's global search trigger (see components/app-shell.tsx). */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h1 className="text-xl font-semibold">Explore</h1>
         <Button variant="secondary" size="sm" className="gap-1.5 shrink-0" onClick={() => setHistoryOpen(true)}>
           <HistoryIcon className="size-3.5" />
           History

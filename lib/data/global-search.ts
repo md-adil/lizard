@@ -49,7 +49,7 @@ const CONCURRENCY = 24;
 // redo on every debounced keystroke. The client resolves this once, when the
 // search dialog opens (createSearchSession), and passes the returned session
 // id back on every keystroke's search call instead of a blind time-based
-// cache — see app/api/search/session/route.ts and app/api/search/route.ts.
+// cache — see app/api/explore/session/route.ts and app/api/explore/route.ts.
 interface SearchTarget {
   conn: ConnectionConfig;
   schemaName: string | undefined;
@@ -95,7 +95,7 @@ function resolveSearchTargets(connections: ConnectionCatalog[]): SearchTarget[] 
   return targets;
 }
 
-// Called once when the search dialog opens (see app/api/search/session/route.ts).
+// Called once when the Explore tab mounts (see app/api/explore/session/route.ts).
 export function createSearchSession(connections: ConnectionCatalog[]): { sessionId: string; scannedTables: number } {
   const targets = resolveSearchTargets(connections);
   const sessionId = randomUUID();
@@ -212,7 +212,7 @@ async function runWithBudget<T>(
 // opinion of its own. `sessionId` should come from createSearchSession
 // (called once when the search dialog opens); a missing/expired/unknown one
 // falls back to resolving fresh rather than failing the search outright.
-// `signal` is the inbound request's AbortSignal (see app/api/search/route.ts)
+// `signal` is the inbound request's AbortSignal (see app/api/explore/route.ts)
 // — threaded through to runWithBudget so a superseded/abandoned search stops
 // fanning out to more tables instead of running to completion unobserved.
 export async function runGlobalSearch(

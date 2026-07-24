@@ -232,12 +232,15 @@ export function Sidebar() {
   const params = useParams<{ connection?: string; schema?: string }>();
   const qc = useQueryClient();
   const { user } = useAuth();
+  // ⌘K (the "Go to" palette) is owned by CommandPaletteProvider in the app
+  // shell; here we only wire the router-navigation shortcuts. Explore
+  // (row-content search + SQL) is ⌘E.
   // sidebar never unmounts across navigation (see the activeSchemaByConn
   // comment below), so this listener only needs registering once.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.key.toLowerCase() === "k") {
+      if (e.key.toLowerCase() === "e") {
         e.preventDefault();
         router.push("/explore");
       } else if (e.key === ",") {
@@ -362,7 +365,7 @@ export function Sidebar() {
                 </span>
                 Explore
                 <span className="ml-auto text-[10px]" style={{ color: "var(--muted-foreground-faint)" }}>
-                  ⌘K
+                  ⌘E
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
